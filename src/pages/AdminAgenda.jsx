@@ -1525,6 +1525,18 @@ export default function AdminAgenda() {
                             </button>
                           )}
 
+                          {isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(appt.id, "confirmed")}
+                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
+                              title="Reverter cancelamento e reativar marcação"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Reativar / Reverter</span>
+                            </button>
+                          )}
+
                           {!isCancelled && (
                             <button
                               type="button"
