@@ -36,7 +36,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
   if (serviceId === "barba-terapia") {
     return (
       <div
-        className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
           isSelected
             ? isDark
               ? "bg-[#C89B58]/20 border-[#C89B58] text-[#E5C268]"
@@ -47,7 +47,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
         }`}
       >
         <svg
-          className="w-5 h-5 sm:w-6 sm:h-6 text-[#C89B58]"
+          className="w-4 h-4 sm:w-5 sm:h-5 text-[#C89B58]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -67,7 +67,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
   if (serviceId === "corte-cabelo") {
     return (
       <div
-        className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
           isSelected
             ? isDark
               ? "bg-[#C89B58]/20 border-[#C89B58] text-[#E5C268]"
@@ -78,7 +78,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
         }`}
       >
         <svg
-          className="w-5 h-5 sm:w-6 sm:h-6 text-[#C89B58]"
+          className="w-4 h-4 sm:w-5 sm:h-5 text-[#C89B58]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -99,7 +99,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
   if (serviceId === "corte-sobrancelha") {
     return (
       <div
-        className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
           isSelected
             ? isDark
               ? "bg-[#C89B58]/20 border-[#C89B58] text-[#E5C268]"
@@ -110,7 +110,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
         }`}
       >
         <svg
-          className="w-5 h-5 sm:w-6 sm:h-6 text-[#C89B58]"
+          className="w-4 h-4 sm:w-5 sm:h-5 text-[#C89B58]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -128,7 +128,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
   if (serviceId === "combo-premium") {
     return (
       <div
-        className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
           isSelected
             ? isDark
               ? "bg-[#C89B58]/20 border-[#C89B58] text-[#E5C268]"
@@ -139,7 +139,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
         }`}
       >
         <svg
-          className="w-5 h-5 sm:w-6 sm:h-6 text-[#C89B58]"
+          className="w-4 h-4 sm:w-5 sm:h-5 text-[#C89B58]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -156,7 +156,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
   // Default / Corte & Barba Terapia (Scissors Icon)
   return (
     <div
-      className={`w-11 h-11 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
+      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
         isSelected
           ? isDark
             ? "bg-[#C89B58]/20 border-[#C89B58] text-[#E5C268]"
@@ -166,7 +166,7 @@ function ServiceAvatar({ serviceId, isSelected, isDark }) {
             : "bg-[#F7F5F0] border-[#E8E4DC] text-[#C89B58]"
       }`}
     >
-      <Scissors className="w-5 h-5 sm:w-6 sm:h-6 text-[#C89B58] -rotate-45" />
+      <Scissors className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#C89B58] -rotate-45" />
     </div>
   );
 }
@@ -466,15 +466,15 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* 3-Column Compact Grid showing all 5 services cleanly */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-1">
+            {/* 3-Column Compact Grid showing all 5 services cleanly with Zero Scroll */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-1">
               {servicesData.map((s, idx) => {
                 const isSelected = selectedServiceId === s.id;
                 return (
                   <div
                     key={s.id}
                     onClick={() => setSelectedServiceId(s.id)}
-                    className={`relative p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
+                    className={`relative p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
                       idx === 4 ? "sm:col-span-2 lg:col-span-1" : ""
                     } ${
                       isSelected
@@ -488,7 +488,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   >
                     {/* Top Section: Avatar + Title & Info + Selected Check */}
                     <div className="flex items-start justify-between gap-2.5">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
                         <ServiceAvatar serviceId={s.id} isSelected={isSelected} isDark={isDark} />
 
                         <div className="min-w-0 flex-1 pt-0.5">
@@ -508,7 +508,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                               </span>
                             )}
                           </div>
-                          <p className={`text-[11px] sm:text-xs mt-1 leading-snug line-clamp-2 ${
+                          <p className={`text-[10.5px] sm:text-[11.5px] mt-0.5 leading-snug line-clamp-2 ${
                             isDark ? "text-[#9E9EA7]" : "text-[#71717A]"
                           }`}>
                             {s.shortDesc}
@@ -525,7 +525,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     </div>
 
                     {/* Bottom Row: Duration + Price */}
-                    <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-white/5 dark:border-white/5">
+                    <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-white/5 dark:border-white/5">
                       <div className="flex items-center gap-1.5 text-xs text-[#C89B58] font-medium">
                         <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
                         <span>{s.duration}</span>
