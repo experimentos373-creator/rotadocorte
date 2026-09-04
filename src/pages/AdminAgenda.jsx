@@ -41,7 +41,12 @@ import {
   Sun,
   Moon,
   Lightbulb,
-  Star
+  Star,
+  Eye,
+  EyeOff,
+  LogOut,
+  KeyRound,
+  ShieldCheck
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -51,12 +56,25 @@ import {
   deleteAppointment,
   getAllAppointments,
   createBlockSlot,
+  verifyAdminPin,
   isSupabaseConfigured,
   supabase
 } from "../lib/supabase";
 import { servicesData, shopInfo } from "../data/services";
 
 export default function AdminAgenda() {
+  // 🔒 Security: Authentication & PIN Lock
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem("rotadocorte_admin_auth") === "true";
+  });
+  const [adminPinInput, setAdminPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [currentAdminPin, setCurrentAdminPin] = useState(() => {
+    return sessionStorage.getItem("rotadocorte_admin_pin") || "2026";
+  });
+
   // Navigation Tabs: 'agenda' | 'stats' | 'crm'
   const [activeTab, setActiveTab] = useState("agenda");
 
@@ -122,10 +140,44 @@ export default function AdminAgenda() {
     return isNaN(num) ? 0 : num;
   };
 
+  // Login Handler
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!adminPinInput.trim()) {
+      setPinError("Por favor insira a senha / PIN de acesso.");
+      return;
+    }
+    setIsVerifyingPin(true);
+    setPinError("");
+
+    const res = await verifyAdminPin(adminPinInput.trim());
+    setIsVerifyingPin(false);
+
+    if (res.success) {
+      sessionStorage.setItem("rotadocorte_admin_auth", "true");
+      sessionStorage.setItem("rotadocorte_admin_pin", adminPinInput.trim());
+      setCurrentAdminPin(adminPinInput.trim());
+      setIsAuthenticated(true);
+      setAdminPinInput("");
+    } else {
+      setPinError(res.message || "Senha / PIN incorreto. Tente novamente.");
+    }
+  };
+
+  // Logout Handler
+  const handleLogout = () => {
+    sessionStorage.removeItem("rotadocorte_admin_auth");
+    sessionStorage.removeItem("rotadocorte_admin_pin");
+    setIsAuthenticated(false);
+    setAdminPinInput("");
+    setPinError("");
+  };
+
   // Load All Appointments (Both for Day View, Multi-Period Stats & CRM)
   const loadAppointments = async () => {
+    if (!isAuthenticated) return;
     setIsLoading(true);
-    const data = await getAllAppointments();
+    const data = await getAllAppointments(currentAdminPin);
     setAllAppointments(data || []);
 
     // Filter day appointments
@@ -136,8 +188,10 @@ export default function AdminAgenda() {
   };
 
   useEffect(() => {
-    loadAppointments();
-  }, [selectedDate]);
+    if (isAuthenticated) {
+      loadAppointments();
+    }
+  }, [selectedDate, isAuthenticated, currentAdminPin]);
 
   // Lock background scroll when any modal is open
   useEffect(() => {
@@ -507,6 +561,101 @@ export default function AdminAgenda() {
     year: "numeric"
   });
 
+  // 🔒 Lock Screen View when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#07080A] text-[#FAF8F5] flex flex-col items-center justify-center p-4 selection:bg-[#C89B58] selection:text-black font-sans relative overflow-hidden">
+        {/* Ambient Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#C89B58]/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="w-full max-w-md bg-[#121318] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10 space-y-6">
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-2xl bg-[#C89B58]/10 border border-[#C89B58]/30 flex items-center justify-center mx-auto mb-3 shadow-[0_0_20px_rgba(200,155,88,0.15)]">
+              <KeyRound className="w-8 h-8 text-[#E5C268]" />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#E5C268] text-[11px] font-mono uppercase tracking-wider font-bold">
+              <ShieldCheck className="w-3 h-3" />
+              <span>Painel Administrativo</span>
+            </div>
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold text-white pt-1">
+              Acesso do Barbeiro
+            </h1>
+            <p className="text-xs text-[#9E9EA7] leading-relaxed">
+              Introduza a senha ou PIN de segurança para aceder à agenda, faturação e dados de clientes.
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-[#C5C3BC] uppercase tracking-wider">
+                Senha / Código PIN
+              </label>
+              <div className="relative">
+                <input
+                  type={showPin ? "text" : "password"}
+                  value={adminPinInput}
+                  onChange={(e) => {
+                    setAdminPinInput(e.target.value);
+                    if (pinError) setPinError("");
+                  }}
+                  placeholder="Introduza o PIN (ex: 2026)"
+                  autoFocus
+                  className="w-full bg-[#0A0B0E] border border-white/15 focus:border-[#C89B58] rounded-xl px-4 py-3.5 text-center text-lg sm:text-xl tracking-widest text-white placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:ring-1 focus:ring-[#C89B58] transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9E9EA7] hover:text-white transition-colors cursor-pointer p-1"
+                  title={showPin ? "Ocultar senha" : "Ver senha"}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {pinError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 flex items-center gap-2 text-xs text-red-400 animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{pinError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isVerifyingPin}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#C89B58] to-[#E5C268] text-black font-bold text-sm tracking-wide hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer shadow-lg shadow-[#C89B58]/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isVerifyingPin ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>A verificar...</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4" />
+                  <span>Entrar no Painel</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Footer Navigation */}
+          <div className="pt-2 text-center border-t border-white/5">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-xs text-[#9E9EA7] hover:text-[#E5C268] transition-colors group"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Voltar ao Website Principal</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#090A0D] text-[#FAF8F5] p-4 sm:p-8 selection:bg-[#C89B58] selection:text-black pt-24 font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -563,6 +712,17 @@ export default function AdminAgenda() {
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Bloquear Horário</span>
+            </button>
+
+            {/* Logout Button */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
+              title="Terminar Sessão de Administrador"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sair</span>
             </button>
 
             {/* New Manual Appointment Button */}
