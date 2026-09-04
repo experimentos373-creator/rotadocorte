@@ -258,7 +258,7 @@ export default function AdminAgenda() {
 
   // Status Updater
   const handleUpdateStatus = async (id, newStatus) => {
-    await updateAppointment(id, { status: newStatus });
+    await updateAppointment(id, { status: newStatus }, currentAdminPin);
     await loadAppointments();
   };
 
@@ -268,15 +268,19 @@ export default function AdminAgenda() {
     if (!editingAppt) return;
     setIsSavingEdit(true);
 
-    const res = await updateAppointment(editingAppt.id, {
-      customer_name: editName.trim(),
-      customer_phone: editPhone.trim(),
-      date: editDate,
-      time: editTime,
-      service_id: editServiceId,
-      status: editStatus,
-      customer_notes: editNotes.trim()
-    });
+    const res = await updateAppointment(
+      editingAppt.id,
+      {
+        customer_name: editName.trim(),
+        customer_phone: editPhone.trim(),
+        date: editDate,
+        time: editTime,
+        service_id: editServiceId,
+        status: editStatus,
+        customer_notes: editNotes.trim()
+      },
+      currentAdminPin
+    );
 
     setIsSavingEdit(false);
     if (res.success) {
@@ -294,7 +298,7 @@ export default function AdminAgenda() {
       ? "Deseja desbloquear e libertar este horário?"
       : "Deseja eliminar esta marcação permanentemente?";
     if (window.confirm(msg)) {
-      await deleteAppointment(id);
+      await deleteAppointment(id, currentAdminPin);
       setEditingAppt(null);
       await loadAppointments();
     }
@@ -320,37 +324,24 @@ export default function AdminAgenda() {
     setIsEditServiceDropdownOpen(false);
   };
 
-  // Create Manual Appointment
-  const handleCreateManual = (e) => {
+  // Create Manual Appointment (Saved directly to central database)
+  const handleCreateManual = async (e) => {
     e.preventDefault();
-    const s = servicesData.find((item) => item.id === manualServiceId) || servicesData[3];
-    const newAppt = {
-      id: "manual-" + Date.now(),
-      shop_name: shopInfo.name,
-      shop_phone: shopInfo.phone,
-      service_id: manualServiceId,
-      service_name: s.name,
-      service_price: s.priceFormatted,
-      service_duration: parseInt(s.duration, 10) || 30,
-      barber_name: "Gabriel Silva",
-      customer_name: manualName.trim(),
-      customer_phone: manualPhone.trim(),
-      customer_notes: manualNotes.trim(),
+    await createBooking({
+      shopSlug: "rotadocorte",
+      serviceId: manualServiceId,
       date: selectedDate,
       time: manualTime,
-      status: "confirmed",
-      created_at: new Date().toISOString()
-    };
-
-    const all = getLocalAppointments();
-    all.push(newAppt);
-    saveLocalAppointments(all);
+      customerName: manualName.trim(),
+      customerPhone: manualPhone.trim(),
+      customerNotes: manualNotes.trim()
+    });
 
     setIsNewModalOpen(false);
     setManualName("");
     setManualPhone("");
     setManualNotes("");
-    loadAppointments();
+    await loadAppointments();
   };
 
   // Create Block Slot (Time Off)
@@ -361,7 +352,8 @@ export default function AdminAgenda() {
       date: blockDate,
       startTime: blockStartTime,
       endTime: blockEndTime,
-      reason: blockReason
+      reason: blockReason,
+      pin: currentAdminPin
     });
     setIsSavingBlock(false);
     setIsBlockModalOpen(false);

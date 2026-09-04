@@ -10,8 +10,6 @@ const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   "sb_publishable_7HteCWain-w3xhd8o2hwSA_p33weMaJ";
 
-export const adminPin = import.meta.env.VITE_ADMIN_PIN || "2026";
-
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
   supabaseAnonKey &&
@@ -43,13 +41,18 @@ export function saveLocalAppointments(appointments) {
 }
 
 /**
- * 🔒 Verify Admin PIN with Supabase RPC or local fallback
+ * 🔒 Verify Admin PIN with Supabase RPC
+ * Validated strictly on PostgreSQL side against the shop's admin_pin.
  */
 export async function verifyAdminPin(pin, shopSlug = "rotadocorte") {
+  if (!pin || typeof pin !== "string" || !pin.trim()) {
+    return { success: false, message: "PIN de administrador obrigatório." };
+  }
+
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.rpc("admin_verify_pin", {
-        p_admin_pin: pin,
+        p_admin_pin: pin.trim(),
         p_shop_slug: shopSlug
       });
       if (!error && data?.authorized) {
@@ -57,15 +60,12 @@ export async function verifyAdminPin(pin, shopSlug = "rotadocorte") {
       }
       return { success: false, message: data?.message || "PIN de administrador incorreto." };
     } catch (err) {
-      console.warn("Supabase PIN verify fallback to local rule:", err);
+      console.warn("Supabase PIN verification error:", err);
+      return { success: false, message: "Erro ao validar PIN no servidor." };
     }
   }
 
-  const validPins = [adminPin, "2026", "rotadocorte"];
-  if (validPins.includes(pin?.trim())) {
-    return { success: true };
-  }
-  return { success: false, message: "PIN de administrador incorreto." };
+  return { success: false, message: "Base de dados não configurada." };
 }
 
 
@@ -216,8 +216,11 @@ export async function createBooking({
 
 /**
  * 🔒 SECURE ADMIN RPC: Update existing appointment
+ * Requires runtime admin PIN verified on PostgreSQL side.
  */
-export async function updateAppointment(appointmentId, updatedFields, pin = adminPin) {
+export async function updateAppointment(appointmentId, updatedFields, pin) {
+  if (!pin) return { success: false, error: "PIN_REQUIRED" };
+
   const service = updatedFields.service_id
     ? servicesData.find((s) => s.id === updatedFields.service_id)
     : null;
@@ -244,39 +247,20 @@ export async function updateAppointment(appointmentId, updatedFields, pin = admi
         return { success: true };
       }
     } catch (err) {
-      console.warn("Supabase update RPC error, falling back to local storage:", err);
+      console.warn("Supabase update RPC error:", err);
     }
   }
 
-  // Local storage update fallback
-  const all = getLocalAppointments();
-  const index = all.findIndex((a) => String(a.id) === String(appointmentId));
-  if (index !== -1) {
-    const existing = all[index];
-    const newService = service || servicesData.find((s) => s.id === existing.service_id) || servicesData[3];
-
-    all[index] = {
-      ...existing,
-      ...updatedFields,
-      service_name: newService.name,
-      service_price: newService.priceFormatted,
-      service_duration: parseInt(newService.duration, 10) || 30,
-      updated_at: new Date().toISOString()
-    };
-    saveLocalAppointments(all);
-    return {
-      success: true,
-      appointment: all[index]
-    };
-  }
-
-  return { success: false, error: "NOT_FOUND" };
+  return { success: false, error: "UPDATE_FAILED" };
 }
 
 /**
  * 🔒 SECURE ADMIN RPC: Delete appointment
+ * Requires runtime admin PIN verified on PostgreSQL side.
  */
-export async function deleteAppointment(appointmentId, pin = adminPin) {
+export async function deleteAppointment(appointmentId, pin) {
+  if (!pin) return { success: false, error: "PIN_REQUIRED" };
+
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.rpc("admin_delete_appointment", {
@@ -291,17 +275,16 @@ export async function deleteAppointment(appointmentId, pin = adminPin) {
     }
   }
 
-  const all = getLocalAppointments();
-  const filtered = all.filter((a) => String(a.id) !== String(appointmentId));
-  saveLocalAppointments(filtered);
-  return { success: true };
+  return { success: false, error: "DELETE_FAILED" };
 }
 
 /**
  * 🔒 SECURE ADMIN RPC: Fetch all appointments across all dates (CRM & Stats)
- * Protected by Admin PIN verification.
+ * Protected strictly by Admin PIN verification on PostgreSQL side.
  */
-export async function getAllAppointments(pin = adminPin, shopSlug = "rotadocorte") {
+export async function getAllAppointments(pin, shopSlug = "rotadocorte") {
+  if (!pin) return [];
+
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.rpc("admin_get_appointments", {
@@ -343,11 +326,11 @@ export async function getAllAppointments(pin = adminPin, shopSlug = "rotadocorte
         });
       }
     } catch (err) {
-      console.warn("Supabase fetch all RPC error, falling back to local storage:", err);
+      console.warn("Supabase fetch all RPC error:", err);
     }
   }
 
-  return getLocalAppointments();
+  return [];
 }
 
 /**
@@ -388,8 +371,10 @@ export async function createBlockSlot({
   endTime,
   reason = "Pausa / Indisponível",
   shopSlug = "rotadocorte",
-  pin = adminPin
+  pin
 }) {
+  if (!pin) return { success: false, error: "PIN_REQUIRED" };
+
   const [startH, startM] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
   const startMinutes = (startH || 10) * 60 + (startM || 0);
@@ -418,30 +403,5 @@ export async function createBlockSlot({
     }
   }
 
-  const all = getLocalAppointments();
-  const newBlock = {
-    id: "block-" + Date.now(),
-    shop_name: shopInfo.name,
-    shop_phone: shopInfo.phone,
-    service_id: "bloqueio",
-    service_name: `Bloqueio: ${reason}`,
-    service_price: "0,00 €",
-    service_duration: duration,
-    barber_name: "Gabriel Silva",
-    customer_name: `[BLOQUEIO] ${reason}`,
-    customer_phone: "---",
-    customer_notes: reason,
-    date,
-    time: startTime,
-    start_time: `${date}T${startTime}:00`,
-    formatted_date: new Date(date).toLocaleDateString("pt-PT"),
-    formatted_time: startTime,
-    status: "blocked",
-    created_at: new Date().toISOString()
-  };
-
-  all.push(newBlock);
-  saveLocalAppointments(all);
-
-  return { success: true, block: newBlock };
+  return { success: false, error: "BLOCK_FAILED" };
 }
