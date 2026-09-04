@@ -1025,7 +1025,7 @@ export default function AdminAgenda() {
                 </p>
               </div>
 
-              {/* 3. Total de Clientes (Substituindo taxa de ocupação genérica) */}
+              {/* 3. Total de Clientes */}
               <div className="p-5 rounded-2xl bg-[#111319] border border-emerald-500/30 bg-gradient-to-br from-[#111319] to-emerald-500/10 shadow-lg space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
@@ -1039,7 +1039,7 @@ export default function AdminAgenda() {
                   {statsData.uniqueClientsCount}
                 </p>
                 <p className="text-[11px] text-[#9E9EA7]">
-                  {statsData.total} {statsData.total === 1 ? "marcação no período" : "marcações no período"}
+                  {statsData.completedCount} {statsData.completedCount === 1 ? "atendimento concluído" : "atendimentos concluídos"} no período
                 </p>
               </div>
 
