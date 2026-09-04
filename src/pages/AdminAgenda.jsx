@@ -63,6 +63,7 @@ import {
   getAllAppointments,
   createBlockSlot,
   verifyAdminPin,
+  subscribeToAppointments,
   isSupabaseConfigured,
   supabase
 } from "../lib/supabase";
@@ -206,6 +207,21 @@ export default function AdminAgenda() {
   useEffect(() => {
     if (isAuthenticated) {
       loadAppointments();
+
+      // Realtime live sync whenever any new booking is made
+      const unsubscribe = subscribeToAppointments(() => {
+        loadAppointments();
+      });
+
+      // Background auto-refresh polling interval (every 10s)
+      const pollInterval = setInterval(() => {
+        loadAppointments();
+      }, 10000);
+
+      return () => {
+        unsubscribe();
+        clearInterval(pollInterval);
+      };
     }
   }, [selectedDate, isAuthenticated, currentAdminPin]);
 

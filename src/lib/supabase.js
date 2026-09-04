@@ -2,8 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 import { generateAvailableSlots } from "./bookingEngine";
 import { servicesData, shopInfo } from "../data/services";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL ||
+  "https://vvucnqnyynydjccfqnor.supabase.co";
+
+const supabaseAnonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "sb_publishable_7HteCWain-w3xhd8o2hwSA_p33weMaJ";
+
 export const adminPin = import.meta.env.VITE_ADMIN_PIN || "2026";
 
 export const isSupabaseConfigured = Boolean(
@@ -304,29 +310,37 @@ export async function getAllAppointments(pin = adminPin, shopSlug = "rotadocorte
       });
 
       if (!error && data?.success && Array.isArray(data.appointments)) {
-        return data.appointments.map((d) => ({
-          id: d.id,
-          customer_name: d.customer_name,
-          customer_phone: d.customer_phone,
-          customer_email: d.customer_email,
-          customer_notes: d.customer_notes || d.notes,
-          service_id: d.service_id,
-          service_name: d.service_name || "Serviço",
-          service_price: d.service_price || "15,00 €",
-          service_duration: d.service_duration || 30,
-          barber_name: d.barber_name || "Gabriel Silva",
-          date: d.start_time ? d.start_time.split("T")[0] : "",
-          time: d.start_time
-            ? new Date(d.start_time).toLocaleTimeString("pt-PT", {
-                hour: "2-digit",
-                minute: "2-digit"
-              })
-            : "",
-          start_time: d.start_time,
-          end_time: d.end_time,
-          status: d.status,
-          created_at: d.created_at
-        }));
+        return data.appointments.map((d) => {
+          let dateStr = "";
+          let timeStr = "";
+          if (d.start_time) {
+            const dt = new Date(d.start_time);
+            dateStr = dt.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+            timeStr = dt.toLocaleTimeString("pt-PT", {
+              timeZone: "Europe/Lisbon",
+              hour: "2-digit",
+              minute: "2-digit"
+            });
+          }
+          return {
+            id: d.id,
+            customer_name: d.customer_name,
+            customer_phone: d.customer_phone,
+            customer_email: d.customer_email,
+            customer_notes: d.customer_notes || d.notes,
+            service_id: d.service_id,
+            service_name: d.service_name || "Serviço",
+            service_price: d.service_price || "15,00 €",
+            service_duration: d.service_duration || 30,
+            barber_name: d.barber_name || "Gabriel Silva",
+            date: dateStr,
+            time: timeStr,
+            start_time: d.start_time,
+            end_time: d.end_time,
+            status: d.status,
+            created_at: d.created_at
+          };
+        });
       }
     } catch (err) {
       console.warn("Supabase fetch all RPC error, falling back to local storage:", err);
@@ -334,6 +348,35 @@ export async function getAllAppointments(pin = adminPin, shopSlug = "rotadocorte
   }
 
   return getLocalAppointments();
+}
+
+/**
+ * 🔒 REALTIME SYNC: Subscribe to appointment table changes
+ */
+export function subscribeToAppointments(callback) {
+  if (!isSupabaseConfigured || !supabase) return () => {};
+
+  try {
+    const channel = supabase
+      .channel("rotadocorte-appointments-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "appointments" },
+        (payload) => {
+          if (typeof callback === "function") {
+            callback(payload);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn("Realtime subscription error:", err);
+    return () => {};
+  }
 }
 
 /**
