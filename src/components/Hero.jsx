@@ -72,28 +72,28 @@ export default function Hero({ onOpenBooking }) {
           </div>
 
           {/* Highlights Strip */}
-          <div className="pt-4 sm:pt-6 border-t border-white/10 grid grid-cols-3 gap-2 sm:gap-4 text-left">
-            <div className="bg-black/50 border border-white/10 p-2.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all">
-              <p className="text-xs sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
+          <div className="pt-4 sm:pt-6 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 text-left w-full">
+            <div className="w-full bg-black/60 border border-white/10 p-3.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all flex items-center justify-between sm:block">
+              <p className="text-sm sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
                 10:00 – 22:00
               </p>
-              <p className="text-[10px] sm:text-sm text-[#C89B58] font-medium pt-0.5 leading-tight">
+              <p className="text-xs sm:text-sm text-[#C89B58] font-medium pt-0.5 leading-tight">
                 Seg. a Sáb.
               </p>
             </div>
-            <div className="bg-black/50 border border-white/10 p-2.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all">
-              <p className="text-xs sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
+            <div className="w-full bg-black/60 border border-white/10 p-3.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all flex items-center justify-between sm:block">
+              <p className="text-sm sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
                 13:00 – 14:00
               </p>
-              <p className="text-[10px] sm:text-sm text-[#9E9EA7] font-medium pt-0.5 leading-tight">
+              <p className="text-xs sm:text-sm text-[#9E9EA7] font-medium pt-0.5 leading-tight">
                 Pausa Almoço
               </p>
             </div>
-            <div className="bg-black/50 border border-white/10 p-2.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all">
-              <p className="text-xs sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
+            <div className="w-full bg-black/60 border border-white/10 p-3.5 sm:p-4 rounded-xl backdrop-blur-md hover:border-[#C89B58]/40 transition-all flex items-center justify-between sm:block">
+              <p className="text-sm sm:text-xl font-bold font-serif text-[#FAF8F5] tracking-tight">
                 Vapor Ozónio
               </p>
-              <p className="text-[10px] sm:text-sm text-[#E5C268] font-medium pt-0.5 leading-tight">
+              <p className="text-xs sm:text-sm text-[#E5C268] font-medium pt-0.5 leading-tight">
                 Barbaterapia
               </p>
             </div>
