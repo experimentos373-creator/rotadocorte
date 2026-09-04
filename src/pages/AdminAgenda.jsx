@@ -107,6 +107,30 @@ export default function AdminAgenda() {
     loadAppointments();
   }, [selectedDate]);
 
+  // 🔒 Lock body & html scroll when admin modal is open
+  useEffect(() => {
+    if (isNewModalOpen) {
+      document.body.classList.add("modal-open");
+      document.documentElement.classList.add("modal-open");
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.touchAction = "none";
+    } else {
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+      document.body.style.touchAction = "";
+    }
+    return () => {
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+      document.body.style.touchAction = "";
+    };
+  }, [isNewModalOpen]);
+
   const changeDay = (delta) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + delta);
@@ -479,8 +503,8 @@ export default function AdminAgenda() {
 
       {/* Manual Appointment Modal */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn">
+          <div className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto">
             <h3 className="font-serif text-xl font-bold text-white">Marcar Novo Cliente</h3>
             <form onSubmit={handleCreateManual} className="space-y-3.5">
               <div>

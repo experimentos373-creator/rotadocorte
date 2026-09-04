@@ -58,6 +58,16 @@
   }
 }
 
+/* Bulletproof Scroll Lock when Modals are active */
+html.modal-open,
+body.modal-open {
+  overflow: hidden !important;
+  height: 100% !important;
+  touch-action: none !important;
+  -webkit-overflow-scrolling: auto !important;
+  overscroll-behavior: contain !important;
+}
+
 /* Custom Minimal Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -127,5 +137,6 @@
 .text-gold-gradient {
   background: linear-gradient(135deg, #F9E7B9 0%, #C89B58 50%, #9A7032 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
