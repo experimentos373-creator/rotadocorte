@@ -11,8 +11,6 @@ import {
   ChevronLeft,
   Share2,
   AlertCircle,
-  MapPin,
-  Sparkles,
   Scissors
 } from "lucide-react";
 import confetti from "canvas-confetti";
@@ -32,7 +30,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  // Streamlined 5-Step Flow: 1=Service, 2=Date, 3=Time (30m slots), 4=Customer Details, 5=Confirmation
+  // Streamlined 4-step wizard + 5th confirmation: 1=Service, 2=Date, 3=Time (30m slots), 4=Customer Details, 5=Confirmation
   const [step, setStep] = useState(1);
 
   // Form State
@@ -51,7 +49,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const [bookingResult, setBookingResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // 🔒 CRITICAL: Lock body background scroll when modal is open
+  // 🔒 Lock body scroll when modal is active
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -174,7 +172,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         setStep(5);
         try {
           confetti({
-            particleCount: 80,
+            particleCount: 75,
             spread: 60,
             origin: { y: 0.6 },
             colors: ["#C89B58", "#E5C268", "#FAF8F5", "#25D366"]
@@ -212,37 +210,43 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className={`absolute top-5 right-5 w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer transition-colors z-20 ${
-            isDark
-              ? "bg-white/5 border-white/10 text-[#9E9EA7] hover:text-white hover:bg-white/15"
-              : "bg-white border-[#DED7C8] text-[#5C554B] hover:text-[#1C1A17]"
-          }`}
-          aria-label="Fechar"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Studio Branding & Step Tracker Header */}
-        <div className="mb-6 space-y-3">
-          <div className="flex items-center justify-between">
+        {/* ========================================================================= */}
+        {/* HEADER: STUDIO BRANDING, STEP INDICATOR & INTEGRATED CLOSE BUTTON        */}
+        {/* (Zero Overlap Guaranteed by Inline Flex Layout)                           */}
+        {/* ========================================================================= */}
+        <div className="mb-6 space-y-3.5">
+          <div className="flex items-center justify-between gap-3">
+            {/* Left: Studio Identity Badge */}
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#C89B58] animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[#C89B58] animate-pulse shrink-0" />
               <span className="text-[11px] font-mono uppercase tracking-widest text-[#C89B58] font-bold">
                 Rota Do Corte • Paião
               </span>
             </div>
-            {step < 5 && (
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">
-                Passo {step} de 4
-              </span>
-            )}
+
+            {/* Right: Step Indicator Pill + Close Button */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              {step < 5 && (
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#C89B58] bg-[#C89B58]/10 px-3 py-1 rounded-full border border-[#C89B58]/25">
+                  Passo {step} de 4
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className={`w-8 h-8 rounded-full border flex items-center justify-center cursor-pointer transition-colors ${
+                  isDark
+                    ? "bg-white/5 border-white/10 text-[#9E9EA7] hover:text-white hover:bg-white/15"
+                    : "bg-white border-[#DED7C8] text-[#5C554B] hover:text-[#1C1A17]"
+                }`}
+                aria-label="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Progress Segmented Indicator */}
+          {/* Progress Segmented Bar */}
           {step < 5 && (
             <div className="grid grid-cols-4 gap-1.5 pt-1">
               {[1, 2, 3, 4].map((s) => (
@@ -273,7 +277,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            <div className="space-y-2.5 max-h-[52vh] overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
               {servicesData.map((s) => (
                 <button
                   key={s.id}
@@ -343,7 +347,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 Selecione o Dia
               </h2>
               <p className={`text-xs mt-1 leading-relaxed ${isDark ? "text-[#9E9EA7]" : "text-[#5C554B]"}`}>
-                Atendimento de Segunda a Sábado das 10:00 às 22:00. Domingos encerrado para descanso.
+                Atendimento de Segunda a Sábado das 10:00 às 22:00. Domingos encerrado.
               </p>
             </div>
 
@@ -425,7 +429,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 3: ESCOLHER HORÁRIO (SLOTS DE 30 EM 30 MINUTOS)                    */}
+        {/* PASSO 3: ESCOLHER HORÁRIO (SLOTS DE 30 EM 30 MINUTOS + OCUPADOS VISÍVEIS) */}
         {/* ========================================================================= */}
         {step === 3 && (
           <div className="space-y-5 animate-fadeIn">
@@ -446,9 +450,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             ) : availableSlots.length === 0 ? (
               <div className="py-10 text-center space-y-3 p-6 rounded-2xl bg-white/5 border border-white/10">
                 <AlertCircle className="w-8 h-8 text-[#C89B58] mx-auto" />
-                <h4 className="text-sm font-bold text-white">Sem vagas livres para esta data</h4>
+                <h4 className="text-sm font-bold text-white">Sem vagas para esta data</h4>
                 <p className="text-xs text-[#9E9EA7] max-w-sm mx-auto">
-                  A barbearia pode estar com lotação esgotada ou encerrada. Por favor selecione outro dia.
+                  A barbearia encontra-se encerrada nesta data. Por favor selecione outro dia.
                 </p>
                 <button
                   type="button"
@@ -470,24 +474,36 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {availableSlots
                         .filter((s) => s.period === "morning")
-                        .map((slot) => (
-                          <button
-                            key={slot.time}
-                            type="button"
-                            onClick={() => setSelectedTime(slot.time)}
-                            className={`py-3 px-3 rounded-xl font-mono text-xs font-bold border transition-all cursor-pointer ${
-                              selectedTime === slot.time
-                                ? isDark
-                                  ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md shadow-[#C89B58]/30 scale-105"
-                                  : "bg-[#1C1A17] text-white border-[#1C1A17] scale-105"
-                                : isDark
-                                  ? "bg-[#14161E] border-white/5 text-[#FAF8F5] hover:border-[#C89B58]/40 hover:bg-[#1a1d27]"
-                                  : "bg-white border-[#DED7C8] text-[#1C1A17] hover:border-[#1C1A17]"
-                            }`}
-                          >
-                            {slot.time}
-                          </button>
-                        ))}
+                        .map((slot) => {
+                          const isOccupied = !slot.available;
+                          const isSelected = selectedTime === slot.time;
+                          return (
+                            <button
+                              key={slot.time}
+                              type="button"
+                              disabled={isOccupied}
+                              onClick={() => {
+                                if (!isOccupied) setSelectedTime(slot.time);
+                              }}
+                              className={`py-3 px-2.5 rounded-xl font-mono text-xs font-bold border transition-all flex flex-col items-center justify-center min-h-[48px] ${
+                                isOccupied
+                                  ? "bg-black/40 border-white/5 text-[#555866] cursor-not-allowed opacity-45"
+                                  : isSelected
+                                    ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md shadow-[#C89B58]/30 scale-105 cursor-pointer font-bold"
+                                    : "bg-[#14161E] border-white/5 text-[#FAF8F5] hover:border-[#C89B58]/50 hover:bg-[#1a1d27] cursor-pointer"
+                              }`}
+                            >
+                              <span className={isOccupied ? "line-through opacity-70" : ""}>
+                                {slot.time}
+                              </span>
+                              {isOccupied && (
+                                <span className="text-[8px] font-sans no-underline font-bold text-red-400/90 uppercase tracking-tight mt-0.5">
+                                  Ocupado
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -502,24 +518,36 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {availableSlots
                         .filter((s) => s.period === "afternoon" || s.period === "evening")
-                        .map((slot) => (
-                          <button
-                            key={slot.time}
-                            type="button"
-                            onClick={() => setSelectedTime(slot.time)}
-                            className={`py-3 px-3 rounded-xl font-mono text-xs font-bold border transition-all cursor-pointer ${
-                              selectedTime === slot.time
-                                ? isDark
-                                  ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md shadow-[#C89B58]/30 scale-105"
-                                  : "bg-[#1C1A17] text-white border-[#1C1A17] scale-105"
-                                : isDark
-                                  ? "bg-[#14161E] border-white/5 text-[#FAF8F5] hover:border-[#C89B58]/40 hover:bg-[#1a1d27]"
-                                  : "bg-white border-[#DED7C8] text-[#1C1A17] hover:border-[#1C1A17]"
-                            }`}
-                          >
-                            {slot.time}
-                          </button>
-                        ))}
+                        .map((slot) => {
+                          const isOccupied = !slot.available;
+                          const isSelected = selectedTime === slot.time;
+                          return (
+                            <button
+                              key={slot.time}
+                              type="button"
+                              disabled={isOccupied}
+                              onClick={() => {
+                                if (!isOccupied) setSelectedTime(slot.time);
+                              }}
+                              className={`py-3 px-2.5 rounded-xl font-mono text-xs font-bold border transition-all flex flex-col items-center justify-center min-h-[48px] ${
+                                isOccupied
+                                  ? "bg-black/40 border-white/5 text-[#555866] cursor-not-allowed opacity-45"
+                                  : isSelected
+                                    ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md shadow-[#C89B58]/30 scale-105 cursor-pointer font-bold"
+                                    : "bg-[#14161E] border-white/5 text-[#FAF8F5] hover:border-[#C89B58]/50 hover:bg-[#1a1d27] cursor-pointer"
+                              }`}
+                            >
+                              <span className={isOccupied ? "line-through opacity-70" : ""}>
+                                {slot.time}
+                              </span>
+                              {isOccupied && (
+                                <span className="text-[8px] font-sans no-underline font-bold text-red-400/90 uppercase tracking-tight mt-0.5">
+                                  Ocupado
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                     </div>
                   </div>
                 )}

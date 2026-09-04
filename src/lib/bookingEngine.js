@@ -6,7 +6,7 @@ import { servicesData, shopInfo } from "../data/services";
 
 /**
  * Generates viable time slots starting strictly at 30-minute intervals (10:00, 10:30, etc.)
- * Dynamically checks if the service duration fits before shop close, lunch break, or existing bookings.
+ * Returns all regular shift slots with an explicit 'available' flag so booked slots remain visible as occupied/disabled.
  */
 export function generateAvailableSlots({
   date,
@@ -55,19 +55,28 @@ export function generateAvailableSlots({
     slotStart += slotIntervalMinutes // Strictly 30-minute increments!
   ) {
     const slotEnd = slotStart + durationMinutes;
-
-    // Skip past times if today
-    if (isToday && slotStart < currentMinutesFromMidnight) {
-      continue;
-    }
+    const timeString = minutesToTimeString(slotStart);
+    const h = Math.floor(slotStart / 60);
+    const period = h < 13 ? "morning" : h < 19 ? "afternoon" : "evening";
 
     // Skip if overlapping with lunch break
     if (slotStart < lunchEndMinutes && slotEnd > lunchStartMinutes) {
       continue;
     }
 
-    // Check conflict with existing bookings
-    const timeString = minutesToTimeString(slotStart);
+    // Check past times if today
+    if (isToday && slotStart < currentMinutesFromMidnight) {
+      slots.push({
+        time: timeString,
+        minutes: slotStart,
+        period,
+        available: false,
+        reason: "past"
+      });
+      continue;
+    }
+
+    // Check conflict with existing bookings (active appointments)
     const hasConflict = existingBookings.some((b) => {
       if (b.date !== date || b.status === "cancelled") return false;
       const bStart = timeStringToMinutes(b.time);
@@ -75,10 +84,16 @@ export function generateAvailableSlots({
       return slotStart < bEnd && slotEnd > bStart;
     });
 
-    if (!hasConflict) {
-      const h = Math.floor(slotStart / 60);
-      const period = h < 13 ? "morning" : h < 19 ? "afternoon" : "evening";
-
+    if (hasConflict) {
+      // Slot remains VISIBLE in the grid, but marked as occupied/disabled!
+      slots.push({
+        time: timeString,
+        minutes: slotStart,
+        period,
+        available: false,
+        reason: "occupied"
+      });
+    } else {
       slots.push({
         time: timeString,
         minutes: slotStart,

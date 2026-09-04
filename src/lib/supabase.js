@@ -56,7 +56,13 @@ export async function getAvailableSlots({
           success: true,
           slots: data.map((d) => ({
             time: d.formatted_time,
-            fullTimestamp: d.slot_time
+            fullTimestamp: d.slot_time,
+            available: d.is_available !== false,
+            period: parseInt(d.formatted_time.split(":")[0], 10) < 13
+              ? "morning"
+              : parseInt(d.formatted_time.split(":")[0], 10) < 19
+                ? "afternoon"
+                : "evening"
           }))
         };
       }

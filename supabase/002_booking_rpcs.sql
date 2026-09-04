@@ -4,7 +4,7 @@
 -- ==============================================================================
 
 -- 1. FUNCTION: get_available_slots
--- Generates slots at 30-minute intervals, dynamically checking availability for the selected service duration
+-- Generates slots at 30-minute intervals, returning full grid with is_available flag
 CREATE OR REPLACE FUNCTION get_available_slots(
     p_shop_slug TEXT,
     p_date DATE,
@@ -12,7 +12,8 @@ CREATE OR REPLACE FUNCTION get_available_slots(
 )
 RETURNS TABLE (
     slot_time TIMESTAMPTZ,
-    formatted_time TEXT
+    formatted_time TEXT,
+    is_available BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -21,7 +22,7 @@ AS $$
 DECLARE
     v_shop_id UUID;
     v_timezone TEXT;
-    v_interval_min INT := 30; -- Slots starting strictly every 30 minutes
+    v_interval_min INT := 30; -- Strictly 30-minute intervals
     v_min_notice_hrs INT;
     v_service_duration INT;
     v_day_of_week INT;
@@ -80,7 +81,7 @@ BEGIN
     WHILE v_slot_start + (v_service_duration || ' minutes')::INTERVAL <= v_shift_end LOOP
         v_slot_end := v_slot_start + (v_service_duration || ' minutes')::INTERVAL;
 
-        -- Check A: Minimum notice requirement / past time check
+        -- Check A: Skip past times if today
         IF v_slot_start < v_earliest_allowed THEN
             v_slot_start := v_slot_start + (v_interval_min || ' minutes')::INTERVAL;
             CONTINUE;
@@ -112,6 +113,10 @@ BEGIN
         ) INTO v_is_conflict;
 
         IF v_is_conflict THEN
+            slot_time := v_slot_start;
+            formatted_time := to_char(v_slot_start AT TIME ZONE v_timezone, 'HH24:MI');
+            is_available := false;
+            RETURN NEXT;
             v_slot_start := v_slot_start + (v_interval_min || ' minutes')::INTERVAL;
             CONTINUE;
         END IF;
@@ -124,11 +129,10 @@ BEGIN
               AND (tstzrange(v_slot_start, v_slot_end, '[)') && tstzrange(a.start_time, a.end_time, '[)'))
         ) INTO v_is_conflict;
 
-        IF NOT v_is_conflict THEN
-            slot_time := v_slot_start;
-            formatted_time := to_char(v_slot_start AT TIME ZONE v_timezone, 'HH24:MI');
-            RETURN NEXT;
-        END IF;
+        slot_time := v_slot_start;
+        formatted_time := to_char(v_slot_start AT TIME ZONE v_timezone, 'HH24:MI');
+        is_available := NOT v_is_conflict;
+        RETURN NEXT;
 
         -- Advance strictly by 30 minutes
         v_slot_start := v_slot_start + (v_interval_min || ' minutes')::INTERVAL;
