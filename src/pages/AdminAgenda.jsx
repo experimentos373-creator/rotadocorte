@@ -267,12 +267,30 @@ export default function AdminAgenda() {
     loadAppointments();
   };
 
+  // Price Parser Helper
+  const parsePrice = (price) => {
+    if (typeof price === "number") return price;
+    if (!price) return 0;
+    const cleaned = String(price)
+      .replace(/[^\d.,]/g, "")
+      .replace(",", ".");
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  };
+
   // Metrics
   const activeAppointments = appointments.filter((a) => a.status !== "cancelled");
+  const confirmedAppointments = appointments.filter((a) => a.status === "confirmed");
   const completedAppointments = appointments.filter((a) => a.status === "completed");
+
+  // 1. Faturação Concluída (Total Realizada - soma dos serviços com estado 'completed')
+  const completedRevenue = completedAppointments.reduce((acc, curr) => {
+    return acc + parsePrice(curr.service_price);
+  }, 0);
+
+  // 2. Faturação Prevista (Soma de todos os agendamentos ativos do dia)
   const estimatedRevenue = activeAppointments.reduce((acc, curr) => {
-    const val = parseFloat((curr.service_price || "").replace("€", "").replace(",", ".")) || 15;
-    return acc + val;
+    return acc + parsePrice(curr.service_price);
   }, 0);
 
   const filteredAppointments = appointments.filter((a) => {
@@ -415,24 +433,39 @@ export default function AdminAgenda() {
         </div>
 
         {/* Studio Metrics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Total Marcações */}
           <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">Total Marcações</p>
             <p className="text-2xl font-mono font-bold text-white">{appointments.length}</p>
           </div>
+
+          {/* Confirmadas */}
           <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
             <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Confirmadas</p>
             <p className="text-2xl font-mono font-bold text-emerald-400">
-              {appointments.filter((a) => a.status === "confirmed").length}
+              {confirmedAppointments.length}
             </p>
           </div>
+
+          {/* Concluídas */}
           <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
             <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Concluídas</p>
             <p className="text-2xl font-mono font-bold text-sky-400">
               {completedAppointments.length}
             </p>
           </div>
-          <div className="p-4 rounded-2xl bg-[#111319] border border-[#C89B58]/30 bg-gradient-to-br from-[#111319] to-[#C89B58]/10 space-y-1">
+
+          {/* Faturação Concluída (Total Realizada) */}
+          <div className="p-4 rounded-2xl bg-[#111319] border border-sky-500/30 bg-gradient-to-br from-[#111319] to-sky-500/10 space-y-1 shadow-lg shadow-sky-500/5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Faturação Concluída</p>
+            <p className="text-2xl font-mono font-bold text-sky-300">
+              {completedRevenue.toFixed(2)} €
+            </p>
+          </div>
+
+          {/* Faturação Prevista Total */}
+          <div className="p-4 rounded-2xl bg-[#111319] border border-[#C89B58]/40 bg-gradient-to-br from-[#111319] to-[#C89B58]/15 space-y-1 shadow-lg shadow-[#C89B58]/10 col-span-2 sm:col-span-1">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#E5C268]">Faturação Prevista</p>
             <p className="text-2xl font-mono font-bold text-[#E5C268]">{estimatedRevenue.toFixed(2)} €</p>
           </div>
