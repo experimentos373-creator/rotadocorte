@@ -367,11 +367,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-hidden animate-fadeIn"
       onClick={onClose}
     >
-      {/* Dynamic Modal Container: Step 1 is 95% wide, Steps 2-5 are ~75% wide and highly responsive */}
+      {/* Dynamic Modal Container */}
       <div
         className={`relative ${
           step === 1
-            ? "w-[95vw] h-[90vh] max-w-6xl"
+            ? "w-[95vw] sm:w-[90vw] max-w-4xl lg:max-w-5xl max-h-[92vh]"
             : "w-[95vw] sm:w-[85vw] md:w-[75vw] max-w-3xl lg:max-w-4xl max-h-[90vh]"
         } flex flex-col rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 md:p-8 shadow-2xl justify-between border transition-all duration-300 overflow-hidden ${
           isDark
@@ -448,7 +448,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         </div>
 
         {/* ========================================================================= */}
-        {/* PASSO 1: ESCOLHA O SERVIÇO (EXACT DESIGN WITH GENEROUS SPACING)           */}
+        {/* PASSO 1: ESCOLHA O SERVIÇO (2-COLUMN GRID WITH SPACIOUS CARDS)            */}
         {/* ========================================================================= */}
         {step === 1 && (
           <div className="flex-1 min-h-0 flex flex-col justify-between pt-2 animate-fadeIn">
@@ -466,8 +466,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* Services Grid (Spacious & uncluttered layout) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 md:gap-5 my-auto flex-1 min-h-0 overflow-y-auto py-2 pr-1">
+            {/* 2-Column Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4.5 my-auto flex-1 min-h-0 overflow-y-auto py-2 pr-1">
               {servicesData.map((s, idx) => {
                 const isSelected = selectedServiceId === s.id;
                 return (
@@ -475,7 +475,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     key={s.id}
                     onClick={() => setSelectedServiceId(s.id)}
                     className={`relative p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
-                      idx === 4 ? "sm:col-span-2 lg:col-span-1" : ""
+                      idx === 4 ? "md:col-span-2" : ""
                     } ${
                       isSelected
                         ? isDark
@@ -543,9 +543,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
             {/* Step 1 Footer */}
             <div className="pt-4 mt-2 flex items-center justify-between gap-4 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
-              <div className="hidden sm:flex items-center gap-2 text-xs text-[#71717A] dark:text-[#9E9EA7]">
-                <ShieldCheck className="w-4 h-4 text-[#C89B58]" />
-                <span className="text-xs">Ambiente seguro, higienizado e profissional</span>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-[#71717A] dark:text-[#9E9EA7] shrink-0">
+                <ShieldCheck className="w-4 h-4 text-[#C89B58] shrink-0" />
+                <span className="text-xs whitespace-nowrap">Ambiente seguro, higienizado e profissional</span>
               </div>
               <button
                 type="button"
@@ -553,14 +553,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 onClick={() => {
                   if (selectedServiceId) setStep(2);
                 }}
-                className={`w-full sm:w-auto ml-auto px-8 py-3.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg ${
+                className={`w-full sm:w-auto ml-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shrink-0 whitespace-nowrap ${
                   selectedServiceId
                     ? "bg-[#C89B58] hover:bg-[#d8ab66] text-black shadow-[#C89B58]/20 hover:scale-[1.02] cursor-pointer"
                     : "bg-white/10 text-white/40 border border-white/10 cursor-not-allowed"
                 }`}
               >
-                <span>{selectedServiceId ? "Avançar para Data" : "Selecione um Serviço"}</span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                <span className="whitespace-nowrap">{selectedServiceId ? "Avançar para Data" : "Selecione um Serviço"}</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -649,22 +649,22 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 2 Footer */}
-            <div className="pt-4 mt-2 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
+            <div className="pt-4 mt-2 flex items-center justify-between gap-4 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors"
+                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
               </button>
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="bg-[#C89B58] hover:bg-[#d8ab66] text-black font-extrabold px-8 py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] text-black font-extrabold px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
               >
-                <span>Ver Horários ({currentService.duration})</span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                <span className="whitespace-nowrap">Ver Horários ({currentService.duration})</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -840,23 +840,23 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             )}
 
             {/* Step 3 Footer */}
-            <div className="pt-4 mt-2 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
+            <div className="pt-4 mt-2 flex items-center justify-between gap-4 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors"
+                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
               </button>
               <button
                 type="button"
                 disabled={!selectedTime}
                 onClick={() => setStep(4)}
-                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-40 text-black font-extrabold px-8 py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-40 text-black font-extrabold px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
               >
-                <span>Avançar para Dados</span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                <span className="whitespace-nowrap">Avançar para Dados</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -987,29 +987,29 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 4 Footer */}
-            <div className="pt-4 sm:pt-5 mt-2 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
+            <div className="pt-4 sm:pt-5 mt-2 flex items-center justify-between gap-4 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors"
+                className="text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#9E9EA7] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-50 text-black font-extrabold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-50 text-black font-extrabold px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                    <span>A Confirmar...</span>
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span className="whitespace-nowrap">A Confirmar...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                    <span>Confirmar Agendamento</span>
+                    <CheckCircle2 className="w-4 h-4 stroke-[2.5] shrink-0" />
+                    <span className="whitespace-nowrap">Confirmar Agendamento</span>
                   </>
                 )}
               </button>
