@@ -1616,104 +1616,104 @@ export default function AdminAgenda() {
               </div>
             </div>
 
-            {/* Visual Charts Grid 1: Donut Mix & Chair Yield Matrix */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* 1. Interactive SVG Donut Chart: Mix de Serviços & Faturação (7 Cols) */}
-              <div className="lg:col-span-7 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-4">
-                  <div>
-                    <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                      <PieChart className="w-5 h-5 text-[#C89B58]" />
-                      <span>Mix de Serviços & Faturação</span>
-                    </h3>
-                    <p className="text-xs text-[#9E9EA7]">
-                      Distribuição visual da faturação e volume por tratamento.
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono font-bold text-[#E5C268]">
-                    <span>Faturação:</span>
-                    <span className="text-white">{statsData.estimatedRevenue.toFixed(2)} €</span>
-                  </div>
+            {/* Visual Chart 1: Donut Mix & Detalhamento de Serviços (Full Width) */}
+            <div className="p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                    <PieChart className="w-5 h-5 text-[#C89B58]" />
+                    <span>Mix de Serviços & Faturação Real</span>
+                  </h3>
+                  <p className="text-xs text-[#9E9EA7]">
+                    Distribuição percentual e financeira de cada corte e tratamento no período selecionado.
+                  </p>
                 </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono font-bold text-[#E5C268]">
+                  <span>Faturação Total:</span>
+                  <span className="text-white text-sm">{statsData.estimatedRevenue.toFixed(2)} €</span>
+                </div>
+              </div>
 
-                {statsData.serviceRanking.length === 0 ? (
-                  <div className="py-16 text-center text-xs text-[#9E9EA7] flex flex-col items-center justify-center gap-2">
-                    <PieChart className="w-8 h-8 text-white/20" />
-                    <span>Sem dados no período selecionado.</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
-                    {/* Donut Ring Visual (5 Cols on SM) */}
-                    <div className="sm:col-span-5 flex flex-col items-center justify-center relative py-2">
-                      <div className="relative w-44 h-44 flex items-center justify-center">
-                        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
-                          {/* Background Track Ring */}
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            className="stroke-white/5"
-                            strokeWidth="16"
-                            fill="transparent"
-                          />
+              {statsData.serviceRanking.length === 0 ? (
+                <div className="py-16 text-center text-xs text-[#9E9EA7] flex flex-col items-center justify-center gap-2">
+                  <PieChart className="w-8 h-8 text-white/20" />
+                  <span>Sem dados de marcações no período selecionado.</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                  {/* Donut Ring Visual (4 Cols on LG) */}
+                  <div className="lg:col-span-4 flex flex-col items-center justify-center relative py-4">
+                    <div className="relative w-52 h-52 flex items-center justify-center">
+                      <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
+                        {/* Background Track Ring */}
+                        <circle
+                          cx="80"
+                          cy="80"
+                          r="60"
+                          className="stroke-white/5"
+                          strokeWidth="16"
+                          fill="transparent"
+                        />
 
-                          {/* Colored Segments */}
-                          {statsData.serviceRanking.map((s) => {
-                            const isHovered = hoveredService === s.name;
-                            const r = 60;
-                            const circ = 2 * Math.PI * r;
-                            const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
-                            const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
+                        {/* Colored Segments */}
+                        {statsData.serviceRanking.map((s) => {
+                          const isHovered = hoveredService === s.name;
+                          const r = 60;
+                          const circ = 2 * Math.PI * r;
+                          const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
+                          const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
 
-                            return (
-                              <circle
-                                key={s.name}
-                                cx="80"
-                                cy="80"
-                                r="60"
-                                fill="transparent"
-                                stroke={s.color}
-                                strokeWidth={isHovered ? "20" : "16"}
-                                strokeDasharray={`${dashL} ${circ}`}
-                                strokeDashoffset={dashOff}
-                                strokeLinecap="round"
-                                className="transition-all duration-300 cursor-pointer"
-                                style={{
-                                  filter: isHovered ? `drop-shadow(0 0 8px ${s.color})` : "none"
-                                }}
-                                onMouseEnter={() => setHoveredService(s.name)}
-                                onMouseLeave={() => setHoveredService(null)}
-                              />
-                            );
-                          })}
-                        </svg>
+                          return (
+                            <circle
+                              key={s.name}
+                              cx="80"
+                              cy="80"
+                              r="60"
+                              fill="transparent"
+                              stroke={s.color}
+                              strokeWidth={isHovered ? "20" : "16"}
+                              strokeDasharray={`${dashL} ${circ}`}
+                              strokeDashoffset={dashOff}
+                              strokeLinecap="round"
+                              className="transition-all duration-300 cursor-pointer"
+                              style={{
+                                filter: isHovered ? `drop-shadow(0 0 10px ${s.color})` : "none"
+                              }}
+                              onMouseEnter={() => setHoveredService(s.name)}
+                              onMouseLeave={() => setHoveredService(null)}
+                            />
+                          );
+                        })}
+                      </svg>
 
-                        {/* Center Hub Metrics */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-2">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#9E9EA7]">
-                            Total Estimado
-                          </span>
-                          <span className="text-xl font-mono font-black text-white">
-                            {statsData.estimatedRevenue.toFixed(2)} €
-                          </span>
-                          <span className="text-[10px] text-[#C89B58] font-bold">
-                            {statsData.total} {statsData.total === 1 ? "marcação" : "marcações"}
-                          </span>
-                        </div>
+                      {/* Center Hub Metrics */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-3">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#9E9EA7]">
+                          Faturação Real
+                        </span>
+                        <span className="text-2xl font-mono font-black text-white mt-0.5">
+                          {statsData.estimatedRevenue.toFixed(2)} €
+                        </span>
+                        <span className="text-xs text-[#C89B58] font-bold mt-0.5">
+                          {statsData.total} {statsData.total === 1 ? "atendimento" : "atendimentos"}
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Interactive Color Legend Cards (7 Cols on SM) */}
-                    <div className="sm:col-span-7 space-y-2.5">
+                  {/* Interactive Multi-Column Legend & Metrics Cards (8 Cols on LG) */}
+                  <div className="lg:col-span-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {statsData.serviceRanking.map((s, idx) => {
                         const isHovered = hoveredService === s.name;
+                        const totalChairTime = s.count * s.durationMin;
 
                         return (
                           <div
                             key={s.name}
                             onMouseEnter={() => setHoveredService(s.name)}
                             onMouseLeave={() => setHoveredService(null)}
-                            className={`p-3 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                            className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
                               isHovered
                                 ? "bg-white/10 border-[#C89B58]/60 shadow-lg scale-[1.02]"
                                 : "bg-black/30 border-white/5 hover:border-white/20"
@@ -1722,140 +1722,57 @@ export default function AdminAgenda() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <span
-                                  className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
                                   style={{ backgroundColor: s.color }}
                                 />
-                                <span className="font-bold text-xs text-white truncate">
+                                <span className="font-bold text-sm text-white truncate">
                                   {s.name}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-mono font-bold text-xs text-sky-300">
-                                  {s.revenue.toFixed(2)} €
-                                </span>
-                                <span
-                                  className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full"
-                                  style={{
-                                    backgroundColor: `${s.color}25`,
-                                    color: s.color,
-                                    border: `1px solid ${s.color}50`
-                                  }}
-                                >
-                                  {s.percent}%
-                                </span>
-                              </div>
+                              <span
+                                className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor: `${s.color}25`,
+                                  color: s.color,
+                                  border: `1px solid ${s.color}50`
+                                }}
+                              >
+                                {s.percent}%
+                              </span>
                             </div>
 
-                            {/* Subtext and Progress line */}
-                            <div className="mt-2 space-y-1">
-                              <div className="flex items-center justify-between text-[11px] text-[#9E9EA7]">
-                                <span>{s.count} {s.count === 1 ? "cliente" : "clientes"} • {s.durationMin} min</span>
-                                <span>Média: {s.avgPrice.toFixed(2)} €</span>
+                            {/* Revenue & Counts */}
+                            <div className="mt-3 flex items-end justify-between">
+                              <div>
+                                <span className="text-[11px] text-[#9E9EA7] block">
+                                  {s.count} {s.count === 1 ? "marcação" : "marcações"} ({totalChairTime} min de cadeira)
+                                </span>
+                                <span className="text-[11px] text-[#9E9EA7]">
+                                  {s.durationMin} min / corte • Média: {s.avgPrice.toFixed(2)} €
+                                </span>
                               </div>
-                              <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${s.percent}%`,
-                                    backgroundColor: s.color
-                                  }}
-                                />
-                              </div>
+                              <span className="font-mono font-bold text-base text-sky-300">
+                                {s.revenue.toFixed(2)} €
+                              </span>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="mt-2.5 w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${s.percent}%`,
+                                  backgroundColor: s.color
+                                }}
+                              />
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* 2. Rentabilidade por Hora de Cadeira (€/h) (5 Cols) */}
-              <div className="lg:col-span-5 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                    <div>
-                      <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                        <Zap className="w-5 h-5 text-[#C89B58]" />
-                        <span>Rentabilidade por Hora</span>
-                      </h3>
-                      <p className="text-xs text-[#9E9EA7]">
-                        Rendimento em € gerado por cada 60 minutos de cadeira.
-                      </p>
-                    </div>
-                  </div>
-
-                  {statsData.yieldRanking.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-[#9E9EA7]">
-                      Sem dados de rentabilidade suficientes.
-                    </div>
-                  ) : (
-                    <div className="space-y-3 mt-4">
-                      {statsData.yieldRanking.map((s, idx) => {
-                        const isTop = idx === 0;
-                        const yieldPercent = (s.hourlyYield / statsData.maxHourlyYield) * 100;
-
-                        return (
-                          <div
-                            key={s.name}
-                            className={`p-3 rounded-2xl border transition-all ${
-                              isTop
-                                ? "bg-gradient-to-r from-[#111319] to-[#C89B58]/10 border-[#C89B58]/40 shadow-md"
-                                : "bg-black/30 border-white/5"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2 text-xs">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {isTop ? (
-                                  <span className="w-5 h-5 rounded-full bg-[#C89B58]/20 text-[#E5C268] flex items-center justify-center shrink-0">
-                                    <Award className="w-3.5 h-3.5" />
-                                  </span>
-                                ) : (
-                                  <span className="w-5 h-5 rounded-full bg-white/5 text-[#9E9EA7] font-mono text-[10px] flex items-center justify-center shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                )}
-                                <span className="font-bold text-white truncate">{s.name}</span>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <span className="font-mono font-black text-sm text-[#E5C268]">
-                                  {s.hourlyYield.toFixed(2)} €
-                                </span>
-                                <span className="text-[10px] text-[#9E9EA7] block">/ hora</span>
-                              </div>
-                            </div>
-
-                            {/* Yield Bar */}
-                            <div className="mt-2.5 space-y-1">
-                              <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    isTop
-                                      ? "bg-gradient-to-r from-[#C89B58] to-[#E5C268]"
-                                      : "bg-white/30"
-                                  }`}
-                                  style={{ width: `${yieldPercent}%` }}
-                                />
-                              </div>
-                              <div className="flex items-center justify-between text-[10px] text-[#9E9EA7]">
-                                <span>{s.durationMin} min por corte</span>
-                                <span>Faturado: {s.revenue.toFixed(2)} €</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
-
-                <div className="p-3.5 rounded-2xl bg-[#C89B58]/10 border border-[#C89B58]/25 text-[11px] text-[#E5C268] leading-relaxed flex items-start gap-2.5 mt-2">
-                  <Lightbulb className="w-4 h-4 text-[#C89B58] shrink-0 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Dica Estratégica:</strong> Priorize promover serviços com maior rendimento horário nos horários nobres (17h - 21h) para maximizar o ganho por hora.
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Visual Charts Grid 2: Evolução Temporal & Matriz de Horários */}
