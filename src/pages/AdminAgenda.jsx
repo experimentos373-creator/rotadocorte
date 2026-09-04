@@ -52,7 +52,15 @@ import {
   Zap,
   Target,
   TrendingDown,
-  ArrowRight
+  ArrowRight,
+  LayoutDashboard,
+  CalendarRange,
+  FileSpreadsheet,
+  Download,
+  Bell,
+  Menu,
+  X,
+  UserCheck
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -64,6 +72,7 @@ import {
   createBlockSlot,
   verifyAdminPin,
   subscribeToAppointments,
+  createBooking,
   isSupabaseConfigured,
   supabase
 } from "../lib/supabase";
@@ -82,8 +91,24 @@ export default function AdminAgenda() {
     return sessionStorage.getItem("rotadocorte_admin_pin") || "";
   });
 
-  // Navigation Tabs: 'agenda' | 'stats' | 'crm'
-  const [activeTab, setActiveTab] = useState("agenda");
+  // UI Theme (Light Executive or Dark Studio)
+  const [dashboardTheme, setDashboardTheme] = useState(() => {
+    return localStorage.getItem("rotadocorte_admin_theme") || "dark";
+  });
+
+  const toggleTheme = () => {
+    const next = dashboardTheme === "dark" ? "light" : "dark";
+    setDashboardTheme(next);
+    localStorage.setItem("rotadocorte_admin_theme", next);
+  };
+
+  const isLight = dashboardTheme === "light";
+
+  // Sidebar Open on Mobile
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Navigation Tabs: 'dashboard' | 'agenda' | 'stats' | 'crm' | 'blocks'
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   // Selected Date for Agenda View
   const [selectedDate, setSelectedDate] = useState(
@@ -95,8 +120,8 @@ export default function AdminAgenda() {
   const [dayAppointments, setDayAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Scope: 'all' (Todas as Marcações) | 'day' (Agenda do Dia Selecionado)
-  const [agendaScope, setAgendaScope] = useState("all");
+  // Scope in Agenda View: 'all' (Todas as Marcações) | 'day' (Agenda do Dia Selecionado)
+  const [agendaScope, setAgendaScope] = useState("day");
 
   // Sorting Mode: 'newest' | 'oldest' | 'price_desc' | 'price_asc'
   const [sortBy, setSortBy] = useState("newest");
@@ -110,7 +135,6 @@ export default function AdminAgenda() {
   // Stats Period Selector: 'today' | 'week' | 'month' | '30days' | 'all'
   const [statsPeriod, setStatsPeriod] = useState("month");
   const [hoveredService, setHoveredService] = useState(null);
-  const [hoveredHourlySlot, setHoveredHourlySlot] = useState(null);
   const [hoveredTimelineBar, setHoveredTimelineBar] = useState(null);
 
   // Modal: New Manual Appointment
@@ -122,6 +146,7 @@ export default function AdminAgenda() {
   const [manualNotes, setManualNotes] = useState("");
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
+  const [isSavingManual, setIsSavingManual] = useState(false);
 
   // Modal: Edit Appointment
   const [editingAppt, setEditingAppt] = useState(null);
@@ -142,8 +167,6 @@ export default function AdminAgenda() {
   const [blockStartTime, setBlockStartTime] = useState("13:00");
   const [blockEndTime, setBlockEndTime] = useState("14:30");
   const [blockReason, setBlockReason] = useState("Pausa de Almoço");
-  const [isBlockStartDropdownOpen, setIsBlockStartDropdownOpen] = useState(false);
-  const [isBlockEndDropdownOpen, setIsBlockEndDropdownOpen] = useState(false);
   const [isSavingBlock, setIsSavingBlock] = useState(false);
 
   // Helper Price Parser
@@ -192,7 +215,7 @@ export default function AdminAgenda() {
 
   // Load All Appointments (Both for Day View, Multi-Period Stats & CRM)
   const loadAppointments = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !currentAdminPin) return;
     setIsLoading(true);
     const data = await getAllAppointments(currentAdminPin);
     setAllAppointments(data || []);
@@ -205,7 +228,7 @@ export default function AdminAgenda() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && currentAdminPin) {
       loadAppointments();
 
       // Realtime live sync whenever any new booking is made
@@ -327,6 +350,7 @@ export default function AdminAgenda() {
   // Create Manual Appointment (Saved directly to central database)
   const handleCreateManual = async (e) => {
     e.preventDefault();
+    setIsSavingManual(true);
     await createBooking({
       shopSlug: "rotadocorte",
       serviceId: manualServiceId,
@@ -336,7 +360,7 @@ export default function AdminAgenda() {
       customerPhone: manualPhone.trim(),
       customerNotes: manualNotes.trim()
     });
-
+    setIsSavingManual(false);
     setIsNewModalOpen(false);
     setManualName("");
     setManualPhone("");
@@ -367,14 +391,7 @@ export default function AdminAgenda() {
   // Active list based on scope (all or day)
   const currentScopeList = agendaScope === "day" ? dayAppointments : allAppointments;
 
-  // Metrics for Current Scope
-  const scopeActive = currentScopeList.filter((a) => a.status !== "cancelled" && a.status !== "blocked");
-  const scopeConfirmed = currentScopeList.filter((a) => a.status === "confirmed");
-  const scopeCompleted = currentScopeList.filter((a) => a.status === "completed");
-  const scopeCompletedRevenue = scopeCompleted.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
-  const scopeEstimatedRevenue = scopeActive.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
-
-  // Filtered & Sorted Appointments List
+  // Filtered & Sorted Appointments List for Agenda View
   const sortedAndFilteredAppointments = useMemo(() => {
     const sourceList = agendaScope === "day" ? dayAppointments : allAppointments;
 
@@ -400,23 +417,19 @@ export default function AdminAgenda() {
 
     return [...filtered].sort((a, b) => {
       if (sortBy === "newest") {
-        // Most recent first
         const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
         const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
         return timeB - timeA;
       }
       if (sortBy === "oldest") {
-        // Oldest first
         const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
         const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
         return timeA - timeB;
       }
       if (sortBy === "price_desc") {
-        // Highest price first
         return parsePrice(b.service_price) - parsePrice(a.service_price);
       }
       if (sortBy === "price_asc") {
-        // Lowest price first
         return parsePrice(a.service_price) - parsePrice(b.service_price);
       }
       return 0;
@@ -424,20 +437,20 @@ export default function AdminAgenda() {
   }, [agendaScope, dayAppointments, allAppointments, filterStatus, searchQuery, sortBy]);
 
   // =========================================================================
-  // MULTI-PERIOD STATS CALCULATIONS (FASE 1 & FASE 2)
+  // MULTI-PERIOD STATS CALCULATIONS (DASHBOARD & METRICS)
   // =========================================================================
   const statsData = useMemo(() => {
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
-    // Get Start of Current Week (Monday)
+    // Start of Current Week (Monday)
     const d = new Date(now);
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
     monday.setHours(0, 0, 0, 0);
 
-    // Filter by period
+    // Filter appointments by period
     const filtered = allAppointments.filter((a) => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
@@ -486,6 +499,42 @@ export default function AdminAgenda() {
     const totalFinishedOrCancelled = completed.length + cancelled.length;
     const completionRate = totalFinishedOrCancelled > 0 ? Math.round((completed.length / totalFinishedOrCancelled) * 100) : 100;
 
+    // Client Retention / Repeat Rate (%)
+    const clientVisitCounts = {};
+    allAppointments.forEach((a) => {
+      if (a.status === "blocked") return;
+      const key = (a.customer_phone || a.customer_name || "").trim();
+      if (!key || key === "---") return;
+      clientVisitCounts[key] = (clientVisitCounts[key] || 0) + 1;
+    });
+    const totalUniqueAllTime = Object.keys(clientVisitCounts).length;
+    const repeatClientsCount = Object.values(clientVisitCounts).filter((c) => c > 1).length;
+    const repeatRate = totalUniqueAllTime > 0 ? Math.round((repeatClientsCount / totalUniqueAllTime) * 100) : 0;
+
+    // Days of Week Breakdown (Seg a Sáb)
+    const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const daysActivityMap = {
+      1: { label: "Seg", name: "Segunda", count: 0, revenue: 0 },
+      2: { label: "Ter", name: "Terça", count: 0, revenue: 0 },
+      3: { label: "Qua", name: "Quarta", count: 0, revenue: 0 },
+      4: { label: "Qui", name: "Quinta", count: 0, revenue: 0 },
+      5: { label: "Sex", name: "Sexta", count: 0, revenue: 0 },
+      6: { label: "Sáb", name: "Sábado", count: 0, revenue: 0 }
+    };
+
+    active.forEach((a) => {
+      if (!a.date) return;
+      const dow = new Date(a.date).getDay();
+      if (daysActivityMap[dow]) {
+        daysActivityMap[dow].count += 1;
+        daysActivityMap[dow].revenue += parsePrice(a.service_price);
+      }
+    });
+
+    const daysActivity = Object.values(daysActivityMap);
+    const maxDayCount = Math.max(...daysActivity.map((d) => d.count), 1);
+    const peakDay = daysActivity.reduce((max, curr) => (curr.count > max.count ? curr : max), daysActivity[0]);
+
     // Service Breakdown & Ranking
     const serviceMap = {};
     active.forEach((a) => {
@@ -499,157 +548,84 @@ export default function AdminAgenda() {
     });
 
     const rawServiceRanking = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue);
-    const maxServiceRevenue = rawServiceRanking.reduce((max, s) => Math.max(max, s.revenue), 1);
 
-    // Curated Luxury Palette (Strictly zero purple/violet colors)
     const PALETTE = [
-      { stroke: "#C89B58", text: "#E5C268", bg: "bg-[#C89B58]/15 border-[#C89B58]/35 text-[#FAF8F5]", dot: "bg-[#C89B58]", shadow: "rgba(200, 155, 88, 0.3)" },
-      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/15 border-sky-500/35 text-sky-300", dot: "bg-sky-400", shadow: "rgba(56, 189, 248, 0.3)" },
-      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300", dot: "bg-emerald-400", shadow: "rgba(52, 211, 153, 0.3)" },
-      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/15 border-orange-500/35 text-orange-300", dot: "bg-orange-400", shadow: "rgba(251, 146, 60, 0.3)" },
-      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/15 border-lime-500/35 text-lime-300", dot: "bg-lime-400", shadow: "rgba(163, 230, 53, 0.3)" },
-      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/15 border-slate-500/35 text-slate-300", dot: "bg-slate-400", shadow: "rgba(148, 163, 184, 0.3)" }
+      { stroke: "#C89B58", text: "#C89B58", bg: "bg-[#C89B58]/10 text-[#C89B58] border-[#C89B58]/30" },
+      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/10 text-sky-400 border-sky-500/30" },
+      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/10 text-orange-400 border-orange-500/30" },
+      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/10 text-lime-400 border-lime-500/30" },
+      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/10 text-slate-400 border-slate-500/30" }
     ];
 
     let accumulatedAngle = 0;
-    const perimeter = 2 * Math.PI * 65; // ~408.407 for r=65
+    const perimeter = 2 * Math.PI * 65;
 
     const serviceRanking = rawServiceRanking.map((s, idx) => {
       const colorScheme = PALETTE[idx % PALETTE.length];
       const percent = estimatedRev > 0 ? (s.revenue / estimatedRev) * 100 : 0;
-      const countPercent = active.length > 0 ? (s.count / active.length) * 100 : 0;
-
       const dashLength = Math.max((percent / 100) * perimeter, percent > 0 ? 3 : 0);
       const dashOffset = -(accumulatedAngle / 100) * perimeter;
       accumulatedAngle += percent;
 
-      // Find matched service duration in servicesData
       const matched = servicesData.find(
         (sd) => sd.name?.toLowerCase() === s.name?.toLowerCase() || sd.id === s.id
       );
       const durationMin = matched ? parseInt(matched.duration, 10) || 30 : 30;
       const avgPrice = s.count > 0 ? s.revenue / s.count : 0;
-      const hourlyYield = durationMin > 0 ? (avgPrice / durationMin) * 60 : 0;
-      const totalHours = (s.count * durationMin) / 60;
 
       return {
         ...s,
         percent: Math.round(percent),
         exactPercent: percent,
-        countPercent: Math.round(countPercent),
         color: colorScheme.stroke,
         textColor: colorScheme.text,
         bgClass: colorScheme.bg,
-        dotClass: colorScheme.dot,
-        shadowColor: colorScheme.shadow,
         dashLength,
         dashOffset,
         durationMin,
-        avgPrice,
-        hourlyYield,
-        totalHours
+        avgPrice
       };
     });
 
-    // Peak Hours Breakdown (Hourly Matrix 10h to 21h)
-    let morningCount = 0; // 10:00 - 13:00
-    let afternoonCount = 0; // 14:00 - 17:00
-    let eveningCount = 0; // 17:00 - 22:00
-
-    const hourlySlots = [
-      "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
-      "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"
-    ];
-
-    const hourlyDistribution = hourlySlots.map((slot) => {
-      const slotHour = parseInt(slot.split(":")[0], 10);
-      const apptsInHour = active.filter((a) => {
-        const h = parseInt((a.time || "10:00").split(":")[0], 10);
-        return h === slotHour;
-      });
-
-      const count = apptsInHour.length;
-      const rev = apptsInHour.reduce((acc, a) => acc + parsePrice(a.service_price), 0);
-      const periodTag = slotHour < 13 ? "Manhã" : slotHour < 17 ? "Tarde" : "Noite";
-
-      if (slotHour < 13) morningCount += count;
-      else if (slotHour < 17) afternoonCount += count;
-      else eveningCount += count;
-
-      return {
-        slot,
-        hour: slotHour,
-        label: `${slotHour}h`,
-        count,
-        revenue: rev,
-        periodTag,
-        isPrime: slotHour >= 17 && slotHour <= 21
-      };
-    });
-
-    const maxHourlyCount = Math.max(...hourlyDistribution.map((h) => h.count), 1);
-    const peakSlot = hourlyDistribution.reduce((max, curr) => (curr.count > max.count ? curr : max), hourlyDistribution[0]);
-
-    // Timeline / Daily Trend Data
+    // Timeline Trend for Smooth Chart
     const dateMap = {};
-    if (statsPeriod === "week") {
-      const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-      for (let i = 0; i < 7; i++) {
-        const cur = new Date(monday);
-        cur.setDate(cur.getDate() + i);
-        const dStr = cur.toISOString().split("T")[0];
-        dateMap[dStr] = {
-          date: dStr,
-          label: dayNames[cur.getDay()],
-          fullLabel: cur.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "numeric" }),
-          count: 0,
-          completedCount: 0,
-          revenue: 0
-        };
-      }
-    }
-
     active.forEach((a) => {
       const dStr = a.date;
       if (!dStr) return;
       if (!dateMap[dStr]) {
         const dObj = new Date(dStr);
-        const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
         dateMap[dStr] = {
           date: dStr,
           label: dayNames[dObj.getDay()] || dStr.slice(5),
           fullLabel: dObj.toLocaleDateString("pt-PT", { day: "numeric", month: "short" }),
           count: 0,
-          completedCount: 0,
           revenue: 0
         };
       }
       dateMap[dStr].count += 1;
-      if (a.status === "completed") {
-        dateMap[dStr].completedCount += 1;
-      }
       dateMap[dStr].revenue += parsePrice(a.service_price);
     });
 
     const timelineData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
     const maxTimelineRevenue = Math.max(...timelineData.map((d) => d.revenue), 1);
-    const maxTimelineCount = Math.max(...timelineData.map((d) => d.count), 1);
 
-    // Yield Ranking (€/hour of chair time)
-    const yieldRanking = [...serviceRanking].sort((a, b) => b.hourlyYield - a.hourlyYield);
-    const maxHourlyYield = Math.max(...yieldRanking.map((y) => y.hourlyYield), 1);
+    // Build SVG Path for Area/Line Chart
+    let chartSvgPath = "";
+    let chartAreaPath = "";
+    if (timelineData.length > 1) {
+      const w = 500;
+      const h = 140;
+      const padding = 15;
+      const points = timelineData.map((d, i) => {
+        const x = padding + (i / (timelineData.length - 1)) * (w - 2 * padding);
+        const y = h - padding - (d.revenue / maxTimelineRevenue) * (h - 2 * padding);
+        return { x, y };
+      });
 
-    // Status Funnel
-    const totalAll = nonBlocked.length || 1;
-    const funnelData = {
-      total: nonBlocked.length,
-      confirmed: confirmed.length,
-      completed: completed.length,
-      cancelled: cancelled.length,
-      completedPct: Math.round((completed.length / totalAll) * 100),
-      confirmedPct: Math.round((confirmed.length / totalAll) * 100),
-      cancelledPct: Math.round((cancelled.length / totalAll) * 100),
-    };
+      chartSvgPath = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map((p) => `L ${p.x} ${p.y}`).join(" ");
+      chartAreaPath = `${chartSvgPath} L ${points[points.length - 1].x} ${h} L ${points[0].x} ${h} Z`;
+    }
 
     return {
       total: nonBlocked.length,
@@ -661,29 +637,21 @@ export default function AdminAgenda() {
       estimatedRevenue: estimatedRev,
       avgTicket,
       completionRate,
+      repeatRate,
+      daysActivity,
+      maxDayCount,
+      peakDay,
       serviceRanking,
-      maxServiceRevenue,
-      hourlyDistribution,
-      maxHourlyCount,
-      peakSlot,
       timelineData,
       maxTimelineRevenue,
-      maxTimelineCount,
-      yieldRanking,
-      maxHourlyYield,
-      funnelData,
-      perimeter,
-      peakHours: {
-        morning: morningCount,
-        afternoon: afternoonCount,
-        evening: eveningCount,
-        total: active.length || 1
-      }
+      chartSvgPath,
+      chartAreaPath,
+      perimeter
     };
   }, [allAppointments, statsPeriod]);
 
   // =========================================================================
-  // MINI-CRM AGGREGATION (FASE 4)
+  // MINI-CRM AGGREGATION
   // =========================================================================
   const crmClients = useMemo(() => {
     const map = {};
@@ -729,7 +697,6 @@ export default function AdminAgenda() {
     });
 
     const list = Object.values(map).map((c) => {
-      // Find favorite service
       let favService = "Corte Clássico";
       let maxCount = 0;
       Object.entries(c.servicesUsed).forEach(([s, count]) => {
@@ -770,26 +737,32 @@ export default function AdminAgenda() {
   // 🔒 Lock Screen View when not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#090A0E] text-[#FAF8F5] flex flex-col items-center justify-center p-4 selection:bg-[#C89B58] selection:text-black font-sans">
-        <div className="w-full max-w-sm bg-[#111319] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div className={`min-h-screen flex flex-col items-center justify-center p-4 font-sans transition-colors ${
+        isLight ? "bg-[#F3F4F6] text-[#111827]" : "bg-[#090A0E] text-[#FAF8F5]"
+      }`}>
+        <div className={`w-full max-w-sm rounded-3xl p-7 shadow-2xl space-y-6 border transition-all ${
+          isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+        }`}>
           {/* Header */}
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3 text-[#C89B58]">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3 border ${
+              isLight ? "bg-neutral-100 border-neutral-200 text-[#C89B58]" : "bg-white/5 border-white/10 text-[#C89B58]"
+            }`}>
               <Lock className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold text-white tracking-tight">
-              Acesso à Gestão
+            <h1 className="text-xl font-bold tracking-tight">
+              Acesso ao Painel
             </h1>
-            <p className="text-xs text-[#8E929E] leading-relaxed">
-              Introduza o PIN de segurança para aceder à agenda e dados de clientes.
+            <p className="text-xs text-neutral-500 leading-relaxed">
+              Introduza o PIN de administrador para aceder ao sistema de gestão da Rota Do Corte.
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-medium text-[#8E929E] uppercase tracking-wider">
-                Senha / Código PIN
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
+                Código PIN
               </label>
               <div className="relative">
                 <input
@@ -799,15 +772,18 @@ export default function AdminAgenda() {
                     setAdminPinInput(e.target.value);
                     if (pinError) setPinError("");
                   }}
-                  placeholder="••••••••"
+                  placeholder="••••"
                   autoFocus
-                  className="w-full bg-black/40 border border-white/10 focus:border-[#C89B58] rounded-xl px-4 py-3 text-center text-lg tracking-widest text-white placeholder:text-white/20 focus:outline-none transition-all"
+                  className={`w-full border rounded-2xl px-4 py-3.5 text-center text-xl tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-[#C89B58] transition-all ${
+                    isLight
+                      ? "bg-neutral-50 border-neutral-200 text-neutral-900"
+                      : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8E929E] hover:text-white transition-colors cursor-pointer p-1"
-                  title={showPin ? "Ocultar senha" : "Ver senha"}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors p-1"
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -815,7 +791,7 @@ export default function AdminAgenda() {
             </div>
 
             {pinError && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-400">
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-500">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{pinError}</span>
               </div>
@@ -824,12 +800,12 @@ export default function AdminAgenda() {
             <button
               type="submit"
               disabled={isVerifyingPin}
-              className="w-full py-3 rounded-xl bg-[#C89B58] hover:bg-[#D4A966] text-black font-bold text-sm tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isVerifyingPin ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>A verificar...</span>
+                  <span>A validar...</span>
                 </>
               ) : (
                 <span>Entrar no Painel</span>
@@ -837,14 +813,13 @@ export default function AdminAgenda() {
             </button>
           </form>
 
-          {/* Footer Navigation */}
-          <div className="pt-2 text-center border-t border-white/5">
+          <div className="pt-2 text-center border-t border-neutral-200 dark:border-white/5">
             <Link
               to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-[#8E929E] hover:text-white transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Voltar ao website</span>
+              <span>Voltar ao website público</span>
             </Link>
           </div>
         </div>
@@ -852,245 +827,723 @@ export default function AdminAgenda() {
     );
   }
 
+  // 🎛️ FULL DASHBOARD SHELL LAYOUT
   return (
-    <div className="min-h-screen bg-[#090A0E] text-[#FAF8F5] p-4 sm:p-8 selection:bg-[#C89B58] selection:text-black font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className={`min-h-screen font-sans flex transition-colors ${
+      isLight ? "bg-[#F4F5F7] text-[#111827]" : "bg-[#0A0B0E] text-[#FAF8F5]"
+    }`}>
 
-        {/* Clean Dashboard Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-          <div className="space-y-1">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-[#8E929E] hover:text-[#C89B58] transition-colors mb-1"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Voltar ao Website</span>
+      {/* ========================================================================= */}
+      {/* 1. LEFT SIDEBAR NAVIGATION (INSPIRATION IMAGE 1)                           */}
+      {/* ========================================================================= */}
+      {/* Mobile Overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-xs"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col justify-between p-4 border-r transition-all duration-300 lg:static lg:translate-x-0 ${
+        isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      } ${
+        isLight
+          ? "bg-white border-neutral-200 shadow-sm"
+          : "bg-[#111319] border-white/10"
+      }`}>
+        <div className="space-y-6">
+          {/* Brand Header */}
+          <div className="flex items-center justify-between px-2 pt-1">
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-2xl bg-[#C89B58] flex items-center justify-center text-black font-black text-base shadow-md group-hover:scale-105 transition-transform">
+                <Scissors className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-bold text-sm leading-tight font-serif tracking-tight">
+                  Rota Do Corte
+                </h2>
+                <span className="text-[11px] text-neutral-400 font-sans block">
+                  Studio Dashboard
+                </span>
+              </div>
             </Link>
 
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Painel de Marcações
-            </h1>
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="lg:hidden p-1.5 rounded-xl text-neutral-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-            <div className="flex items-center gap-2 text-xs text-[#8E929E] pt-0.5">
-              <span>Gabriel Silva • Paião</span>
-              <span>•</span>
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Base de Dados Sincronizada</span>
-              </span>
+          {/* Main Navigation Links */}
+          <nav className="space-y-1.5">
+            {[
+              { id: "dashboard", label: "Visão Geral", icon: LayoutDashboard },
+              { id: "agenda", label: "Agenda & Marcações", icon: CalendarDays, badge: dayAppointments.length },
+              { id: "stats", label: "Métricas & Faturação", icon: BarChart3 },
+              { id: "crm", label: "Base de Clientes", icon: Users, badge: crmClients.length },
+              { id: "blocks", label: "Pausas & Bloqueios", icon: Lock }
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? isLight
+                        ? "bg-[#C89B58] text-black font-bold shadow-sm"
+                        : "bg-[#C89B58] text-black font-bold shadow-md"
+                      : isLight
+                        ? "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                        : "text-neutral-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge !== undefined && (
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                      isActive
+                        ? "bg-black/20 text-black"
+                        : isLight
+                          ? "bg-neutral-200 text-neutral-700"
+                          : "bg-white/10 text-neutral-300"
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="space-y-3 pt-4 border-t border-neutral-200 dark:border-white/10">
+          {/* Live Sync Badge */}
+          <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-xl border ${
+            isLight
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+              : "bg-emerald-950/20 border-emerald-500/20 text-emerald-400"
+          }`}>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span className="truncate">Base de Dados Sincronizada</span>
+          </div>
+
+          {/* User Profile & Logout */}
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-[#C89B58]/20 border border-[#C89B58]/40 text-[#C89B58] flex items-center justify-center font-bold text-xs shrink-0">
+                G
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold truncate">Gabriel Silva</p>
+                <p className="text-[10px] text-neutral-400 truncate">Paião, PT</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-2 rounded-xl text-neutral-400 hover:text-red-500 transition-colors"
+              title="Sair"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================================= */}
+      {/* 2. MAIN APP CANVAS CONTAINER                                              */}
+      {/* ========================================================================= */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+
+        {/* Top Header App Bar */}
+        <header className={`sticky top-0 z-30 px-4 sm:px-8 py-4 border-b flex items-center justify-between gap-4 backdrop-blur-md transition-colors ${
+          isLight
+            ? "bg-white/80 border-neutral-200"
+            : "bg-[#0A0B0E]/80 border-white/10"
+        }`}>
+          {/* Left: Mobile Menu Toggle + Search */}
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-xl border border-neutral-200 dark:border-white/10"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="relative w-full">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                placeholder="Pesquisar cliente, contacto ou serviço..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-9 pr-4 py-2.5 text-xs rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                  isLight
+                    ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
+                    : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
+                }`}
+              />
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Theme Toggle (Light / Dark Mode) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
+                isLight
+                  ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
+                  : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
+              }`}
+              title={isLight ? "Ativar Modo Escuro" : "Ativar Modo Claro"}
+            >
+              {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-[#C89B58]" />}
+            </button>
+
+            {/* Refresh Button */}
             <button
               type="button"
               onClick={loadAppointments}
-              className="p-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-[#8E929E] hover:text-white transition-colors cursor-pointer"
+              className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
+                isLight
+                  ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
+                  : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
+              }`}
               title="Atualizar Dados"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
             </button>
 
-            {/* Quick Time Off Block Button */}
+            {/* Block Slot Button */}
             <button
               type="button"
               onClick={() => {
                 setBlockDate(selectedDate);
                 setIsBlockModalOpen(true);
               }}
-              className="px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-[#FAF8F5] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Bloquear Horário / Pausa"
+              className={`hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border text-xs font-semibold cursor-pointer transition-colors ${
+                isLight
+                  ? "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-100"
+                  : "bg-[#111319] border-white/10 text-neutral-200 hover:bg-white/5"
+              }`}
             >
               <Lock className="w-3.5 h-3.5 text-[#C89B58]" />
               <span>Bloquear Horário</span>
             </button>
 
-            {/* Logout Button */}
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Terminar Sessão"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
-
-            {/* New Manual Appointment Button */}
+            {/* New Manual Booking Button */}
             <button
               type="button"
               onClick={() => setIsNewModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold tracking-wide flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold shadow-md cursor-pointer transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Marcar Cliente</span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* ========================================================================= */}
-        {/* MAIN NAVIGATION TABS (CLEAN SEGMENTED CONTROL)                             */}
-        {/* ========================================================================= */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-[#111319] border border-white/10 rounded-2xl overflow-x-auto shadow-sm">
-          <button
-            type="button"
-            onClick={() => setActiveTab("agenda")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === "agenda"
-                ? "bg-[#C89B58] text-black font-bold shadow-sm"
-                : "text-[#8E929E] hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            <span>Agenda & Marcações</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-              activeTab === "agenda" ? "bg-black/20 text-black" : "bg-white/10 text-white"
-            }`}>
-              {dayAppointments.length}
-            </span>
-          </button>
+        {/* Main Content View Switcher */}
+        <main className="p-4 sm:p-8 space-y-6 flex-1">
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("stats")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === "stats"
-                ? "bg-[#C89B58] text-black font-bold shadow-sm"
-                : "text-[#8E929E] hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Estatísticas & Faturação</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("crm")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === "crm"
-                ? "bg-[#C89B58] text-black font-bold shadow-sm"
-                : "text-[#8E929E] hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Base de Clientes</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-              activeTab === "crm" ? "bg-black/20 text-black" : "bg-white/10 text-white"
-            }`}>
-              {crmClients.length}
-            </span>
-          </button>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* TAB 1: AGENDA & MARCAÇÕES (COM FILTROS & ORDENAÇÃO)                       */}
-        {/* ========================================================================= */}
-        {activeTab === "agenda" && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* View Scope & Controls Header */}
-            <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-4 shadow-lg">
+          {/* ========================================================================= */}
+          {/* TAB: DASHBOARD (INSPIRATION IMAGE 1 & 2)                                  */}
+          {/* ========================================================================= */}
+          {activeTab === "dashboard" && (
+            <div className="space-y-6 animate-fadeIn">
               
-              {/* Row 1: Scope Toggle & Date Stepper */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-white/5">
-                {/* Scope Toggle */}
-                <div className="flex items-center gap-1.5 p-1 bg-black/40 border border-white/10 rounded-xl w-fit">
-                  <button
-                    type="button"
-                    onClick={() => setAgendaScope("all")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                      agendaScope === "all"
-                        ? "bg-[#C89B58] text-black shadow-md font-black"
-                        : "text-[#9E9EA7] hover:text-white"
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Todas as Marcações</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      agendaScope === "all" ? "bg-black/20 text-black font-bold" : "bg-white/10 text-white"
-                    }`}>
-                      {allAppointments.length}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAgendaScope("day")}
-                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                      agendaScope === "day"
-                        ? "bg-[#C89B58] text-black shadow-md font-black"
-                        : "text-[#9E9EA7] hover:text-white"
-                    }`}
-                  >
-                    <CalendarDays className="w-3.5 h-3.5" />
-                    <span>Agenda do Dia</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      agendaScope === "day" ? "bg-black/20 text-black font-bold" : "bg-white/10 text-white"
-                    }`}>
-                      {dayAppointments.length}
-                    </span>
-                  </button>
+              {/* Dashboard Subheader & Period Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">Dashboard Executivo</h1>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Métricas e desempenho em tempo real do Barber Studio.
+                  </p>
                 </div>
 
-                {/* Day Stepper (Active in 'day' scope) */}
-                {agendaScope === "day" && (
-                  <div className="flex items-center gap-2 flex-wrap">
+                {/* Period Pills */}
+                <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
+                  isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
+                }`}>
+                  {[
+                    { id: "today", label: "Hoje" },
+                    { id: "week", label: "Esta Semana" },
+                    { id: "month", label: "Este Mês" },
+                    { id: "30days", label: "Últimos 30 Dias" },
+                    { id: "all", label: "Total" }
+                  ].map((p) => (
                     <button
+                      key={p.id}
                       type="button"
-                      onClick={() => changeDay(-1)}
-                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
-                      title="Dia Anterior"
+                      onClick={() => setStatsPeriod(p.id)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        statsPeriod === p.id
+                          ? "bg-[#C89B58] text-black shadow-xs"
+                          : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
+                      }`}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      {p.label}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                      className="px-3.5 py-2 rounded-xl border border-[#C89B58]/30 bg-[#C89B58]/15 hover:bg-[#C89B58]/25 text-[#E5C268] text-xs font-bold cursor-pointer transition-colors font-mono"
-                    >
-                      Hoje
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => changeDay(1)}
-                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
-                      title="Dia Seguinte"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-bold capitalize ml-1 text-white font-serif">
-                      {formattedPortugueseDate}
-                    </span>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
 
-              {/* Row 2: Search, Status Filter & Sorting Dropdown */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                {/* Search & Status Pills */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-grow">
-                  {/* Search Input */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E9EA7]" />
-                    <input
-                      type="text"
-                      placeholder="Pesquisar cliente, telefone ou serviço..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8 pr-3 py-2 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58] w-full sm:w-60 transition-colors"
-                    />
+              {/* 4 Top KPI Cards Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Faturação Concluída */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Faturação Real</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {statsData.completedCount} cortes
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-[#C89B58]">
+                      {statsData.completedRevenue.toFixed(2)} €
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Previsto: {statsData.estimatedRevenue.toFixed(2)} €
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. Total de Atendimentos */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Total Marcações</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      {statsData.uniqueClientsCount} clientes
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.total}
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {statsData.confirmedCount} confirmados em carteira
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Ticket Médio */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Ticket Médio / Cliente</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Média
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.avgTicket.toFixed(2)} €
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Valor médio por visita
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4. Taxa de Comparência */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Taxa de Comparência</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {statsData.completionRate}%
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.completionRate}%
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {statsData.cancelledCount} cancelamentos registados
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Middle Section Grid: Revenue Chart (8 cols) & Side Widgets (4 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Large Chart Card (8 cols) */}
+                <div className={`lg:col-span-8 p-6 rounded-3xl border shadow-xs space-y-5 flex flex-col justify-between ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base">Evolução de Faturação</h3>
+                      <p className="text-xs text-neutral-400">
+                        Receita diária acumulada ao longo do período selecionado.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#C89B58]">
+                      Pico: {statsData.maxTimelineRevenue.toFixed(2)} €
+                    </span>
                   </div>
 
-                  {/* Status Pills */}
-                  <div className="flex items-center gap-1 overflow-x-auto p-1 bg-black/30 rounded-xl border border-white/5">
+                  {/* SVG Line / Area Graph */}
+                  {statsData.timelineData.length === 0 ? (
+                    <div className="py-20 text-center text-xs text-neutral-400">
+                      Sem dados suficientes de faturação para este período.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="h-44 w-full relative flex items-end">
+                        {statsData.timelineData.length > 1 ? (
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 500 140" preserveAspectRatio="none">
+                            <defs>
+                              <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#C89B58" stopOpacity="0.35" />
+                                <stop offset="100%" stopColor="#C89B58" stopOpacity="0.0" />
+                              </linearGradient>
+                            </defs>
+                            <path d={statsData.chartAreaPath} fill="url(#revenueGrad)" />
+                            <path d={statsData.chartSvgPath} fill="none" stroke="#C89B58" strokeWidth="3" strokeLinecap="round" />
+                          </svg>
+                        ) : (
+                          <div className="w-full flex items-end justify-center h-32">
+                            <div className="w-24 rounded-t-2xl bg-[#C89B58] h-full flex items-center justify-center font-bold text-black text-xs font-mono">
+                              {statsData.timelineData[0]?.revenue.toFixed(0)} €
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* X-axis labels */}
+                      <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 pt-2 border-t border-neutral-100 dark:border-white/5">
+                        {statsData.timelineData.slice(0, 6).map((d) => (
+                          <span key={d.date}>{d.fullLabel || d.label}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Highlights Bar */}
+                  <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs ${
+                    isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#C89B58]" />
+                      <span>Faturação Total Registada:</span>
+                    </div>
+                    <span className="font-mono font-bold text-base text-[#C89B58]">
+                      {statsData.completedRevenue.toFixed(2)} €
+                    </span>
+                  </div>
+                </div>
+
+                {/* Side Column Widgets (4 cols) */}
+                <div className="lg:col-span-4 space-y-5">
+                  {/* Widget 1: Dias Mais Ativos (Bar Chart) */}
+                  <div className={`p-6 rounded-3xl border shadow-xs space-y-4 ${
+                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm">Dias Mais Ativos</h4>
+                      <span className="text-[10px] font-bold text-[#C89B58] uppercase">Seg - Sáb</span>
+                    </div>
+
+                    <div className="grid grid-cols-6 gap-2 items-end h-28 pt-2">
+                      {statsData.daysActivity.map((d) => {
+                        const isPeak = d.count === statsData.maxDayCount && d.count > 0;
+                        const heightPct = statsData.maxDayCount > 0
+                          ? Math.max((d.count / statsData.maxDayCount) * 100, d.count > 0 ? 20 : 8)
+                          : 8;
+
+                        return (
+                          <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end group">
+                            <div className="w-full rounded-t-xl bg-neutral-100 dark:bg-white/5 relative flex items-end justify-center h-full overflow-hidden">
+                              <div
+                                className={`w-full rounded-t-xl transition-all duration-500 ${
+                                  isPeak
+                                    ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
+                                    : d.count > 0
+                                      ? "bg-[#C89B58]/40"
+                                      : "bg-neutral-200 dark:bg-white/10"
+                                }`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-bold ${isPeak ? "text-[#C89B58]" : "text-neutral-400"}`}>
+                              {d.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-neutral-400 text-center">
+                      Dia com maior procura: <strong>{statsData.peakDay?.name || "Sábado"}</strong>
+                    </p>
+                  </div>
+
+                  {/* Widget 2: Taxa de Retenção de Clientes (Radial Gauge) */}
+                  <div className={`p-6 rounded-3xl border shadow-xs space-y-3 text-center ${
+                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                  }`}>
+                    <div className="flex items-center justify-between text-left">
+                      <h4 className="font-bold text-sm">Fidelização de Clientes</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                        Recorrentes
+                      </span>
+                    </div>
+
+                    <div className="py-2">
+                      <div className="text-3xl font-mono font-bold text-emerald-500">
+                        {statsData.repeatRate}%
+                      </div>
+                      <p className="text-[11px] text-neutral-400 mt-0.5">
+                        Clientes que agendam mais de uma vez
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("crm")}
+                      className={`w-full py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer ${
+                        isLight
+                          ? "bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-700"
+                          : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                      }`}
+                    >
+                      Ver Base de Clientes (CRM)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Row Grid: Service Ranking Table (7 cols) & Upcoming Clients (5 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Ranking de Serviços (7 cols) */}
+                <div className={`lg:col-span-7 p-6 rounded-3xl border shadow-xs space-y-4 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-base">Serviços Mais Solicitados</h3>
+                    <span className="text-xs text-neutral-400">{statsData.serviceRanking.length} categorias</span>
+                  </div>
+
+                  {statsData.serviceRanking.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-neutral-400">
+                      Sem marcações no período selecionado.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {statsData.serviceRanking.map((s, idx) => (
+                        <div
+                          key={s.name}
+                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-colors ${
+                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-6 h-6 rounded-full bg-[#C89B58]/20 text-[#C89B58] text-xs font-bold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-xs truncate">{s.name}</p>
+                              <p className="text-[10px] text-neutral-400">
+                                {s.count} {s.count === 1 ? "marcação" : "marcações"} • {s.durationMin} min
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="font-mono font-bold text-xs text-[#C89B58]">
+                              {s.revenue.toFixed(2)} €
+                            </span>
+                            <p className="text-[10px] text-neutral-400">{s.percent}% do total</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Upcoming Today Appointments (5 cols) */}
+                <div className={`lg:col-span-5 p-6 rounded-3xl border shadow-xs space-y-4 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-base">Marcações do Dia</h3>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("agenda")}
+                      className="text-xs font-bold text-[#C89B58] hover:underline"
+                    >
+                      Ver Agenda Completa
+                    </button>
+                  </div>
+
+                  {dayAppointments.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-neutral-400 space-y-2">
+                      <CalendarIcon className="w-8 h-8 mx-auto opacity-40" />
+                      <p>Sem marcações registadas para hoje.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                      {dayAppointments.map((appt) => (
+                        <div
+                          key={appt.id}
+                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                            appt.status === "completed"
+                              ? isLight ? "bg-emerald-50 border-emerald-200" : "bg-emerald-950/20 border-emerald-500/30"
+                              : appt.status === "cancelled"
+                                ? "opacity-50 line-through"
+                                : isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="px-2.5 py-1.5 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 font-mono font-bold text-xs text-[#C89B58] shrink-0">
+                              {appt.time}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-xs truncate">{appt.customer_name}</p>
+                              <p className="text-[10px] text-neutral-400 truncate">{appt.service_name}</p>
+                            </div>
+                          </div>
+
+                          {appt.customer_phone && appt.customer_phone !== "---" && (
+                            <a
+                              href={`https://wa.me/${appt.customer_phone.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 rounded-xl bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 transition-colors shrink-0"
+                              title="WhatsApp"
+                            >
+                              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB: AGENDA & MARCAÇÕES (TIMELINE + CONTROLS)                             */}
+          {/* ========================================================================= */}
+          {activeTab === "agenda" && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Agenda Scope, Stepper & Filters */}
+              <div className={`p-5 rounded-3xl border shadow-xs space-y-4 ${
+                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+              }`}>
+                {/* Row 1: Scope & Stepper */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-neutral-100 dark:border-white/5">
+                  <div className={`flex items-center gap-1.5 p-1 rounded-2xl border w-fit ${
+                    isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/40 border-white/10"
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setAgendaScope("day")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        agendaScope === "day"
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <CalendarDays className="w-3.5 h-3.5" />
+                      <span>Agenda do Dia</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-black/20 text-black font-bold">
+                        {dayAppointments.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAgendaScope("all")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        agendaScope === "all"
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Todas as Marcações</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-white/10 text-neutral-300">
+                        {allAppointments.length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Day Stepper */}
+                  {agendaScope === "day" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => changeDay(-1)}
+                        className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                          isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+                        className="px-3.5 py-2 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold cursor-pointer font-mono"
+                      >
+                        Hoje
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => changeDay(1)}
+                        className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                          isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm font-bold capitalize ml-1 font-serif">
+                        {formattedPortugueseDate}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 2: Status Filter & Sorting */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className={`flex items-center gap-1 overflow-x-auto p-1 rounded-2xl border ${
+                    isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/30 border-white/5"
+                  }`}>
                     {["all", "confirmed", "completed", "cancelled", "blocked"].map((st) => (
                       <button
                         key={st}
                         type="button"
                         onClick={() => setFilterStatus(st)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                           filterStatus === st
-                            ? "bg-[#C89B58] text-black shadow-sm font-bold"
-                            : "text-[#9E9EA7] hover:text-white"
+                            ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                            : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
                         }`}
                       >
                         {st === "all"
@@ -1105,164 +1558,78 @@ export default function AdminAgenda() {
                       </button>
                     ))}
                   </div>
-                </div>
 
-                {/* 🔽 SORTING DROPDOWN (DROPBOX DE ORDENAÇÃO) */}
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/40 text-xs font-medium text-white flex items-center justify-between gap-2.5 cursor-pointer transition-all shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
+                  {/* Sorting Mode Dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                      className={`px-4 py-2 rounded-2xl border text-xs font-medium flex items-center justify-between gap-2.5 cursor-pointer ${
+                        isLight ? "bg-white border-neutral-200" : "bg-black/40 border-white/10"
+                      }`}
+                    >
                       <SlidersHorizontal className="w-3.5 h-3.5 text-[#C89B58]" />
-                      <span className="text-[#9E9EA7]">Ordenar:</span>
-                      <span className="font-bold text-[#E5C268]">
+                      <span className="text-neutral-400">Ordenar:</span>
+                      <span className="font-bold text-[#C89B58]">
                         {sortBy === "newest"
                           ? "Mais Recentes"
                           : sortBy === "oldest"
                             ? "Mais Antigos"
                             : sortBy === "price_desc"
-                              ? "Preço: Mais Caro"
-                              : "Preço: Mais Barato"}
+                              ? "Preço: Maior"
+                              : "Preço: Menor"}
                       </span>
-                    </div>
-                    <ChevronDown className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform ${isSortDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
+                      <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+                    </button>
 
-                  {isSortDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-20" onClick={() => setIsSortDropdownOpen(false)} />
-                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-[#121318] border border-white/15 rounded-xl p-1.5 shadow-2xl z-30 space-y-1 animate-scaleIn">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSortBy("newest");
-                            setIsSortDropdownOpen(false);
-                          }}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                            sortBy === "newest" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Mais recentes primeiro</span>
-                          </div>
-                          {sortBy === "newest" && <Check className="w-3.5 h-3.5" />}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSortBy("oldest");
-                            setIsSortDropdownOpen(false);
-                          }}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                            sortBy === "oldest" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <CalendarIcon className="w-3.5 h-3.5" />
-                            <span>Mais antigos primeiro</span>
-                          </div>
-                          {sortBy === "oldest" && <Check className="w-3.5 h-3.5" />}
-                        </button>
-
-                        <div className="h-px bg-white/10 my-1" />
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSortBy("price_desc");
-                            setIsSortDropdownOpen(false);
-                          }}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                            sortBy === "price_desc" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Euro className="w-3.5 h-3.5" />
-                            <span>Preço: Mais Caro</span>
-                          </div>
-                          {sortBy === "price_desc" && <Check className="w-3.5 h-3.5" />}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSortBy("price_asc");
-                            setIsSortDropdownOpen(false);
-                          }}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                            sortBy === "price_asc" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Euro className="w-3.5 h-3.5" />
-                            <span>Preço: Mais Barato</span>
-                          </div>
-                          {sortBy === "price_asc" && <Check className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </>
-                  )}
+                    {isSortDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-20" onClick={() => setIsSortDropdownOpen(false)} />
+                        <div className={`absolute right-0 top-full mt-1.5 w-52 rounded-2xl p-1.5 shadow-2xl z-30 space-y-1 border ${
+                          isLight ? "bg-white border-neutral-200" : "bg-[#14161F] border-white/15"
+                        }`}>
+                          {[
+                            { id: "newest", label: "Mais recentes primeiro" },
+                            { id: "oldest", label: "Mais antigos primeiro" },
+                            { id: "price_desc", label: "Preço: Maior primeiro" },
+                            { id: "price_asc", label: "Preço: Menor primeiro" }
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setSortBy(opt.id);
+                                setIsSortDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors cursor-pointer ${
+                                sortBy === opt.id ? "bg-[#C89B58] text-black font-bold" : "hover:bg-neutral-100 dark:hover:bg-white/5"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Clean Metrics Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {/* Total Marcações */}
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E929E]">
-                  {agendaScope === "all" ? "Total de Marcações" : "Marcações do Dia"}
-                </p>
-                <p className="text-2xl font-mono font-bold text-white">{currentScopeList.length}</p>
-              </div>
-
-              {/* Confirmadas */}
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Confirmadas</p>
-                <p className="text-2xl font-mono font-bold text-emerald-400">
-                  {scopeConfirmed.length}
-                </p>
-              </div>
-
-              {/* Concluídas */}
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">Concluídas</p>
-                <p className="text-2xl font-mono font-bold text-sky-400">
-                  {scopeCompleted.length}
-                </p>
-              </div>
-
-              {/* Faturação Concluída */}
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-300">Faturado Real</p>
-                <p className="text-2xl font-mono font-bold text-sky-300">
-                  {scopeCompletedRevenue.toFixed(2)} €
-                </p>
-              </div>
-
-              {/* Faturação Prevista Total */}
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1 col-span-2 sm:col-span-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C89B58]">Faturação Prevista</p>
-                <p className="text-2xl font-mono font-bold text-[#FAF8F5]">{scopeEstimatedRevenue.toFixed(2)} €</p>
-              </div>
-            </div>
-
-            {/* Timeline & Ordered List of Appointments */}
-            <div className="space-y-3">
+              {/* Appointments List */}
               {isLoading ? (
-                <div className="py-20 text-center space-y-3 bg-[#111319] rounded-2xl border border-white/10">
-                  <div className="w-9 h-9 border-2 border-[#C89B58] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs text-[#9E9EA7] font-mono">A carregar agendamentos...</p>
+                <div className={`py-20 text-center space-y-3 rounded-3xl border ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="w-8 h-8 border-2 border-[#C89B58] border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs text-neutral-400 font-mono">A carregar agendamentos...</p>
                 </div>
               ) : sortedAndFilteredAppointments.length === 0 ? (
-                <div className="p-14 text-center space-y-3 rounded-2xl bg-[#111319] border border-white/10">
-                  <CalendarIcon className="w-10 h-10 text-[#9E9EA7] mx-auto opacity-40" />
-                  <h3 className="text-sm font-bold text-white">Nenhuma marcação encontrada</h3>
-                  <p className="text-xs text-[#9E9EA7] max-w-sm mx-auto">
+                <div className={`p-14 text-center space-y-3 rounded-3xl border ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <CalendarIcon className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
+                  <h3 className="text-sm font-bold">Nenhuma marcação encontrada</h3>
+                  <p className="text-xs text-neutral-400 max-w-sm mx-auto">
                     {searchQuery
                       ? "Nenhum resultado corresponde à sua pesquisa."
                       : agendaScope === "all"
@@ -1289,33 +1656,27 @@ export default function AdminAgenda() {
                       `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota Do Corte para ${appt.formatted_date || appt.date} às ${appt.time} (${appt.service_name}). Até já!`
                     );
 
-                    // Render Blocked Slot differently
                     if (isBlocked) {
                       return (
                         <div
                           key={appt.id}
-                          className="p-4 rounded-2xl border border-amber-500/30 bg-amber-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+                          className="p-4 rounded-3xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
                         >
                           <div className="flex items-center gap-3.5">
-                            <div className="px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono font-bold text-sm flex items-center gap-1.5">
+                            <div className="px-3.5 py-2 rounded-2xl bg-amber-500/20 text-amber-500 font-mono font-bold text-sm flex items-center gap-1.5">
                               <Lock className="w-3.5 h-3.5" />
                               <span>{appt.time}</span>
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-amber-300 font-serif">
+                                <span className="text-xs font-bold text-amber-500">
                                   {appt.customer_name}
                                 </span>
-                                <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500">
                                   Horário Bloqueado
                                 </span>
-                                {appt.date && (
-                                  <span className="text-[10px] font-mono text-amber-400/80">
-                                    • {appt.date}
-                                  </span>
-                                )}
                               </div>
-                              <p className="text-[11px] text-[#9E9EA7] mt-0.5">
+                              <p className="text-[11px] text-neutral-400 mt-0.5">
                                 Duração: {appt.service_duration} min • Indisponível no agendamento público
                               </p>
                             </div>
@@ -1324,8 +1685,7 @@ export default function AdminAgenda() {
                           <button
                             type="button"
                             onClick={() => handleDeleteAppointment(appt.id, true)}
-                            className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer self-end sm:self-auto"
-                            title="Desbloquear horário"
+                            className="px-3 py-1.5 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 text-xs font-bold flex items-center gap-1.5 cursor-pointer self-end sm:self-auto"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>Desbloquear</span>
@@ -1337,44 +1697,44 @@ export default function AdminAgenda() {
                     return (
                       <div
                         key={appt.id}
-                        className={`p-5 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        className={`p-5 rounded-3xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                           isCancelled
-                            ? "bg-red-950/10 border-red-500/20 opacity-60"
+                            ? "opacity-50 bg-red-500/5 border-red-500/20"
                             : isCompleted
-                              ? "bg-sky-950/10 border-sky-500/25"
-                              : "bg-[#111319] border-white/10 hover:border-[#C89B58]/40 shadow-md"
+                              ? isLight ? "bg-emerald-50/50 border-emerald-200" : "bg-emerald-950/10 border-emerald-500/20"
+                              : isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]" : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
                         }`}
                       >
-                        {/* Time Slot & Customer Info */}
+                        {/* Time & Details */}
                         <div className="flex items-start gap-4">
-                          {/* Time & Date Badge */}
-                          <div className="px-4 py-3 rounded-2xl bg-black/40 border border-white/10 text-center font-mono shrink-0 shadow-inner min-w-[80px]">
+                          <div className={`px-4 py-3 rounded-2xl border text-center font-mono shrink-0 shadow-inner min-w-[76px] ${
+                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/40 border-white/10"
+                          }`}>
                             {appt.date && (
-                              <span className="text-[10px] font-bold text-[#9E9EA7] uppercase tracking-wider block border-b border-white/5 pb-0.5 mb-1">
+                              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block border-b border-neutral-200 dark:border-white/5 pb-0.5 mb-1">
                                 {apptFormattedDate}
                               </span>
                             )}
-                            <span className="text-lg font-bold text-[#E5C268] block">
+                            <span className="text-base font-bold text-[#C89B58] block">
                               {appt.time}
                             </span>
-                            <span className="text-[10px] text-[#9E9EA7] block mt-0.5">
+                            <span className="text-[10px] text-neutral-400 block mt-0.5">
                               {appt.service_duration} min
                             </span>
                           </div>
 
-                          {/* Details */}
                           <div className="space-y-1">
                             <div className="flex items-center gap-2.5 flex-wrap">
-                              <h3 className="font-bold text-sm text-white font-serif">
+                              <h3 className="font-bold text-sm font-serif">
                                 {appt.customer_name}
                               </h3>
                               <span
                                 className={`text-[9px] font-mono uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${
                                   isCancelled
-                                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                                    ? "bg-red-500/10 text-red-500 border border-red-500/20"
                                     : isCompleted
-                                      ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
-                                      : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                      : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
                                 }`}
                               >
                                 {appt.status}
@@ -1385,18 +1745,18 @@ export default function AdminAgenda() {
                               <Scissors className="w-3.5 h-3.5 shrink-0" />
                               <span>{appt.service_name}</span>
                               <span>•</span>
-                              <span className="font-mono font-bold text-white">{appt.service_price}</span>
+                              <span className="font-mono font-bold">{appt.service_price}</span>
                             </p>
 
-                            <div className="flex items-center gap-3 text-xs text-[#9E9EA7] pt-0.5">
+                            <div className="flex items-center gap-3 text-xs text-neutral-400 pt-0.5">
                               <a
                                 href={`tel:${appt.customer_phone?.replace(/\s/g, "")}`}
-                                className="flex items-center gap-1 hover:text-white transition-colors"
+                                className="flex items-center gap-1 hover:text-[#C89B58] transition-colors"
                               >
                                 <Phone className="w-3 h-3 text-[#C89B58]" /> {appt.customer_phone}
                               </a>
                               {appt.customer_notes && (
-                                <span className="italic text-[#9E9EA7] line-clamp-1">
+                                <span className="italic line-clamp-1">
                                   "{appt.customer_notes}"
                                 </span>
                               )}
@@ -1404,78 +1764,67 @@ export default function AdminAgenda() {
                           </div>
                         </div>
 
-                        {/* Operational Action Controls */}
-                        <div className="flex items-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-white/5 flex-wrap">
-                          {/* WhatsApp Contact */}
+                        {/* Action Controls */}
+                        <div className="flex items-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-neutral-200 dark:border-white/5 flex-wrap">
                           {appt.customer_phone && appt.customer_phone !== "---" && (
                             <a
                               href={`https://wa.me/${appt.customer_phone.replace(/\D/g, "")}?text=${whatsAppClientText}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-3.5 py-2 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="Enviar Confirmação WhatsApp"
                             >
                               <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
                               <span className="hidden sm:inline">WhatsApp</span>
                             </a>
                           )}
 
-                          {/* Edit Appointment */}
                           <button
                             type="button"
                             onClick={() => openEditModal(appt)}
-                            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                            title="Editar dados da marcação"
+                            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                             <span>Editar</span>
                           </button>
 
-                          {/* Complete */}
                           {!isCompleted && !isCancelled && (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "completed")}
-                              className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="Marcar como Concluído"
+                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>Concluir</span>
                             </button>
                           )}
 
-                          {/* Re-confirm */}
                           {isCompleted && (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "confirmed")}
-                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="Reabrir como Confirmado"
+                              className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Clock className="w-3.5 h-3.5" />
                               <span>Reabrir</span>
                             </button>
                           )}
 
-                          {/* Cancel */}
                           {!isCancelled && (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "cancelled")}
-                              className="px-3 py-2 rounded-xl bg-white/5 hover:bg-red-500/15 border border-white/10 hover:border-red-500/30 text-[#9E9EA7] hover:text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="Cancelar marcação"
+                              className="px-3 py-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/15 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               <span>Cancelar</span>
                             </button>
                           )}
 
-                          {/* Delete */}
                           <button
                             type="button"
                             onClick={() => handleDeleteAppointment(appt.id)}
-                            className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-[#9E9EA7] hover:text-red-400 transition-colors cursor-pointer"
-                            title="Eliminar definitivamente"
+                            className="p-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/20 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
+                            title="Eliminar"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1486,713 +1835,351 @@ export default function AdminAgenda() {
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ========================================================================= */}
-        {/* TAB 2: ESTATÍSTICAS & RENTABILIDADE (MULTI-PERÍODO)                        */}
-        {/* ========================================================================= */}
-        {activeTab === "stats" && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* Period Selector Header */}
-            <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
-              <div>
-                <h2 className="text-base font-bold font-serif text-white flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-[#C89B58]" />
-                  <span>Análise de Performance do Barber Studio</span>
-                </h2>
-                <p className="text-xs text-[#9E9EA7]">
-                  Métricas agregadas de receita, rentabilidade e fidelização.
-                </p>
-              </div>
-
-              {/* Period Selector Buttons */}
-              <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto">
-                {[
-                  { id: "today", label: "Hoje" },
-                  { id: "week", label: "Esta Semana" },
-                  { id: "month", label: "Este Mês" },
-                  { id: "30days", label: "Últimos 30 Dias" },
-                  { id: "all", label: "Histórico Total" }
-                ].map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setStatsPeriod(p.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      statsPeriod === p.id
-                        ? "bg-[#C89B58] text-black shadow-md font-black"
-                        : "text-[#9E9EA7] hover:text-white"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Strategic KPI Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* 1. Faturação Concluída */}
-              <div className="p-5 rounded-2xl bg-[#111319] border border-sky-500/30 bg-gradient-to-br from-[#111319] to-sky-500/10 shadow-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-sky-400">
-                    Faturação Concluída
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
-                    <Euro className="w-4 h-4" />
-                  </div>
-                </div>
-                <p className="text-3xl font-mono font-bold text-sky-300">
-                  {statsData.completedRevenue.toFixed(2)} €
-                </p>
-                <p className="text-[11px] text-[#9E9EA7]">
-                  {statsData.completedCount} cortes/serviços finalizados
-                </p>
-              </div>
-
-              {/* 2. Ticket Médio por Cliente */}
-              <div className="p-5 rounded-2xl bg-[#111319] border border-[#C89B58]/40 bg-gradient-to-br from-[#111319] to-[#C89B58]/15 shadow-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#E5C268]">
-                    Ticket Médio / Cliente
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-[#C89B58]/20 border border-[#C89B58]/35 flex items-center justify-center text-[#E5C268]">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                </div>
-                <p className="text-3xl font-mono font-bold text-[#FAF8F5]">
-                  {statsData.avgTicket.toFixed(2)} €
-                </p>
-                <p className="text-[11px] text-[#9E9EA7]">
-                  Média de valor gasto por atendimento
-                </p>
-              </div>
-
-              {/* 3. Total de Clientes */}
-              <div className="p-5 rounded-2xl bg-[#111319] border border-emerald-500/30 bg-gradient-to-br from-[#111319] to-emerald-500/10 shadow-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                    Total de Clientes
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <Users className="w-4 h-4" />
-                  </div>
-                </div>
-                <p className="text-3xl font-mono font-bold text-emerald-300">
-                  {statsData.uniqueClientsCount}
-                </p>
-                <p className="text-[11px] text-[#9E9EA7]">
-                  {statsData.completedCount} {statsData.completedCount === 1 ? "atendimento concluído" : "atendimentos concluídos"} no período
-                </p>
-              </div>
-
-              {/* 4. Taxa de Conclusão / Comparecimento */}
-              <div className="p-5 rounded-2xl bg-[#111319] border border-white/10 bg-gradient-to-br from-[#111319] to-white/5 shadow-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">
-                    Taxa de Comparecimento
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                </div>
-                <p className="text-3xl font-mono font-bold text-white">
-                  {statsData.completionRate}%
-                </p>
-                <p className="text-[11px] text-[#9E9EA7]">
-                  {statsData.cancelledCount} cancelamentos no período
-                </p>
-              </div>
-            </div>
-
-            {/* Visual Chart 1: Donut Mix & Detalhamento de Serviços (Full Width) */}
-            <div className="p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
-                <div>
-                  <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                    <PieChart className="w-5 h-5 text-[#C89B58]" />
-                    <span>Mix de Serviços & Faturação Real</span>
-                  </h3>
-                  <p className="text-xs text-[#9E9EA7]">
-                    Distribuição percentual e financeira de cada corte e tratamento no período selecionado.
-                  </p>
-                </div>
-                <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono font-bold text-[#E5C268]">
-                  <span>Faturação Total:</span>
-                  <span className="text-white text-sm">{statsData.estimatedRevenue.toFixed(2)} €</span>
-                </div>
-              </div>
-
-              {statsData.serviceRanking.length === 0 ? (
-                <div className="py-16 text-center text-xs text-[#9E9EA7] flex flex-col items-center justify-center gap-2">
-                  <PieChart className="w-8 h-8 text-white/20" />
-                  <span>Sem dados de marcações no período selecionado.</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  {/* Donut Ring Visual (4 Cols on LG) */}
-                  <div className="lg:col-span-4 flex flex-col items-center justify-center relative py-4">
-                    <div className="relative w-52 h-52 flex items-center justify-center">
-                      <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
-                        {/* Background Track Ring */}
-                        <circle
-                          cx="80"
-                          cy="80"
-                          r="60"
-                          className="stroke-white/5"
-                          strokeWidth="16"
-                          fill="transparent"
-                        />
-
-                        {/* Colored Segments */}
-                        {statsData.serviceRanking.map((s) => {
-                          const isHovered = hoveredService === s.name;
-                          const r = 60;
-                          const circ = 2 * Math.PI * r;
-                          const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
-                          const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
-
-                          return (
-                            <circle
-                              key={s.name}
-                              cx="80"
-                              cy="80"
-                              r="60"
-                              fill="transparent"
-                              stroke={s.color}
-                              strokeWidth={isHovered ? "20" : "16"}
-                              strokeDasharray={`${dashL} ${circ}`}
-                              strokeDashoffset={dashOff}
-                              strokeLinecap="round"
-                              className="transition-all duration-300 cursor-pointer"
-                              style={{
-                                filter: isHovered ? `drop-shadow(0 0 10px ${s.color})` : "none"
-                              }}
-                              onMouseEnter={() => setHoveredService(s.name)}
-                              onMouseLeave={() => setHoveredService(null)}
-                            />
-                          );
-                        })}
-                      </svg>
-
-                      {/* Center Hub Metrics */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-3">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#9E9EA7]">
-                          Faturação Real
-                        </span>
-                        <span className="text-2xl font-mono font-black text-white mt-0.5">
-                          {statsData.estimatedRevenue.toFixed(2)} €
-                        </span>
-                        <span className="text-xs text-[#C89B58] font-bold mt-0.5">
-                          {statsData.total} {statsData.total === 1 ? "atendimento" : "atendimentos"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Interactive Multi-Column Legend & Metrics Cards (8 Cols on LG) */}
-                  <div className="lg:col-span-8">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {statsData.serviceRanking.map((s, idx) => {
-                        const isHovered = hoveredService === s.name;
-                        const totalChairTime = s.count * s.durationMin;
-
-                        return (
-                          <div
-                            key={s.name}
-                            onMouseEnter={() => setHoveredService(s.name)}
-                            onMouseLeave={() => setHoveredService(null)}
-                            className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                              isHovered
-                                ? "bg-white/10 border-[#C89B58]/60 shadow-lg scale-[1.02]"
-                                : "bg-black/30 border-white/5 hover:border-white/20"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span
-                                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
-                                  style={{ backgroundColor: s.color }}
-                                />
-                                <span className="font-bold text-sm text-white truncate">
-                                  {s.name}
-                                </span>
-                              </div>
-                              <span
-                                className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full shrink-0"
-                                style={{
-                                  backgroundColor: `${s.color}25`,
-                                  color: s.color,
-                                  border: `1px solid ${s.color}50`
-                                }}
-                              >
-                                {s.percent}%
-                              </span>
-                            </div>
-
-                            {/* Revenue & Counts */}
-                            <div className="mt-3 flex items-end justify-between">
-                              <div>
-                                <span className="text-[11px] text-[#9E9EA7] block">
-                                  {s.count} {s.count === 1 ? "marcação" : "marcações"} ({totalChairTime} min de cadeira)
-                                </span>
-                                <span className="text-[11px] text-[#9E9EA7]">
-                                  {s.durationMin} min / corte • Média: {s.avgPrice.toFixed(2)} €
-                                </span>
-                              </div>
-                              <span className="font-mono font-bold text-base text-sky-300">
-                                {s.revenue.toFixed(2)} €
-                              </span>
-                            </div>
-
-                            {/* Progress Bar */}
-                            <div className="mt-2.5 w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{
-                                  width: `${s.percent}%`,
-                                  backgroundColor: s.color
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Visual Charts Grid 2: Evolução Temporal & Matriz de Horários */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* 3. Evolução de Faturação & Volume no Período (7 Cols) */}
-              <div className="lg:col-span-7 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+          {/* ========================================================================= */}
+          {/* TAB: MÉTRICAS & FATURAÇÃO (DONUT MIX + DETAILS)                           */}
+          {/* ========================================================================= */}
+          {activeTab === "stats" && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className={`p-6 rounded-3xl border shadow-xs space-y-6 ${
+                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-white/5 pb-4">
                   <div>
-                    <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-[#C89B58]" />
-                      <span>Evolução Cronológica</span>
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <PieChart className="w-5 h-5 text-[#C89B58]" />
+                      <span>Mix de Serviços & Faturação Real</span>
                     </h3>
-                    <p className="text-xs text-[#9E9EA7]">
-                      Volume e faturação distribuídos ao longo dos dias do período.
+                    <p className="text-xs text-neutral-400">
+                      Distribuição percentual e financeira por serviço prestado.
                     </p>
                   </div>
-                  <span className="text-xs font-mono font-bold text-sky-300">
-                    Média / Atendimento: {statsData.avgTicket.toFixed(2)} €
-                  </span>
+                  <div className="text-sm font-mono font-bold text-[#C89B58]">
+                    Faturação Total: {statsData.estimatedRevenue.toFixed(2)} €
+                  </div>
                 </div>
 
-                {statsData.timelineData.length === 0 ? (
-                  <div className="py-14 text-center text-xs text-[#9E9EA7]">
-                    Sem dados suficientes para construir a evolução temporal.
+                {statsData.serviceRanking.length === 0 ? (
+                  <div className="py-16 text-center text-xs text-neutral-400">
+                    Sem dados de faturação no período selecionado.
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {/* Visual Vertical Bars Container */}
-                    <div className="h-44 pt-6 flex items-end justify-between gap-2 sm:gap-3 border-b border-white/10 pb-2">
-                      {statsData.timelineData.map((day) => {
-                        const heightPct = statsData.maxTimelineRevenue > 0
-                          ? Math.max((day.revenue / statsData.maxTimelineRevenue) * 100, day.revenue > 0 ? 12 : 4)
-                          : 4;
-                        const isHovered = hoveredTimelineBar === day.date;
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    {/* Donut Ring Visual */}
+                    <div className="lg:col-span-4 flex flex-col items-center justify-center relative py-4">
+                      <div className="relative w-48 h-48 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
+                          <circle
+                            cx="80"
+                            cy="80"
+                            r="60"
+                            className={isLight ? "stroke-neutral-100" : "stroke-white/5"}
+                            strokeWidth="16"
+                            fill="transparent"
+                          />
+                          {statsData.serviceRanking.map((s) => {
+                            const isHovered = hoveredService === s.name;
+                            const r = 60;
+                            const circ = 2 * Math.PI * r;
+                            const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
+                            const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
 
-                        return (
-                          <div
-                            key={day.date}
-                            className="flex-1 flex flex-col items-center gap-2 group relative h-full justify-end"
-                            onMouseEnter={() => setHoveredTimelineBar(day.date)}
-                            onMouseLeave={() => setHoveredTimelineBar(null)}
-                          >
-                            {/* Hover Tooltip */}
-                            <div
-                              className={`absolute -top-12 left-1/2 -translate-x-1/2 px-2.5 py-1.5 rounded-xl bg-black/95 border border-[#C89B58]/60 text-center pointer-events-none transition-all duration-200 z-20 shadow-2xl whitespace-nowrap ${
-                                isHovered ? "opacity-100 scale-100" : "opacity-0 scale-90"
-                              }`}
-                            >
-                              <p className="text-[10px] font-bold text-[#E5C268]">{day.fullLabel || day.date}</p>
-                              <p className="text-xs font-mono font-bold text-white">
-                                {day.revenue.toFixed(2)} € • {day.count} {day.count === 1 ? "corte" : "cortes"}
-                              </p>
-                            </div>
-
-                            {/* Bar Visual */}
-                            <div className="w-full max-w-[40px] rounded-t-xl bg-white/5 relative flex items-end justify-center overflow-hidden h-full">
-                              <div
-                                className={`w-full rounded-t-xl transition-all duration-500 ${
-                                  isHovered
-                                    ? "bg-gradient-to-t from-[#C89B58] to-[#FAF8F5] shadow-lg shadow-[#C89B58]/30"
-                                    : day.revenue > 0
-                                      ? "bg-gradient-to-t from-[#C89B58]/80 to-[#E5C268]"
-                                      : "bg-white/10"
-                                }`}
-                                style={{ height: `${heightPct}%` }}
+                            return (
+                              <circle
+                                key={s.name}
+                                cx="80"
+                                cy="80"
+                                r="60"
+                                fill="transparent"
+                                stroke={s.color}
+                                strokeWidth={isHovered ? "20" : "16"}
+                                strokeDasharray={`${dashL} ${circ}`}
+                                strokeDashoffset={dashOff}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 cursor-pointer"
+                                onMouseEnter={() => setHoveredService(s.name)}
+                                onMouseLeave={() => setHoveredService(null)}
                               />
-                            </div>
+                            );
+                          })}
+                        </svg>
 
-                            {/* X-axis Label */}
-                            <span className="text-[10px] font-mono font-bold text-[#9E9EA7] group-hover:text-white transition-colors">
-                              {day.label}
-                            </span>
-                          </div>
-                        );
-                      })}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-3">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400">
+                            Faturado Real
+                          </span>
+                          <span className="text-xl font-mono font-bold mt-0.5">
+                            {statsData.completedRevenue.toFixed(2)} €
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-[#9E9EA7] pt-1">
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded bg-gradient-to-t from-[#C89B58] to-[#E5C268]" />
-                        <span>Faturação Diária Gerada</span>
-                      </div>
-                      <span className="font-mono font-bold text-white">
-                        Pico Máximo: {statsData.maxTimelineRevenue.toFixed(2)} €
-                      </span>
+                    {/* Service Legend & Metrics Cards */}
+                    <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {statsData.serviceRanking.map((s) => (
+                        <div
+                          key={s.name}
+                          className={`p-4 rounded-2xl border transition-all ${
+                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                              <span className="font-bold text-xs truncate">{s.name}</span>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full" style={{ color: s.color, backgroundColor: `${s.color}20` }}>
+                              {s.percent}%
+                            </span>
+                          </div>
+
+                          <div className="mt-3 flex items-end justify-between">
+                            <span className="text-[11px] text-neutral-400">
+                              {s.count} {s.count === 1 ? "corte" : "cortes"} • {s.durationMin} min
+                            </span>
+                            <span className="font-mono font-bold text-sm text-[#C89B58]">
+                              {s.revenue.toFixed(2)} €
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-
-              {/* 4. Matriz de Fluxo Horário (10h às 21h) (5 Cols) */}
-              <div className="lg:col-span-5 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl">
-                <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                  <div>
-                    <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-amber-400" />
-                      <span>Matriz de Fluxo Horário</span>
-                    </h3>
-                    <p className="text-xs text-[#9E9EA7]">
-                      Distribuição de clientes das 10:00 às 21:00.
-                    </p>
-                  </div>
-                </div>
-
-                {/* 12-Hour Micro Bar Matrix */}
-                <div className="space-y-3">
-                  <div className="grid grid-cols-6 gap-1.5">
-                    {statsData.hourlyDistribution.map((h) => {
-                      const isPeak = h.count === statsData.maxHourlyCount && h.count > 0;
-                      const isHovered = hoveredHourlySlot === h.slot;
-
-                      return (
-                        <div
-                          key={h.slot}
-                          onMouseEnter={() => setHoveredHourlySlot(h.slot)}
-                          onMouseLeave={() => setHoveredHourlySlot(null)}
-                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                            isPeak
-                              ? "bg-amber-500/20 border-amber-500/50 shadow-md scale-105"
-                              : h.isPrime
-                                ? "bg-orange-500/10 border-orange-500/25 hover:border-orange-500/50"
-                                : "bg-black/30 border-white/5 hover:border-white/20"
-                          } ${isHovered ? "ring-1 ring-[#C89B58]" : ""}`}
-                        >
-                          <span className="text-[10px] font-mono font-bold text-[#9E9EA7] block">
-                            {h.label}
-                          </span>
-                          <span
-                            className={`text-sm font-mono font-black block mt-0.5 ${
-                              isPeak
-                                ? "text-amber-300"
-                                : h.count > 0
-                                  ? "text-white"
-                                  : "text-white/20"
-                            }`}
-                          >
-                            {h.count}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Shift Summary Badges */}
-                  <div className="space-y-2 pt-2">
-                    {/* Morning */}
-                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-black/30 border border-white/5">
-                      <span className="text-[#9E9EA7] flex items-center gap-2">
-                        <Sunrise className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Manhã (10h - 13h)</span>
-                      </span>
-                      <span className="font-mono font-bold text-white">
-                        {statsData.peakHours.morning} marcações
-                      </span>
-                    </div>
-
-                    {/* Afternoon */}
-                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-black/30 border border-white/5">
-                      <span className="text-[#9E9EA7] flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-[#C89B58] shrink-0" />
-                        <span>Tarde (14h - 17h)</span>
-                      </span>
-                      <span className="font-mono font-bold text-white">
-                        {statsData.peakHours.afternoon} marcações
-                      </span>
-                    </div>
-
-                    {/* Evening Prime */}
-                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                      <span className="text-amber-300 font-bold flex items-center gap-2">
-                        <Moon className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Horário Nobre (17h - 22h)</span>
-                      </span>
-                      <span className="font-mono font-bold text-amber-300">
-                        {statsData.peakHours.evening} marcações
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
+          )}
 
-            {/* Visual Funnel Card: Eficiência Operacional & Conversão */}
-            <div className="p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-4 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+          {/* ========================================================================= */}
+          {/* TAB: BASE DE CLIENTES (CRM)                                               */}
+          {/* ========================================================================= */}
+          {activeTab === "crm" && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+              }`}>
                 <div>
-                  <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-emerald-400" />
-                    <span>Funil de Eficiência Operacional & Conversão</span>
-                  </h3>
-                  <p className="text-xs text-[#9E9EA7]">
-                    Acompanhamento do status de atendimento e retenção de agenda.
+                  <h2 className="font-bold text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5 text-[#C89B58]" />
+                    <span>Base de Clientes & Fidelização</span>
+                  </h2>
+                  <p className="text-xs text-neutral-400">
+                    Histórico de atendimentos, ticket médio e fidelidade.
                   </p>
                 </div>
-                <div className="flex items-center gap-3 text-xs font-mono">
-                  <span className="text-emerald-400 font-bold">{statsData.completedCount} Concluídos</span>
-                  <span className="text-white/20">•</span>
-                  <span className="text-sky-300 font-bold">{statsData.confirmedCount} Confirmados</span>
-                  <span className="text-white/20">•</span>
-                  <span className="text-rose-400 font-bold">{statsData.cancelledCount} Cancelados</span>
-                </div>
-              </div>
 
-              {/* Segmented Funnel Progress Bar */}
-              <div className="space-y-2">
-                <div className="w-full h-3 rounded-full bg-black/40 border border-white/5 overflow-hidden flex">
-                  <div
-                    className="h-full bg-emerald-500 transition-all duration-500"
-                    style={{ width: `${statsData.funnelData.completedPct}%` }}
-                    title={`Concluídos: ${statsData.funnelData.completedPct}%`}
-                  />
-                  <div
-                    className="h-full bg-sky-500 transition-all duration-500"
-                    style={{ width: `${statsData.funnelData.confirmedPct}%` }}
-                    title={`Confirmados: ${statsData.funnelData.confirmedPct}%`}
-                  />
-                  <div
-                    className="h-full bg-rose-500 transition-all duration-500"
-                    style={{ width: `${statsData.funnelData.cancelledPct}%` }}
-                    title={`Cancelados: ${statsData.funnelData.cancelledPct}%`}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar por nome ou telemóvel..."
+                    value={crmSearchQuery}
+                    onChange={(e) => setCrmSearchQuery(e.target.value)}
+                    className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-100 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
                   />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Taxa de Conclusão</span>
-                    <span className="text-lg font-mono font-bold text-emerald-300">{statsData.completionRate}%</span>
-                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Atendimentos finalizados com sucesso</p>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 block">Em Carteira / Confirmados</span>
-                    <span className="text-lg font-mono font-bold text-sky-300">{statsData.confirmedCount}</span>
-                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Marcações ativas no sistema</p>
-                  </div>
-                  <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E9EA7] block">Cancelamentos</span>
-                    <span className="text-lg font-mono font-bold text-rose-400">{statsData.cancelledCount}</span>
-                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Cancelados ou reagendados</p>
-                  </div>
+              {crmClients.length === 0 ? (
+                <div className={`p-14 text-center rounded-3xl border space-y-2 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <Users className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
+                  <h3 className="text-sm font-bold">Nenhum cliente encontrado</h3>
+                  <p className="text-xs text-neutral-400">
+                    {crmSearchQuery ? "Nenhum resultado corresponde à pesquisa." : "Ainda não existem clientes registados."}
+                  </p>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {crmClients.map((client) => {
+                    const whatsAppChatUrl = client.phone && client.phone !== "---"
+                      ? `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                          `Olá ${client.name}! Daqui é o Gabriel Silva da Rota Do Corte.`
+                        )}`
+                      : null;
 
-        {/* ========================================================================= */}
-        {/* TAB 3: CLIENTES (MINI-CRM DO BARBEIRO)                                    */}
-        {/* ========================================================================= */}
-        {activeTab === "crm" && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* CRM Header & Search */}
-            <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
-              <div>
-                <h2 className="text-base font-bold font-serif text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-[#C89B58]" />
-                  <span>Base de Clientes & Fidelização</span>
-                </h2>
-                <p className="text-xs text-[#9E9EA7]">
-                  Histórico de visitas, total investido e preferências por cliente.
-                </p>
-              </div>
-
-              {/* Search Client */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E9EA7]" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar por nome ou telemóvel..."
-                  value={crmSearchQuery}
-                  onChange={(e) => setCrmSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
-                />
-              </div>
-            </div>
-
-            {/* Clean CRM Overview Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E929E]">Total de Clientes</p>
-                <p className="text-2xl font-mono font-bold text-white">{crmClients.length}</p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C89B58]">Clientes Recorrentes (VIP)</p>
-                <p className="text-2xl font-mono font-bold text-[#FAF8F5]">
-                  {crmClients.filter((c) => c.isVip).length}
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">Total Histórico Acumulado</p>
-                <p className="text-2xl font-mono font-bold text-sky-300">
-                  {crmClients.reduce((acc, c) => acc + c.totalSpent, 0).toFixed(2)} €
-                </p>
-              </div>
-            </div>
-
-            {/* Clients Cards Grid */}
-            {crmClients.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-[#111319] border border-white/10 space-y-2">
-                <Users className="w-8 h-8 text-[#9E9EA7] mx-auto opacity-40" />
-                <h3 className="text-sm font-bold text-white">Nenhum cliente encontrado</h3>
-                <p className="text-xs text-[#9E9EA7]">
-                  {crmSearchQuery ? "Nenhum resultado corresponde à pesquisa." : "Ainda não existem marcações registadas."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {crmClients.map((client) => {
-                  const whatsAppChatUrl = client.phone && client.phone !== "---"
-                    ? `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                        `Olá ${client.name}! Daqui é o Gabriel Silva da Rota Do Corte. Espero que esteja tudo bem!`
-                      )}`
-                    : null;
-
-                  return (
-                    <div
-                      key={client.key}
-                      className="p-5 rounded-2xl bg-[#111319] border border-white/10 hover:border-[#C89B58]/40 transition-all space-y-3.5 shadow-md flex flex-col justify-between"
-                    >
-                      <div className="space-y-2">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-full bg-[#C89B58]/20 border border-[#C89B58]/35 flex items-center justify-center font-bold text-xs text-[#E5C268]">
-                              {client.name.charAt(0).toUpperCase()}
+                    return (
+                      <div
+                        key={client.key}
+                        className={`p-5 rounded-3xl border transition-all space-y-3.5 shadow-xs flex flex-col justify-between ${
+                          isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]" : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
+                        }`}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-2xl bg-[#C89B58]/20 text-[#C89B58] font-bold text-xs flex items-center justify-center">
+                                {client.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-sm leading-tight">{client.name}</h4>
+                                {client.phone && client.phone !== "---" && (
+                                  <span className="text-[11px] font-mono text-neutral-400">
+                                    {client.phone}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-bold text-sm text-white font-serif leading-tight">
-                                {client.name}
-                              </h3>
-                              {client.phone && client.phone !== "---" && (
-                                <span className="text-[11px] font-mono text-[#9E9EA7]">
-                                  {client.phone}
-                                </span>
-                              )}
+
+                            {client.isVip && (
+                              <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/20 text-[#C89B58] flex items-center gap-1">
+                                <Star className="w-2.5 h-2.5 fill-[#C89B58]" />
+                                <span>VIP</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
+                              <span className="text-[9px] uppercase text-neutral-400 block">Visitas</span>
+                              <span className="text-xs font-mono font-bold">{client.totalBookings}</span>
+                            </div>
+                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
+                              <span className="text-[9px] uppercase text-neutral-400 block">Total</span>
+                              <span className="text-xs font-mono font-bold text-[#C89B58]">{client.totalSpent.toFixed(0)} €</span>
+                            </div>
+                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
+                              <span className="text-[9px] uppercase text-neutral-400 block">Ticket</span>
+                              <span className="text-xs font-mono font-bold">{client.avgTicket.toFixed(0)} €</span>
                             </div>
                           </div>
 
-                          {client.isVip && (
-                            <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/25 text-[#E5C268] border border-[#C89B58]/40 flex items-center gap-1">
-                              <Star className="w-2.5 h-2.5 text-[#E5C268] fill-[#E5C268]" />
-                              <span>VIP</span>
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Stats Matrix */}
-                        <div className="grid grid-cols-3 gap-2 pt-1">
-                          <div className="p-2 rounded-xl bg-black/40 border border-white/5 text-center">
-                            <span className="text-[9px] uppercase text-[#9E9EA7] block">Visitas</span>
-                            <span className="text-xs font-mono font-bold text-white">{client.totalBookings}</span>
-                          </div>
-                          <div className="p-2 rounded-xl bg-black/40 border border-white/5 text-center">
-                            <span className="text-[9px] uppercase text-sky-400 block">Total Gasto</span>
-                            <span className="text-xs font-mono font-bold text-sky-300">{client.totalSpent.toFixed(0)} €</span>
-                          </div>
-                          <div className="p-2 rounded-xl bg-black/40 border border-white/5 text-center">
-                            <span className="text-[9px] uppercase text-[#E5C268] block">Ticket Médio</span>
-                            <span className="text-xs font-mono font-bold text-[#E5C268]">{client.avgTicket.toFixed(0)} €</span>
+                          <div className="text-[11px] text-neutral-400 space-y-1">
+                            <p className="flex items-center gap-1.5">
+                              <Scissors className="w-3 h-3 text-[#C89B58]" />
+                              <span>Favorito: <strong>{client.favService}</strong></span>
+                            </p>
+                            {client.lastVisit && (
+                              <p className="flex items-center gap-1.5 text-[10px]">
+                                <Clock className="w-3 h-3" />
+                                <span>Última visita: {new Date(client.lastVisit).toLocaleDateString("pt-PT")}</span>
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {/* Preferred Service & Last Visit */}
-                        <div className="text-[11px] text-[#9E9EA7] space-y-1 pt-1">
-                          <p className="flex items-center gap-1.5 text-white">
-                            <Scissors className="w-3 h-3 text-[#C89B58]" />
-                            <span>Favorito: <strong>{client.favService}</strong></span>
-                          </p>
-                          {client.lastVisit && (
-                            <p className="flex items-center gap-1.5 text-[10px]">
-                              <Clock className="w-3 h-3 text-[#9E9EA7]" />
-                              <span>Última visita: {new Date(client.lastVisit).toLocaleDateString("pt-PT")}</span>
-                            </p>
-                          )}
-                          {client.notesList.length > 0 && (
-                            <p className="italic text-[#9E9EA7] line-clamp-2 text-[10px] bg-white/5 p-1.5 rounded-lg">
-                              "{client.notesList[0]}"
-                            </p>
-                          )}
-                        </div>
+                        {whatsAppChatUrl && (
+                          <a
+                            href={whatsAppChatUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2 px-3 rounded-2xl bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
+                            <span>Mensagem WhatsApp</span>
+                          </a>
+                        )}
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
-                      {/* Direct WhatsApp Contact */}
-                      {whatsAppChatUrl && (
-                        <a
-                          href={whatsAppChatUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full py-2 px-3 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                          <span>Mensagem WhatsApp</span>
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* ========================================================================= */}
+          {/* TAB: PAUSAS & BLOQUEIOS                                                   */}
+          {/* ========================================================================= */}
+          {activeTab === "blocks" && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+              }`}>
+                <div>
+                  <h2 className="font-bold text-lg flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-[#C89B58]" />
+                    <span>Gestão de Pausas & Bloqueios</span>
+                  </h2>
+                  <p className="text-xs text-neutral-400">
+                    Defina horários de almoço, folgas e períodos indisponíveis para o público.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsBlockModalOpen(true)}
+                  className="px-4 py-2.5 rounded-2xl bg-[#C89B58] text-black text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Bloqueio</span>
+                </button>
               </div>
-            )}
-          </div>
-        )}
 
+              {allAppointments.filter((a) => a.status === "blocked").length === 0 ? (
+                <div className={`p-14 text-center rounded-3xl border space-y-2 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <Lock className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
+                  <h3 className="text-sm font-bold">Sem bloqueios ativos</h3>
+                  <p className="text-xs text-neutral-400">
+                    Todos os horários comerciais estão abertos ao público.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {allAppointments
+                    .filter((a) => a.status === "blocked")
+                    .map((block) => (
+                      <div
+                        key={block.id}
+                        className="p-5 rounded-3xl border border-amber-500/30 bg-amber-500/10 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="px-3 py-2 rounded-2xl bg-amber-500/20 text-amber-500 font-mono font-bold text-xs">
+                            {block.time}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-xs text-amber-500">{block.customer_name}</h4>
+                            <p className="text-[10px] text-neutral-400">{block.date} • {block.service_duration} min</p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAppointment(block.id, true)}
+                          className="px-3 py-1.5 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Desbloquear</span>
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+        </main>
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: MARCAR NOVO CLIENTE (MANUAL APPOINTMENT)                          */}
+      {/* MODAL 1: MARCAR CLIENTE (MANUAL BOOKING)                                   */}
       {/* ========================================================================= */}
       {isNewModalOpen && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn"
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => {
             setIsTimeDropdownOpen(false);
             setIsServiceDropdownOpen(false);
           }}
         >
-          <div 
-            className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto"
+          <div
+            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-xl font-bold text-white">Marcar Novo Cliente</h3>
+              <h3 className="font-serif text-lg font-bold">Marcar Cliente Manualmente</h3>
               <button
                 type="button"
-                onClick={() => {
-                  setIsNewModalOpen(false);
-                  setIsTimeDropdownOpen(false);
-                  setIsServiceDropdownOpen(false);
-                }}
-                className="w-7 h-7 rounded-full bg-white/5 border border-white/10 text-[#9E9EA7] hover:text-white flex items-center justify-center cursor-pointer"
+                onClick={() => setIsNewModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -2200,7 +2187,7 @@ export default function AdminAgenda() {
 
             <form onSubmit={handleCreateManual} className="space-y-3.5">
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Nome do Cliente *
                 </label>
                 <input
@@ -2209,12 +2196,14 @@ export default function AdminAgenda() {
                   placeholder="Nome do cliente"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Telemóvel / WhatsApp *
                 </label>
                 <input
@@ -2223,177 +2212,60 @@ export default function AdminAgenda() {
                   placeholder="+351 9xx xxx xxx"
                   value={manualPhone}
                   onChange={(e) => setManualPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* Time Dropdown (30 min slots) */}
-                <div className="relative">
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                    Horário (30 min) *
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Horário *
                   </label>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsTimeDropdownOpen((prev) => !prev);
-                      setIsServiceDropdownOpen(false);
-                    }}
-                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
-                      <span>{manualTime}</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
-                        isTimeDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isTimeDropdownOpen && (
-                    <div 
-                      className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-2.5 shadow-2xl space-y-2.5 max-h-56 overflow-y-auto animate-fadeIn backdrop-blur-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
-                          <Sunrise className="w-3 h-3 text-[#C89B58]" />
-                          <span>Manhã (10:00 - 13:00)</span>
-                        </span>
-                        <div className="grid grid-cols-3 gap-1">
-                          {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setManualTime(t);
-                                setIsTimeDropdownOpen(false);
-                              }}
-                              className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
-                                manualTime === t
-                                  ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
-                                  : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="pt-1 border-t border-white/5">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
-                          <Sun className="w-3 h-3 text-[#C89B58]" />
-                          <span>Tarde & Noite (14:00 - 22:00)</span>
-                        </span>
-                        <div className="grid grid-cols-3 gap-1">
-                          {[
-                            "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
-                            "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
-                            "20:00", "20:30", "21:00", "21:30"
-                          ].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setManualTime(t);
-                                setIsTimeDropdownOpen(false);
-                              }}
-                              className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
-                                manualTime === t
-                                  ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
-                                  : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <input
+                    type="time"
+                    required
+                    value={manualTime}
+                    onChange={(e) => setManualTime(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
                 </div>
 
-                {/* Service Dropdown */}
-                <div className="relative">
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                     Serviço *
                   </label>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsServiceDropdownOpen((prev) => !prev);
-                      setIsTimeDropdownOpen(false);
-                    }}
-                    className="w-full px-3 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
+                  <select
+                    value={manualServiceId}
+                    onChange={(e) => setManualServiceId(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
+                    }`}
                   >
-                    <div className="flex items-center gap-2 truncate pr-1">
-                      <Scissors className="w-3.5 h-3.5 text-[#C89B58] shrink-0" />
-                      <span className="truncate font-medium text-left">
-                        {servicesData.find((s) => s.id === manualServiceId)?.name || "Selecionar"}
-                      </span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
-                        isServiceDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isServiceDropdownOpen && (
-                    <div 
-                      className="absolute top-full left-0 right-0 sm:left-auto sm:right-0 sm:w-72 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-1.5 shadow-2xl space-y-1 max-h-60 overflow-y-auto animate-fadeIn backdrop-blur-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {servicesData.map((s) => {
-                        const isSelected = manualServiceId === s.id;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                              setManualServiceId(s.id);
-                              setIsServiceDropdownOpen(false);
-                            }}
-                            className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between cursor-pointer border ${
-                              isSelected
-                                ? "bg-[#C89B58]/20 border-[#C89B58]/60 text-white shadow-sm"
-                                : "hover:bg-white/5 text-[#c4c4cc] hover:text-white border-transparent"
-                            }`}
-                          >
-                            <div className="space-y-0.5 pr-2">
-                              <span className="text-xs font-bold text-white block">
-                                {s.name}
-                              </span>
-                              <span className="text-[10px] text-[#9E9EA7] flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5 text-[#C89B58]" /> {s.duration}
-                              </span>
-                            </div>
-                            <span className="text-xs font-mono font-bold text-[#E5C268]">
-                              {s.priceFormatted}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                    {servicesData.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-[#111319] text-white">
+                        {s.name} ({s.priceFormatted})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Notas / Observações
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Cliente prefere máquina 1 / Barba desenhada"
+                  placeholder="Ex: Corte à tesoura e barba desenhada"
                   value={manualNotes}
                   onChange={(e) => setManualNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
@@ -2401,15 +2273,16 @@ export default function AdminAgenda() {
                 <button
                   type="button"
                   onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="btn-pill-gold px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer"
+                  disabled={isSavingManual}
+                  className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black cursor-pointer shadow-md disabled:opacity-50"
                 >
-                  Confirmar Marcação
+                  {isSavingManual ? "A Guardar..." : "Confirmar Marcação"}
                 </button>
               </div>
             </form>
@@ -2421,27 +2294,25 @@ export default function AdminAgenda() {
       {/* MODAL 2: EDITAR MARCAÇÃO                                                  */}
       {/* ========================================================================= */}
       {editingAppt && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn"
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
           onClick={() => {
             setIsEditTimeDropdownOpen(false);
             setIsEditServiceDropdownOpen(false);
           }}
         >
-          <div 
-            className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto"
+          <div
+            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-xl font-bold text-white">Editar Marcação</h3>
+              <h3 className="font-serif text-lg font-bold">Editar Marcação</h3>
               <button
                 type="button"
-                onClick={() => {
-                  setEditingAppt(null);
-                  setIsEditTimeDropdownOpen(false);
-                  setIsEditServiceDropdownOpen(false);
-                }}
-                className="w-7 h-7 rounded-full bg-white/5 border border-white/10 text-[#9E9EA7] hover:text-white flex items-center justify-center cursor-pointer"
+                onClick={() => setEditingAppt(null)}
+                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -2449,7 +2320,7 @@ export default function AdminAgenda() {
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5">
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Nome do Cliente *
                 </label>
                 <input
@@ -2457,12 +2328,14 @@ export default function AdminAgenda() {
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Telemóvel / WhatsApp *
                 </label>
                 <input
@@ -2470,13 +2343,15 @@ export default function AdminAgenda() {
                   required
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                     Data *
                   </label>
                   <input
@@ -2484,213 +2359,85 @@ export default function AdminAgenda() {
                     required
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58] font-mono"
+                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
                   />
                 </div>
 
-                {/* Edit Time Selector */}
-                <div className="relative">
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                    Horário (30 min) *
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Horário *
                   </label>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsEditTimeDropdownOpen((prev) => !prev);
-                      setIsEditServiceDropdownOpen(false);
-                    }}
-                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
-                      <span>{editTime}</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
-                        isEditTimeDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isEditTimeDropdownOpen && (
-                    <div 
-                      className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-2.5 shadow-2xl space-y-2.5 max-h-56 overflow-y-auto animate-fadeIn backdrop-blur-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
-                          <Sunrise className="w-3 h-3 text-[#C89B58]" />
-                          <span>Manhã (10:00 - 13:00)</span>
-                        </span>
-                        <div className="grid grid-cols-3 gap-1">
-                          {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setEditTime(t);
-                                setIsEditTimeDropdownOpen(false);
-                              }}
-                              className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
-                                editTime === t
-                                  ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
-                                  : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="pt-1 border-t border-white/5">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
-                          <Sun className="w-3 h-3 text-[#C89B58]" />
-                          <span>Tarde & Noite (14:00 - 22:00)</span>
-                        </span>
-                        <div className="grid grid-cols-3 gap-1">
-                          {[
-                            "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
-                            "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
-                            "20:00", "20:30", "21:00", "21:30"
-                          ].map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setEditTime(t);
-                                setIsEditTimeDropdownOpen(false);
-                              }}
-                              className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
-                                editTime === t
-                                  ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
-                                  : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <input
+                    type="time"
+                    required
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Service Selector */}
-                <div className="relative">
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                     Serviço *
                   </label>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsEditServiceDropdownOpen((prev) => !prev);
-                      setIsEditTimeDropdownOpen(false);
-                    }}
-                    className="w-full px-3 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
+                  <select
+                    value={editServiceId}
+                    onChange={(e) => setEditServiceId(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
+                    }`}
                   >
-                    <div className="flex items-center gap-2 truncate pr-1">
-                      <Scissors className="w-3.5 h-3.5 text-[#C89B58] shrink-0" />
-                      <span className="truncate font-medium text-left">
-                        {servicesData.find((s) => s.id === editServiceId)?.name || "Selecionar"}
-                      </span>
-                    </div>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
-                        isEditServiceDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isEditServiceDropdownOpen && (
-                    <div 
-                      className="absolute top-full left-0 right-0 sm:left-auto sm:right-0 sm:w-72 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-1.5 shadow-2xl space-y-1 max-h-60 overflow-y-auto animate-fadeIn backdrop-blur-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {servicesData.map((s) => {
-                        const isSelected = editServiceId === s.id;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                              setEditServiceId(s.id);
-                              setIsEditServiceDropdownOpen(false);
-                            }}
-                            className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between cursor-pointer border ${
-                              isSelected
-                                ? "bg-[#C89B58]/20 border-[#C89B58]/60 text-white shadow-sm"
-                                : "hover:bg-white/5 text-[#c4c4cc] hover:text-white border-transparent"
-                            }`}
-                          >
-                            <div className="space-y-0.5 pr-2">
-                              <span className="text-xs font-bold text-white block">
-                                {s.name}
-                              </span>
-                              <span className="text-[10px] text-[#9E9EA7] flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5 text-[#C89B58]" /> {s.duration}
-                              </span>
-                            </div>
-                            <span className="text-xs font-mono font-bold text-[#E5C268]">
-                              {s.priceFormatted}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                    {servicesData.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-[#111319] text-white">
+                        {s.name} ({s.priceFormatted})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Status Selector */}
                 <div>
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                    Estado
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Estado *
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { id: "confirmed", label: "Confirmado", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" },
-                      { id: "completed", label: "Concluído", color: "bg-sky-500/20 text-sky-400 border-sky-500/40" },
-                      { id: "cancelled", label: "Cancelado", color: "bg-red-500/20 text-red-400 border-red-500/40" }
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => setEditStatus(st.id)}
-                        className={`py-2 px-1 text-[10px] font-bold rounded-xl border transition-all cursor-pointer text-center ${
-                          editStatus === st.id
-                            ? `${st.color} ring-1 ring-[#C89B58]/50 font-black`
-                            : "bg-black/30 border-white/10 text-[#9E9EA7] hover:text-white"
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
+                    }`}
+                  >
+                    <option value="confirmed">Confirmado</option>
+                    <option value="completed">Concluído</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Notas / Observações
                 </label>
                 <input
                   type="text"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
-              <div className="pt-3 flex items-center justify-between border-t border-white/5">
+              <div className="pt-3 flex items-center justify-between border-t border-neutral-200 dark:border-white/5">
                 <button
                   type="button"
                   onClick={() => handleDeleteAppointment(editingAppt.id)}
-                  className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Eliminar marcação"
+                  className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Eliminar</span>
@@ -2700,16 +2447,16 @@ export default function AdminAgenda() {
                   <button
                     type="button"
                     onClick={() => setEditingAppt(null)}
-                    className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white cursor-pointer"
+                    className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingEdit}
-                    className="btn-pill-gold px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-50"
+                    className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black cursor-pointer shadow-md disabled:opacity-50"
                   >
-                    {isSavingEdit ? "A Guardar..." : "Guardar"}
+                    {isSavingEdit ? "A Guardar..." : "Guardar Alterações"}
                   </button>
                 </div>
               </div>
@@ -2719,43 +2466,40 @@ export default function AdminAgenda() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: BLOQUEAR HORÁRIO / PAUSA / AUSÊNCIA (FASE 3)                     */}
+      {/* MODAL 3: BLOQUEAR HORÁRIO / PAUSA                                         */}
       {/* ========================================================================= */}
       {isBlockModalOpen && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn"
-          onClick={() => {
-            setIsBlockStartDropdownOpen(false);
-            setIsBlockEndDropdownOpen(false);
-          }}
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsBlockModalOpen(false)}
         >
-          <div 
-            className="relative max-w-md w-full bg-[#111319] border border-amber-500/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto"
+          <div
+            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <h3 className="font-serif text-xl font-bold text-white">Bloquear Horário / Pausa</h3>
+                <Lock className="w-4 h-4 text-amber-500" />
+                <h3 className="font-serif text-lg font-bold">Bloquear Horário / Pausa</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsBlockModalOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/5 border border-white/10 text-[#9E9EA7] hover:text-white flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-[#9E9EA7] leading-relaxed">
-              O período selecionado ficará automaticamente indisponível para marcações públicas e reservado na sua agenda.
+            <p className="text-xs text-neutral-400">
+              O horário selecionado ficará indisponível para marcações de clientes.
             </p>
 
             <form onSubmit={handleCreateBlock} className="space-y-3.5">
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                   Data a Bloquear *
                 </label>
                 <input
@@ -2763,88 +2507,57 @@ export default function AdminAgenda() {
                   required
                   value={blockDate}
                   onChange={(e) => setBlockDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-amber-400 font-mono"
+                  className={`w-full px-3.5 py-2.5 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                     Hora Início *
                   </label>
-                  <select
+                  <input
+                    type="time"
+                    required
                     value={blockStartTime}
                     onChange={(e) => setBlockStartTime(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-amber-400"
-                  >
-                    {[
-                      "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
-                      "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
-                      "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
-                      "19:00", "19:30", "20:00", "20:30", "21:00"
-                    ].map((t) => (
-                      <option key={t} value={t} className="bg-[#111319] text-white font-mono">
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
                     Hora Fim *
                   </label>
-                  <select
+                  <input
+                    type="time"
+                    required
                     value={blockEndTime}
                     onChange={(e) => setBlockEndTime(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-amber-400"
-                  >
-                    {[
-                      "10:30", "11:00", "11:30", "12:00", "12:30", "13:00",
-                      "13:30", "14:00", "14:30", "15:00", "15:30", "16:00",
-                      "16:30", "17:00", "17:30", "18:00", "18:30", "19:00",
-                      "19:30", "20:00", "20:30", "21:00", "21:30", "22:00"
-                    ].map((t) => (
-                      <option key={t} value={t} className="bg-[#111319] text-white font-mono">
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                  Motivo do Bloqueio *
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                  Motivo *
                 </label>
-                <div className="grid grid-cols-2 gap-1.5 mb-2">
-                  {[
-                    "Pausa de Almoço",
-                    "Formação / Curso",
-                    "Assuntos Pessoais",
-                    "Dia de Folga / Férias"
-                  ].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setBlockReason(preset)}
-                      className={`p-2 rounded-xl text-[10px] font-bold border transition-all text-left cursor-pointer ${
-                        blockReason === preset
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                          : "bg-black/30 border-white/5 text-[#9E9EA7] hover:text-white"
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
                 <input
                   type="text"
                   required
-                  placeholder="Ou escreva um motivo personalizado..."
+                  placeholder="Ex: Pausa de Almoço / Formação / Assuntos Pessoais"
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-amber-400"
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
                 />
               </div>
 
@@ -2852,14 +2565,14 @@ export default function AdminAgenda() {
                 <button
                   type="button"
                   onClick={() => setIsBlockModalOpen(false)}
-                  className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingBlock}
-                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md disabled:opacity-50"
                 >
                   {isSavingBlock ? "A Bloquear..." : "Confirmar Bloqueio"}
                 </button>
