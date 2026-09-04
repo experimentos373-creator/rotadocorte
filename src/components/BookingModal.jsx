@@ -230,7 +230,6 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
           <div className="flex items-center justify-between gap-3">
             {/* Left: Studio Identity Badge */}
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#C89B58] animate-pulse shrink-0" />
               <span className={`text-[11px] font-mono uppercase tracking-widest font-bold ${
                 isDark ? "text-[#C89B58]" : "text-[#8C601E]"
               }`}>
