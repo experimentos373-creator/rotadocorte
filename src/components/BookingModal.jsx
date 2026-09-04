@@ -180,7 +180,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const [step, setStep] = useState(1);
 
   // Form State
-  const [selectedServiceId, setSelectedServiceId] = useState("corte-barba-terapia");
+  const [selectedServiceId, setSelectedServiceId] = useState(
+    preselectedService?.id || ""
+  );
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [clientName, setClientName] = useState("");
@@ -220,7 +222,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   }, [isOpen]);
 
   useEffect(() => {
-    if (preselectedService) {
+    if (preselectedService?.id) {
       setSelectedServiceId(preselectedService.id);
     }
   }, [preselectedService]);
@@ -236,6 +238,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       setStep(1);
       setBookingResult(null);
       setErrorMessage("");
+      if (preselectedService?.id) {
+        setSelectedServiceId(preselectedService.id);
+      } else {
+        setSelectedServiceId("");
+      }
     }
   }, [isOpen]);
 
@@ -538,10 +545,17 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
               <button
                 type="button"
-                onClick={() => setStep(2)}
-                className="w-full sm:w-auto ml-auto bg-[#C89B58] hover:bg-[#d8ab66] text-black font-extrabold px-8 py-3 rounded-full text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
+                disabled={!selectedServiceId}
+                onClick={() => {
+                  if (selectedServiceId) setStep(2);
+                }}
+                className={`w-full sm:w-auto ml-auto px-8 py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg ${
+                  selectedServiceId
+                    ? "bg-[#C89B58] hover:bg-[#d8ab66] text-black shadow-[#C89B58]/20 hover:scale-[1.02] cursor-pointer"
+                    : "bg-white/10 text-white/40 border border-white/10 cursor-not-allowed"
+                }`}
               >
-                <span>Avançar para Data</span>
+                <span>{selectedServiceId ? "Avançar para Data" : "Selecione um Serviço"}</span>
                 <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
