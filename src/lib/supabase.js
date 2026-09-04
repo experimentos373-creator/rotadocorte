@@ -176,3 +176,90 @@ export async function createBooking({
     appointment: newAppointment
   };
 }
+
+/**
+ * Update existing appointment (Supabase + LocalStorage)
+ */
+export async function updateAppointment(appointmentId, updatedFields) {
+  const service = updatedFields.service_id
+    ? servicesData.find((s) => s.id === updatedFields.service_id)
+    : null;
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const payload = {
+        updated_at: new Date().toISOString()
+      };
+      if (updatedFields.customer_name !== undefined) payload.customer_name = updatedFields.customer_name;
+      if (updatedFields.customer_phone !== undefined) payload.customer_phone = updatedFields.customer_phone;
+      if (updatedFields.customer_email !== undefined) payload.customer_email = updatedFields.customer_email;
+      if (updatedFields.customer_notes !== undefined) payload.notes = updatedFields.customer_notes;
+      if (updatedFields.status !== undefined) payload.status = updatedFields.status;
+      if (updatedFields.date && updatedFields.time) {
+        payload.start_time = `${updatedFields.date}T${updatedFields.time}:00`;
+      }
+      if (updatedFields.service_id) {
+        payload.service_id = updatedFields.service_id;
+      }
+
+      const { data, error } = await supabase
+        .from("appointments")
+        .update(payload)
+        .eq("id", appointmentId)
+        .select("*, services(*)")
+        .single();
+
+      if (!error && data) {
+        return {
+          success: true,
+          appointment: data
+        };
+      }
+    } catch (err) {
+      console.warn("Supabase update error, falling back to local storage:", err);
+    }
+  }
+
+  // Local storage update
+  const all = getLocalAppointments();
+  const index = all.findIndex((a) => String(a.id) === String(appointmentId));
+  if (index !== -1) {
+    const existing = all[index];
+    const newService = service || servicesData.find((s) => s.id === existing.service_id) || servicesData[3];
+
+    all[index] = {
+      ...existing,
+      ...updatedFields,
+      service_name: newService.name,
+      service_price: newService.priceFormatted,
+      service_duration: parseInt(newService.duration, 10) || 30,
+      updated_at: new Date().toISOString()
+    };
+    saveLocalAppointments(all);
+    return {
+      success: true,
+      appointment: all[index]
+    };
+  }
+
+  return { success: false, error: "NOT_FOUND" };
+}
+
+/**
+ * Delete appointment (Supabase + LocalStorage)
+ */
+export async function deleteAppointment(appointmentId) {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from("appointments").delete().eq("id", appointmentId);
+    } catch (err) {
+      console.warn("Supabase delete error:", err);
+    }
+  }
+
+  const all = getLocalAppointments();
+  const filtered = all.filter((a) => String(a.id) !== String(appointmentId));
+  saveLocalAppointments(filtered);
+  return { success: true };
+}
+

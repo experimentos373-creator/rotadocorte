@@ -23,12 +23,16 @@ import {
   Layers,
   Sparkles,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
   getLocalAppointments,
   saveLocalAppointments,
+  updateAppointment,
+  deleteAppointment,
   isSupabaseConfigured,
   supabase
 } from "../lib/supabase";
@@ -54,11 +58,81 @@ export default function AdminAgenda() {
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
 
+  // Edit appointment modal state
+  const [editingAppt, setEditingAppt] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editServiceId, setEditServiceId] = useState("");
+  const [editStatus, setEditStatus] = useState("confirmed");
+  const [editNotes, setEditNotes] = useState("");
+  const [isEditTimeDropdownOpen, setIsEditTimeDropdownOpen] = useState(false);
+  const [isEditServiceDropdownOpen, setIsEditServiceDropdownOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editFeedback, setEditFeedback] = useState("");
+
   // Block slot modal
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
   const [blockStart, setBlockStart] = useState("13:00");
   const [blockEnd, setBlockEnd] = useState("14:30");
   const [blockReason, setBlockReason] = useState("Pausa / Formação");
+
+  const openEditModal = (appt) => {
+    setEditingAppt(appt);
+    setEditName(appt.customer_name || "");
+    setEditPhone(appt.customer_phone || "");
+    setEditDate(appt.date || selectedDate);
+    setEditTime(appt.time || "10:30");
+    const matchedService =
+      servicesData.find(
+        (s) =>
+          s.name?.toLowerCase() === appt.service_name?.toLowerCase() ||
+          s.id === appt.service_id
+      ) || servicesData[3];
+    setEditServiceId(matchedService.id);
+    setEditStatus(appt.status || "confirmed");
+    setEditNotes(appt.customer_notes || "");
+    setEditFeedback("");
+    setIsEditTimeDropdownOpen(false);
+    setIsEditServiceDropdownOpen(false);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingAppt) return;
+    setIsSavingEdit(true);
+    setEditFeedback("");
+
+    const res = await updateAppointment(editingAppt.id, {
+      customer_name: editName.trim(),
+      customer_phone: editPhone.trim(),
+      date: editDate,
+      time: editTime,
+      service_id: editServiceId,
+      status: editStatus,
+      customer_notes: editNotes.trim()
+    });
+
+    setIsSavingEdit(false);
+    if (res.success) {
+      if (editDate !== selectedDate) {
+        setSelectedDate(editDate);
+      }
+      await loadAppointments();
+      setEditingAppt(null);
+    } else {
+      setEditFeedback("Erro ao guardar alterações. Por favor tente novamente.");
+    }
+  };
+
+  const handleDeleteAppointment = async (id) => {
+    if (window.confirm("Deseja eliminar esta marcação permanentemente?")) {
+      await deleteAppointment(id);
+      setEditingAppt(null);
+      await loadAppointments();
+    }
+  };
 
   const loadAppointments = async () => {
     setIsLoading(true);
@@ -110,9 +184,9 @@ export default function AdminAgenda() {
     loadAppointments();
   }, [selectedDate]);
 
-  // 🔒 Lock body & html scroll when admin modal is open
+  // 🔒 Lock body & html scroll when admin modal or edit modal is open
   useEffect(() => {
-    if (isNewModalOpen) {
+    if (isNewModalOpen || editingAppt) {
       document.body.classList.add("modal-open");
       document.documentElement.classList.add("modal-open");
       document.body.style.overflow = "hidden";
@@ -132,7 +206,7 @@ export default function AdminAgenda() {
       document.documentElement.style.overflow = "";
       document.body.style.touchAction = "";
     };
-  }, [isNewModalOpen]);
+  }, [isNewModalOpen, editingAppt]);
 
   const changeDay = (delta) => {
     const d = new Date(selectedDate);
@@ -457,7 +531,7 @@ export default function AdminAgenda() {
                     </div>
 
                     {/* Operational Action Controls */}
-                    <div className="flex items-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-white/5">
+                    <div className="flex items-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-white/5 flex-wrap">
                       {/* WhatsApp Contact */}
                       {appt.customer_phone && (
                         <a
@@ -471,6 +545,17 @@ export default function AdminAgenda() {
                           <span className="hidden sm:inline">WhatsApp</span>
                         </a>
                       )}
+
+                      {/* Edit Appointment */}
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(appt)}
+                        className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Editar dados da marcação"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
 
                       {/* Complete */}
                       {!isCompleted && !isCancelled && (
@@ -768,6 +853,347 @@ export default function AdminAgenda() {
                 >
                   Guardar Marcação
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Appointment Modal */}
+      {editingAppt && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn"
+          onClick={() => {
+            setIsEditTimeDropdownOpen(false);
+            setIsEditServiceDropdownOpen(false);
+          }}
+        >
+          <div 
+            className="relative max-w-lg w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-[#C89B58]" />
+                <h3 className="font-serif text-xl font-bold text-white">
+                  Editar Marcação
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAppt(null);
+                  setIsEditTimeDropdownOpen(false);
+                  setIsEditServiceDropdownOpen(false);
+                }}
+                className="w-7 h-7 rounded-full bg-white/5 border border-white/10 text-[#9E9EA7] hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {editFeedback && (
+              <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{editFeedback}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Name */}
+                <div>
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Nome do Cliente *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Telemóvel / WhatsApp *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Date */}
+                <div>
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Data da Marcação *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58] [color-scheme:dark]"
+                  />
+                </div>
+
+                {/* Time with Custom 30-min Slot Selector */}
+                <div className="relative">
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Horário (30 min) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditTimeDropdownOpen((prev) => !prev);
+                      setIsEditServiceDropdownOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
+                      <span>{editTime}</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
+                        isEditTimeDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isEditTimeDropdownOpen && (
+                    <div 
+                      className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-2.5 shadow-2xl space-y-2.5 max-h-56 overflow-y-auto animate-fadeIn backdrop-blur-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
+                          🌅 Manhã (10:00 - 13:00)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => {
+                            const isSelected = editTime === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setEditTime(t);
+                                  setIsEditTimeDropdownOpen(false);
+                                }}
+                                className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
+                                    : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="pt-1 border-t border-white/5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
+                          ☀️ Tarde & Noite (14:00 - 22:00)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[
+                            "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+                            "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
+                            "20:00", "20:30", "21:00", "21:30"
+                          ].map((t) => {
+                            const isSelected = editTime === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setEditTime(t);
+                                  setIsEditTimeDropdownOpen(false);
+                                }}
+                                className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
+                                    : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Service Selector */}
+                <div className="relative">
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Serviço *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditServiceDropdownOpen((prev) => !prev);
+                      setIsEditTimeDropdownOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 truncate pr-1">
+                      <Scissors className="w-3.5 h-3.5 text-[#C89B58] shrink-0" />
+                      <span className="truncate font-medium text-left">
+                        {servicesData.find((s) => s.id === editServiceId)?.name || "Selecionar"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[#E5C268] font-bold font-mono text-[11px]">
+                        {servicesData.find((s) => s.id === editServiceId)?.priceFormatted}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
+                          isEditServiceDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  {isEditServiceDropdownOpen && (
+                    <div 
+                      className="absolute top-full left-0 right-0 sm:left-auto sm:right-0 sm:w-72 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-1.5 shadow-2xl space-y-1 max-h-60 overflow-y-auto animate-fadeIn backdrop-blur-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {servicesData.map((s) => {
+                        const isSelected = editServiceId === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setEditServiceId(s.id);
+                              setIsEditServiceDropdownOpen(false);
+                            }}
+                            className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between cursor-pointer border ${
+                              isSelected
+                                ? "bg-[#C89B58]/20 border-[#C89B58]/60 text-white shadow-sm"
+                                : "hover:bg-white/5 text-[#c4c4cc] hover:text-white border-transparent"
+                            }`}
+                          >
+                            <div className="space-y-0.5 pr-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-bold text-white leading-tight">
+                                  {s.name}
+                                </span>
+                                {s.badge && (
+                                  <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded font-bold bg-[#C89B58]/25 text-[#E5C268] border border-[#C89B58]/35">
+                                    {s.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[#9E9EA7] flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-[#C89B58]" /> {s.duration}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-xs font-mono font-bold text-[#E5C268]">
+                                {s.priceFormatted}
+                              </span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-[#E5C268]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status Selector */}
+                <div>
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Estado
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: "confirmed", label: "Confirmado", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" },
+                      { id: "completed", label: "Concluído", color: "bg-sky-500/20 text-sky-400 border-sky-500/40" },
+                      { id: "cancelled", label: "Cancelado", color: "bg-red-500/20 text-red-400 border-red-500/40" }
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setEditStatus(st.id)}
+                        className={`py-2 px-1 text-[10px] font-bold rounded-xl border transition-all cursor-pointer text-center ${
+                          editStatus === st.id
+                            ? `${st.color} ring-1 ring-[#C89B58]/50 font-black`
+                            : "bg-black/30 border-white/10 text-[#9E9EA7] hover:text-white"
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                  Notas / Observações
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Corte clássico / Barba alinhada"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-between border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAppointment(editingAppt.id)}
+                  className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Eliminar marcação"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAppt(null);
+                      setIsEditTimeDropdownOpen(false);
+                      setIsEditServiceDropdownOpen(false);
+                    }}
+                    className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="btn-pill-gold px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingEdit ? "A Guardar..." : "Guardar Alterações"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
