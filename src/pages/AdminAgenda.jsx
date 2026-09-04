@@ -1822,31 +1822,48 @@ export default function AdminAgenda() {
                     <div className="grid grid-cols-6 gap-2 items-end h-32 pt-2">
                       {statsData.daysActivity.map((d) => {
                         const isPeak = d.count === statsData.maxDayCount && d.count > 0;
-                        const heightPct = statsData.maxDayCount > 0
-                          ? Math.max((d.count / statsData.maxDayCount) * 100, d.count > 0 ? 22 : 10)
-                          : 10;
+                        const heightPct = statsData.maxDayCount > 0 && d.count > 0
+                          ? Math.max((d.count / statsData.maxDayCount) * 100, 20)
+                          : 0;
 
                         return (
                           <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                            {/* Value badge over peak */}
-                            {isPeak && (
-                              <span className="text-[9px] font-mono font-bold text-[#C89B58] bg-[#C89B58]/15 px-1 py-0.2 rounded-md">
+                            {/* Value badge over bar when count > 0 */}
+                            {d.count > 0 ? (
+                              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all ${
+                                isPeak
+                                  ? "text-black bg-[#C89B58] shadow-xs"
+                                  : "text-[#C89B58] bg-[#C89B58]/15"
+                              }`}>
                                 {d.count}
                               </span>
+                            ) : (
+                              <span className="text-[10px] font-mono text-transparent select-none py-0.5">
+                                -
+                              </span>
                             )}
-                            <div className="w-full rounded-xl bg-neutral-100 dark:bg-white/5 relative flex items-end justify-center h-full overflow-hidden">
-                              <div
-                                className={`w-full rounded-xl transition-all duration-500 ${
-                                  isPeak
-                                    ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
-                                    : d.count > 0
-                                      ? "bg-[#C89B58]/40 hover:bg-[#C89B58]/60"
-                                      : "bg-neutral-200 dark:bg-white/10"
-                                }`}
-                                style={{ height: `${heightPct}%` }}
-                              />
+
+                            {/* Track & Bar: transparent when count is 0 */}
+                            <div className="w-full rounded-xl bg-transparent relative flex items-end justify-center h-full">
+                              {d.count > 0 ? (
+                                <div
+                                  className={`w-full rounded-xl transition-all duration-500 ${
+                                    isPeak
+                                      ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
+                                      : "bg-[#C89B58]/50 hover:bg-[#C89B58]/70"
+                                  }`}
+                                  style={{ height: `${heightPct}%` }}
+                                />
+                              ) : (
+                                <div className={`w-full h-1 rounded-full ${
+                                  isLight ? "bg-neutral-200" : "bg-white/5"
+                                }`} />
+                              )}
                             </div>
-                            <span className={`text-[10px] font-bold ${isPeak ? "text-[#C89B58]" : "text-neutral-400"}`}>
+
+                            <span className={`text-[10px] font-bold ${
+                              d.count > 0 ? (isPeak ? "text-[#C89B58]" : isLight ? "text-neutral-700" : "text-neutral-300") : "text-neutral-500"
+                            }`}>
                               {d.label}
                             </span>
                           </div>
@@ -1857,12 +1874,20 @@ export default function AdminAgenda() {
                     <div className={`p-3 rounded-2xl border text-center text-xs ${
                       isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
                     }`}>
-                      <p className="text-neutral-400">
-                        Pico de movimento: <strong className="text-[#C89B58] font-bold">{statsData.peakDay?.name || "Sábado"}</strong>
-                      </p>
-                      <p className="text-[10px] text-neutral-400 font-mono mt-0.5">
-                        {statsData.peakDay?.count || 0} cortes • {(statsData.peakDay?.revenue || 0).toFixed(2)} €
-                      </p>
+                      {statsData.peakDay?.count > 0 ? (
+                        <>
+                          <p className="text-neutral-400">
+                            Pico de movimento: <strong className="text-[#C89B58] font-bold">{statsData.peakDay.name}</strong>
+                          </p>
+                          <p className="text-[10px] text-neutral-400 font-mono mt-0.5">
+                            {statsData.peakDay.count} {statsData.peakDay.count === 1 ? "corte" : "cortes"} • {statsData.peakDay.revenue.toFixed(2)} €
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-neutral-400 text-[11px]">
+                          Sem movimento registado neste período
+                        </p>
+                      )}
                     </div>
                   </div>
 
