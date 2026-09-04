@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Layers,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  ChevronDown
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -50,6 +51,8 @@ export default function AdminAgenda() {
   const [manualTime, setManualTime] = useState("11:00");
   const [manualServiceId, setManualServiceId] = useState("corte-barba-terapia");
   const [manualNotes, setManualNotes] = useState("");
+  const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
 
   // Block slot modal
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
@@ -503,9 +506,32 @@ export default function AdminAgenda() {
 
       {/* Manual Appointment Modal */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn">
-          <div className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto">
-            <h3 className="font-serif text-xl font-bold text-white">Marcar Novo Cliente</h3>
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto overscroll-contain animate-fadeIn"
+          onClick={() => {
+            setIsTimeDropdownOpen(false);
+            setIsServiceDropdownOpen(false);
+          }}
+        >
+          <div 
+            className="relative max-w-md w-full bg-[#111319] border border-[#C89B58]/40 rounded-3xl p-6 shadow-2xl space-y-4 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-xl font-bold text-white">Marcar Novo Cliente</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNewModalOpen(false);
+                  setIsTimeDropdownOpen(false);
+                  setIsServiceDropdownOpen(false);
+                }}
+                className="w-7 h-7 rounded-full bg-white/5 border border-white/10 text-[#9E9EA7] hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
             <form onSubmit={handleCreateManual} className="space-y-3.5">
               <div>
                 <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
@@ -517,7 +543,7 @@ export default function AdminAgenda() {
                   placeholder="Nome do cliente"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58]"
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
                 />
               </div>
 
@@ -531,39 +557,183 @@ export default function AdminAgenda() {
                   placeholder="+351 9xx xxx xxx"
                   value={manualPhone}
                   onChange={(e) => setManualPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58]"
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Custom Time Selector Dropdown (30 min intervals) */}
+                <div className="relative">
                   <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                    Horário (30 min)
+                    Horário (30 min) *
                   </label>
-                  <input
-                    type="time"
-                    required
-                    step="1800"
-                    value={manualTime}
-                    onChange={(e) => setManualTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58]"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
-                    Serviço
-                  </label>
-                  <select
-                    value={manualServiceId}
-                    onChange={(e) => setManualServiceId(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs rounded-xl bg-[#181B24] border border-white/10 text-white focus:outline-none focus:border-[#C89B58]"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsTimeDropdownOpen((prev) => !prev);
+                      setIsServiceDropdownOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 text-xs font-mono font-bold rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
                   >
-                    {servicesData.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.priceFormatted})
-                      </option>
-                    ))}
-                  </select>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
+                      <span>{manualTime}</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
+                        isTimeDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isTimeDropdownOpen && (
+                    <div 
+                      className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-2.5 shadow-2xl space-y-2.5 max-h-56 overflow-y-auto animate-fadeIn backdrop-blur-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
+                          🌅 Manhã (10:00 - 13:00)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => {
+                            const isSelected = manualTime === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setManualTime(t);
+                                  setIsTimeDropdownOpen(false);
+                                }}
+                                className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
+                                    : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="pt-1 border-t border-white/5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
+                          ☀️ Tarde & Noite (14:00 - 22:00)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[
+                            "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+                            "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
+                            "20:00", "20:30", "21:00", "21:30"
+                          ].map((t) => {
+                            const isSelected = manualTime === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setManualTime(t);
+                                  setIsTimeDropdownOpen(false);
+                                }}
+                                className={`py-1.5 px-2 text-[11px] font-mono font-bold rounded-lg transition-all cursor-pointer text-center ${
+                                  isSelected
+                                    ? "bg-[#C89B58] text-black shadow-md shadow-[#C89B58]/25 font-black scale-105"
+                                    : "bg-white/5 hover:bg-white/15 text-[#FAF8F5] hover:text-[#E5C268]"
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Custom Service Selector Dropdown */}
+                <div className="relative">
+                  <label className="text-[11px] font-bold text-[#9E9EA7] uppercase tracking-wider block mb-1">
+                    Serviço *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsServiceDropdownOpen((prev) => !prev);
+                      setIsTimeDropdownOpen(false);
+                    }}
+                    className="w-full px-3 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/60 text-white flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 truncate pr-1">
+                      <Scissors className="w-3.5 h-3.5 text-[#C89B58] shrink-0" />
+                      <span className="truncate font-medium text-left">
+                        {servicesData.find((s) => s.id === manualServiceId)?.name || "Selecionar Serviço"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[#E5C268] font-bold font-mono text-[11px]">
+                        {servicesData.find((s) => s.id === manualServiceId)?.priceFormatted}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform duration-200 ${
+                          isServiceDropdownOpen ? "rotate-180 text-[#C89B58]" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  {isServiceDropdownOpen && (
+                    <div 
+                      className="absolute top-full left-0 right-0 sm:left-auto sm:right-0 sm:w-72 mt-1.5 z-40 bg-[#14161F] border border-[#C89B58]/40 rounded-2xl p-1.5 shadow-2xl space-y-1 max-h-60 overflow-y-auto animate-fadeIn backdrop-blur-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {servicesData.map((s) => {
+                        const isSelected = manualServiceId === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setManualServiceId(s.id);
+                              setIsServiceDropdownOpen(false);
+                            }}
+                            className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between cursor-pointer border ${
+                              isSelected
+                                ? "bg-[#C89B58]/20 border-[#C89B58]/60 text-white shadow-sm"
+                                : "hover:bg-white/5 text-[#c4c4cc] hover:text-white border-transparent"
+                            }`}
+                          >
+                            <div className="space-y-0.5 pr-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-bold text-white leading-tight">
+                                  {s.name}
+                                </span>
+                                {s.badge && (
+                                  <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded font-bold bg-[#C89B58]/25 text-[#E5C268] border border-[#C89B58]/35">
+                                    {s.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[#9E9EA7] flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5 text-[#C89B58]" /> {s.duration}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-xs font-mono font-bold text-[#E5C268]">
+                                {s.priceFormatted}
+                              </span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-[#E5C268]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -576,15 +746,19 @@ export default function AdminAgenda() {
                   placeholder="Ex: Corte clássico / Barba alinhada"
                   value={manualNotes}
                   onChange={(e) => setManualNotes(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-[#C89B58]"
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58]"
                 />
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white"
+                  onClick={() => {
+                    setIsNewModalOpen(false);
+                    setIsTimeDropdownOpen(false);
+                    setIsServiceDropdownOpen(false);
+                  }}
+                  className="px-4 py-2 text-xs text-[#9E9EA7] hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
