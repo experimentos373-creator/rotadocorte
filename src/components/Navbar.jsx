@@ -217,56 +217,8 @@ export default function Navbar({ onOpenBooking }) {
             </button>
           </div>
 
-          {/* Mobile Right Actions: Theme, Lang Pill, CTA, Menu */}
+          {/* Mobile Right Actions: Theme, CTA, Menu */}
           <div className="flex items-center gap-1.5 sm:gap-2 lg:hidden">
-            
-            {/* Mobile Language Switcher Button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setLangDropdownOpen(!langDropdownOpen)}
-                className={`flex items-center gap-1 px-2 py-1.5 rounded-full border text-[11px] font-bold cursor-pointer transition-colors ${
-                  isDark
-                    ? "bg-white/5 border-white/10 text-white hover:bg-white/10"
-                    : "bg-white border-[#DED7C8] text-[#1C1A17]"
-                }`}
-                aria-label="Selecionar idioma"
-              >
-                <currentLang.FlagComponent className="w-3.5 h-2.5 rounded-2xs object-cover shrink-0" />
-                <span className="uppercase">{currentLang.label}</span>
-              </button>
-
-              {langDropdownOpen && (
-                <div
-                  className={`absolute right-0 mt-2 w-32 py-1.5 rounded-2xl shadow-2xl z-50 border ${
-                    isDark
-                      ? "bg-[#13151B] border-white/15 text-[#FAF8F5]"
-                      : "bg-white border-[#DED7C8] text-[#1C1A17]"
-                  }`}
-                >
-                  {languages.map((l) => (
-                    <button
-                      key={l.code}
-                      type="button"
-                      onClick={() => {
-                        setLang(l.code);
-                        setLangDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 cursor-pointer ${
-                        lang === l.code
-                          ? isDark ? "text-[#E5C268] font-bold bg-[#C89B58]/20" : "text-[#1C1A17] font-bold bg-[#ECE7DC]"
-                          : isDark ? "text-[#9E9EA7] hover:bg-white/5" : "text-[#5C554B] hover:bg-[#F6F4EE]"
-                      }`}
-                    >
-                      <l.FlagComponent className="w-4 h-3 rounded-2xs object-cover shrink-0" />
-                      <span className="font-semibold uppercase">{l.label}</span>
-                      <span className="text-[10px] text-neutral-400">({l.fullName})</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Mobile Theme Toggle */}
             <button
               type="button"
