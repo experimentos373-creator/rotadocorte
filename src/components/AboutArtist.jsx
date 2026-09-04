@@ -1,9 +1,11 @@
 import React from "react";
 import { Instagram, ArrowUpRight, Check, Clock } from "lucide-react";
 import { shopInfo } from "../data/services";
+import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function AboutArtist({ onOpenBooking }) {
+  const { t } = useLanguage();
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -27,7 +29,7 @@ export default function AboutArtist({ onOpenBooking }) {
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
               <div className="absolute bottom-4 left-4 right-4 text-left">
                 <p className="text-white font-serif text-lg font-bold">Gabriel</p>
-                <p className="text-[#C89B58] text-xs font-semibold">Fundador & Barbeiro • Paião</p>
+                <p className="text-[#C89B58] text-xs font-semibold">{t.about?.tag || "Fundador & Barbeiro • Paião"}</p>
               </div>
             </div>
           </div>
@@ -37,13 +39,13 @@ export default function AboutArtist({ onOpenBooking }) {
             <h2 className={`font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight ${
               isDark ? "text-[#FAF8F5]" : "text-[#1C1A17]"
             }`}>
-              Gabriel & a Rota Do Corte
+              {t.about?.title || "Gabriel & a Rota Do Corte"}
             </h2>
 
             <p className={`text-base sm:text-lg leading-relaxed ${
               isDark ? "text-[#9E9EA7]" : "text-[#5C554B]"
             }`}>
-              Com foco absoluto na precisão, na arte do visagismo e no atendimento personalizado, o <strong>Gabriel</strong> fundou a Rota Do Corte no centro do Paião. Cada atendimento combina técnica apurada de tesoura e máquina, desenhos à lâmina e o relaxamento revigorante do vapor de ozono.
+              {t.about?.description}
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -54,10 +56,10 @@ export default function AboutArtist({ onOpenBooking }) {
                   isDark ? "text-[#FAF8F5]" : "text-[#1C1A17]"
                 }`}>
                   <Check className="w-4 h-4 text-[#C89B58]" />
-                  Degradês & Razor Art
+                  {t.about?.feature1Title || "Degradês & Razor Art"}
                 </p>
                 <p className={`text-xs ${isDark ? "text-[#9E9EA7]" : "text-[#5C554B]"}`}>
-                  Fades cirúrgicos e desenhos exclusivos personalizados para o seu perfil.
+                  {t.about?.feature1Desc}
                 </p>
               </div>
 
@@ -68,10 +70,10 @@ export default function AboutArtist({ onOpenBooking }) {
                   isDark ? "text-[#FAF8F5]" : "text-[#1C1A17]"
                 }`}>
                   <Check className="w-4 h-4 text-[#C89B58]" />
-                  Barbaterapia com Ozónio
+                  {t.about?.feature2Title || "Barbaterapia com Ozónio"}
                 </p>
                 <p className={`text-xs ${isDark ? "text-[#9E9EA7]" : "text-[#5C554B]"}`}>
-                  Vapor de ozono que abre os poros e elimina qualquer irritação ou foliculite.
+                  {t.about?.feature2Desc}
                 </p>
               </div>
             </div>
@@ -94,7 +96,7 @@ export default function AboutArtist({ onOpenBooking }) {
                 isDark ? "bg-white/5 border-white/5 text-[#9E9EA7]" : "bg-[#FAF8F5] border-[#DED7C8] text-[#5C554B]"
               }`}>
                 <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
-                <span>Seg. a Sáb.: 10:00 – 22:00 (Almoço: 13:00 – 14:00)</span>
+                <span>{t.about?.scheduleNote || "Seg. a Sáb.: 10:00 – 22:00 (Almoço: 13:00 – 14:00)"}</span>
               </div>
             </div>
           </div>
@@ -104,3 +106,4 @@ export default function AboutArtist({ onOpenBooking }) {
     </section>
   );
 }
+

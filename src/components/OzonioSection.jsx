@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Sparkles, Droplets, Shield, Wind, ArrowUpRight, Volume2, VolumeX, Play, Pause } from "lucide-react";
+import { Droplets, Shield, Wind, ArrowUpRight, Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 
@@ -34,18 +34,18 @@ export default function OzonioSection({ onOpenBooking }) {
   const benefits = [
     {
       icon: Wind,
-      title: "Abertura dos Poros & Suavidade",
-      desc: "O vapor aquecido amolece os pelos mais resistentes, permitindo um deslize suave da navalha sem puxões ou irritações."
+      title: t.ozone?.benefit1Title || "Abertura dos Poros & Suavidade",
+      desc: t.ozone?.benefit1Desc || "O vapor aquecido amolece os pelos mais resistentes, permitindo um deslize suave da navalha sem puxões ou irritações."
     },
     {
       icon: Shield,
-      title: "Ação Antibacteriana & Anti-Foliculite",
-      desc: "As propriedades do ozónio purificam a epiderme, eliminam bactérias e previnem borbulhas ou pelos encravados."
+      title: t.ozone?.benefit2Title || "Ação Antibacteriana & Anti-Foliculite",
+      desc: t.ozone?.benefit2Desc || "As propriedades do ozónio purificam a epiderme, eliminam bactérias e previnem borbulhas ou pelos encravados."
     },
     {
       icon: Droplets,
-      title: "Toalha Quente Aromática & Hidratação",
-      desc: "Infusão de toalha de algodão aquecida com óleos essenciais para uma sensação de spa e relaxamento profundo."
+      title: t.ozone?.benefit3Title || "Toalha Quente Aromática & Hidratação",
+      desc: t.ozone?.benefit3Desc || "Infusão de toalha de algodão aquecida com óleos essenciais para uma sensação de spa e relaxamento profundo."
     }
   ];
 
@@ -105,13 +105,13 @@ export default function OzonioSection({ onOpenBooking }) {
             <h2 className={`font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight ${
               isDark ? "text-[#FAF8F5]" : "text-[#1C1A17]"
             }`}>
-              Barbaterapia com <span className={isDark ? "text-gold-gradient" : "text-[#9A7743]"}>Vaporizador de Ozónio</span>
+              {t.ozone?.titlePrefix || "Barbaterapia com"} <span className={isDark ? "text-gold-gradient" : "text-[#9A7743]"}>{t.ozone?.titleHighlight || "Vaporizador de Ozónio"}</span>
             </h2>
 
             <p className={`text-base sm:text-lg leading-relaxed ${
               isDark ? "text-[#9E9EA7]" : "text-[#5C554B]"
             }`}>
-              Mais do que aparar a barba, a barbaterapia é um ritual de higiene profunda e descanso. O vaporizador de ozónio da <strong>Rota Do Corte</strong> eleva a sua visita a um padrão superior de conforto e cuidado dérmico.
+              {t.ozone?.description}
             </p>
 
             <div className="space-y-3.5 pt-2">
@@ -154,7 +154,7 @@ export default function OzonioSection({ onOpenBooking }) {
                   isDark ? "btn-pill-gold" : "bg-[#1C1A17] text-[#FAF8F5] hover:bg-[#2F2B26]"
                 }`}
               >
-                <span>Agendar Barbaterapia (€ 15)</span>
+                <span>{t.ozone?.cta || "Agendar Barbaterapia (€ 15)"}</span>
                 <ArrowUpRight className={`w-3.5 h-3.5 ${isDark ? "text-black" : "text-[#D6B78B]"}`} />
               </button>
             </div>
@@ -166,3 +166,4 @@ export default function OzonioSection({ onOpenBooking }) {
     </section>
   );
 }
+
