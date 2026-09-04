@@ -4,6 +4,7 @@ import { servicesData, shopInfo } from "../data/services";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const adminPin = import.meta.env.VITE_ADMIN_PIN || "2026";
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -36,7 +37,8 @@ export function saveLocalAppointments(appointments) {
 }
 
 /**
- * Fetch viable 30-minute slots for a date & service
+ * 🔒 ZERO-LEAK RPC: Fetch viable 30-minute slots for a date & service
+ * Does NOT leak any customer information or existing booking IDs.
  */
 export async function getAvailableSlots({
   shopSlug = "rotadocorte",
@@ -51,7 +53,7 @@ export async function getAvailableSlots({
         p_service_id: serviceId
       });
 
-      if (!error && data) {
+      if (!error && Array.isArray(data)) {
         return {
           success: true,
           slots: data.map((d) => ({
@@ -87,7 +89,9 @@ export async function getAvailableSlots({
 }
 
 /**
- * Book an appointment (Single Barber, Atomic protection)
+ * 🔒 ANTI-TAMPER RPC: Book an appointment
+ * Prices and durations are calculated strictly inside PostgreSQL.
+ * Atomic exclusion prevents double-booking.
  */
 export async function createBooking({
   shopSlug = "rotadocorte",
@@ -178,49 +182,40 @@ export async function createBooking({
 }
 
 /**
- * Update existing appointment (Supabase + LocalStorage)
+ * 🔒 SECURE ADMIN RPC: Update existing appointment
  */
-export async function updateAppointment(appointmentId, updatedFields) {
+export async function updateAppointment(appointmentId, updatedFields, pin = adminPin) {
   const service = updatedFields.service_id
     ? servicesData.find((s) => s.id === updatedFields.service_id)
     : null;
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const payload = {
-        updated_at: new Date().toISOString()
-      };
-      if (updatedFields.customer_name !== undefined) payload.customer_name = updatedFields.customer_name;
-      if (updatedFields.customer_phone !== undefined) payload.customer_phone = updatedFields.customer_phone;
-      if (updatedFields.customer_email !== undefined) payload.customer_email = updatedFields.customer_email;
-      if (updatedFields.customer_notes !== undefined) payload.notes = updatedFields.customer_notes;
-      if (updatedFields.status !== undefined) payload.status = updatedFields.status;
+      let startTimeIso = null;
       if (updatedFields.date && updatedFields.time) {
-        payload.start_time = `${updatedFields.date}T${updatedFields.time}:00`;
-      }
-      if (updatedFields.service_id) {
-        payload.service_id = updatedFields.service_id;
+        startTimeIso = new Date(`${updatedFields.date}T${updatedFields.time}:00`).toISOString();
       }
 
-      const { data, error } = await supabase
-        .from("appointments")
-        .update(payload)
-        .eq("id", appointmentId)
-        .select("*, services(*)")
-        .single();
+      const { data, error } = await supabase.rpc("admin_update_appointment", {
+        p_admin_pin: pin,
+        p_appointment_id: appointmentId,
+        p_status: updatedFields.status || null,
+        p_start_time: startTimeIso,
+        p_customer_name: updatedFields.customer_name || null,
+        p_customer_phone: updatedFields.customer_phone || null,
+        p_notes: updatedFields.customer_notes || updatedFields.notes || null,
+        p_service_id: updatedFields.service_id || null
+      });
 
-      if (!error && data) {
-        return {
-          success: true,
-          appointment: data
-        };
+      if (!error && data?.success) {
+        return { success: true };
       }
     } catch (err) {
-      console.warn("Supabase update error, falling back to local storage:", err);
+      console.warn("Supabase update RPC error, falling back to local storage:", err);
     }
   }
 
-  // Local storage update
+  // Local storage update fallback
   const all = getLocalAppointments();
   const index = all.findIndex((a) => String(a.id) === String(appointmentId));
   if (index !== -1) {
@@ -246,14 +241,20 @@ export async function updateAppointment(appointmentId, updatedFields) {
 }
 
 /**
- * Delete appointment (Supabase + LocalStorage)
+ * 🔒 SECURE ADMIN RPC: Delete appointment
  */
-export async function deleteAppointment(appointmentId) {
+export async function deleteAppointment(appointmentId, pin = adminPin) {
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("appointments").delete().eq("id", appointmentId);
+      const { data, error } = await supabase.rpc("admin_delete_appointment", {
+        p_admin_pin: pin,
+        p_appointment_id: appointmentId
+      });
+      if (!error && data?.success) {
+        return { success: true };
+      }
     } catch (err) {
-      console.warn("Supabase delete error:", err);
+      console.warn("Supabase delete RPC error:", err);
     }
   }
 
@@ -264,28 +265,30 @@ export async function deleteAppointment(appointmentId) {
 }
 
 /**
- * Fetch all appointments across all dates (for analytics, multi-period metrics & CRM)
+ * 🔒 SECURE ADMIN RPC: Fetch all appointments across all dates (CRM & Stats)
+ * Protected by Admin PIN verification.
  */
-export async function getAllAppointments() {
+export async function getAllAppointments(pin = adminPin, shopSlug = "rotadocorte") {
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("*, services(*)")
-        .order("start_time", { ascending: false });
+      const { data, error } = await supabase.rpc("admin_get_appointments", {
+        p_admin_pin: pin,
+        p_shop_slug: shopSlug
+      });
 
-      if (!error && data) {
-        return data.map((d) => ({
+      if (!error && data?.success && Array.isArray(data.appointments)) {
+        return data.appointments.map((d) => ({
           id: d.id,
           customer_name: d.customer_name,
           customer_phone: d.customer_phone,
           customer_email: d.customer_email,
-          customer_notes: d.notes || d.customer_notes,
-          service_name: d.services?.name || "Serviço",
-          service_price: d.services?.price ? `${d.services.price} €` : "15,00 €",
-          service_duration: d.services?.duration_minutes || 30,
-          barber_name: "Gabriel Silva",
-          date: d.start_time?.split("T")[0] || "",
+          customer_notes: d.customer_notes || d.notes,
+          service_id: d.service_id,
+          service_name: d.service_name || "Serviço",
+          service_price: d.service_price || "15,00 €",
+          service_duration: d.service_duration || 30,
+          barber_name: d.barber_name || "Gabriel Silva",
+          date: d.start_time ? d.start_time.split("T")[0] : "",
           time: d.start_time
             ? new Date(d.start_time).toLocaleTimeString("pt-PT", {
                 hour: "2-digit",
@@ -293,12 +296,13 @@ export async function getAllAppointments() {
               })
             : "",
           start_time: d.start_time,
+          end_time: d.end_time,
           status: d.status,
           created_at: d.created_at
         }));
       }
     } catch (err) {
-      console.warn("Supabase fetch all error, falling back to local storage:", err);
+      console.warn("Supabase fetch all RPC error, falling back to local storage:", err);
     }
   }
 
@@ -306,13 +310,15 @@ export async function getAllAppointments() {
 }
 
 /**
- * Create a blocked time slot (Pausa / Formação / Folga)
+ * 🔒 SECURE ADMIN RPC: Create a blocked time slot (Pausa / Formação / Folga)
  */
 export async function createBlockSlot({
   date,
   startTime,
   endTime,
-  reason = "Pausa / Indisponível"
+  reason = "Pausa / Indisponível",
+  shopSlug = "rotadocorte",
+  pin = adminPin
 }) {
   const [startH, startM] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
@@ -324,15 +330,21 @@ export async function createBlockSlot({
   if (isSupabaseConfigured && supabase) {
     try {
       const startTimeIso = new Date(`${date}T${startTime}:00`).toISOString();
-      await supabase.from("appointments").insert({
-        customer_name: `[BLOQUEIO] ${reason}`,
-        customer_phone: "---",
-        notes: reason,
-        status: "blocked",
-        start_time: startTimeIso
+      const endTimeIso = new Date(`${date}T${endTime}:00`).toISOString();
+
+      const { data, error } = await supabase.rpc("admin_create_block", {
+        p_admin_pin: pin,
+        p_shop_slug: shopSlug,
+        p_start_time: startTimeIso,
+        p_end_time: endTimeIso,
+        p_reason: reason
       });
+
+      if (!error && data?.success) {
+        return { success: true, id: data.id };
+      }
     } catch (err) {
-      console.warn("Supabase block slot insert error:", err);
+      console.warn("Supabase block slot insert RPC error:", err);
     }
   }
 
@@ -363,5 +375,3 @@ export async function createBlockSlot({
 
   return { success: true, block: newBlock };
 }
-
-
