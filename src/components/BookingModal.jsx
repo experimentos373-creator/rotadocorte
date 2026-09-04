@@ -372,7 +372,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* ========================================================================= */}
         {/* TOP BAR: BRAND LOGO + STEP PILL + CLOSE BUTTON                            */}
         {/* ========================================================================= */}
-        <div className="space-y-2 shrink-0">
+        <div className="space-y-2 shrink-0 pb-1">
           <div className="flex items-center justify-between gap-3">
             {/* Left: Scissors Brand Mark */}
             <div className="flex items-center gap-2.5 sm:gap-3">
@@ -396,7 +396,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               {step < 5 && (
                 <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
                   isDark
-                    ? "border-white/15 bg-white/5 text-white/90"
+                    ? "border-[#C89B58]/40 bg-[#C89B58]/10 text-[#E5C268]"
                     : "border-neutral-300 bg-neutral-100 text-neutral-800"
                 }`}>
                   PASSO {step} DE 4
@@ -440,9 +440,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 1: ESCOLHA O SERVIÇO (EXACT DESIGN IN 90% VIEWPORT CANVAS)          */}
         {/* ========================================================================= */}
         {step === 1 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between py-2 animate-fadeIn">
+          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             {/* Title & Subtitle */}
-            <div className="shrink-0 pb-1">
+            <div className="shrink-0 pb-1.5">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
               }`}>
@@ -455,8 +455,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* Services Grid (Filling the 90vh space evenly and beautifully) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5 my-auto flex-1 min-h-0 py-1">
+            {/* Services Grid (Scrollable if needed, fits seamlessly) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
               {servicesData.map((s, idx) => {
                 const isSelected = selectedServiceId === s.id;
                 return (
@@ -530,8 +530,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               })}
             </div>
 
-            {/* Step 1 Footer */}
-            <div className="pt-2 sm:pt-3 flex items-center justify-between gap-3 border-t border-black/5 dark:border-white/5 shrink-0">
+            {/* Step 1 Footer - Always pinned & HIGH CONTRAST GOLD BUTTON */}
+            <div className="pt-3 mt-1 flex items-center justify-between gap-3 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <div className="hidden sm:flex items-center gap-2 text-xs text-[#71717A] dark:text-[#9E9EA7]">
                 <ShieldCheck className="w-4 h-4 text-[#C89B58]" />
                 <span className="text-xs">Ambiente seguro, higienizado e profissional</span>
@@ -539,10 +539,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="w-full sm:w-auto ml-auto bg-[#18181B] hover:bg-black text-white px-7 py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.01]"
+                className="w-full sm:w-auto ml-auto bg-[#C89B58] hover:bg-[#d8ab66] text-black font-extrabold px-8 py-3 rounded-full text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
               >
                 <span>Avançar para Data</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>
@@ -552,7 +552,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 2: SELECIONE O DIA (CALENDÁRIO 7 COLUNAS X 5 SEMANAS)               */}
         {/* ========================================================================= */}
         {step === 2 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between py-2 animate-fadeIn">
+          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-1">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
@@ -567,7 +567,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* 31-Day Month Grid (7 columns x 5 weeks) */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 my-auto flex-1 min-h-0 py-2">
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 my-auto flex-1 min-h-0 overflow-y-auto py-2 pr-0.5">
               {getNextDays().map((d) => {
                 const isSelected = selectedDate === d.iso;
                 return (
@@ -631,7 +631,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 2 Footer */}
-            <div className="pt-2 sm:pt-3 flex items-center justify-between border-t border-black/5 dark:border-white/5 shrink-0">
+            <div className="pt-3 mt-1 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(1)}
@@ -643,10 +643,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="bg-[#18181B] hover:bg-black text-white px-7 py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.01]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] text-black font-extrabold px-8 py-3 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
               >
                 <span>Ver Horários ({currentService.duration})</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>
@@ -656,7 +656,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 3: ESCOLHA O HORÁRIO (MANHÃ & TARDE/NOITE + OCUPADOS)                */}
         {/* ========================================================================= */}
         {step === 3 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between py-2 animate-fadeIn">
+          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-1">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
@@ -691,7 +691,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="bg-[#18181B] text-white px-6 py-2.5 text-xs rounded-full uppercase font-bold cursor-pointer hover:bg-black"
+                  className="bg-[#C89B58] text-black font-bold px-6 py-2.5 text-xs rounded-full uppercase cursor-pointer hover:bg-[#d8ab66]"
                 >
                   Escolher Outra Data
                 </button>
@@ -728,8 +728,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                                     : "bg-neutral-50 border-neutral-200 text-neutral-400 cursor-not-allowed"
                                   : isSelected
                                     ? isDark
-                                      ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md scale-[1.02] cursor-pointer"
-                                      : "bg-[#18181B] text-white border-[#18181B] shadow-md scale-[1.02] cursor-pointer"
+                                      ? "bg-[#C89B58] text-black font-bold border-[#C89B58] shadow-md scale-[1.02] cursor-pointer"
+                                      : "bg-[#18181B] text-white font-bold border-[#18181B] shadow-md scale-[1.02] cursor-pointer"
                                     : isDark
                                       ? "bg-[#10131A] border-white/10 text-[#FAF8F5] hover:border-[#C89B58]/50 hover:bg-[#141722] cursor-pointer"
                                       : "bg-white border-[#E8E4DC] text-[#18181B] hover:border-[#C89B58] hover:bg-[#FAF6F0] shadow-sm cursor-pointer"
@@ -780,7 +780,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                                     : "bg-neutral-50 border-neutral-200 text-neutral-400 cursor-not-allowed"
                                   : isSelected
                                     ? isDark
-                                      ? "bg-[#C89B58] text-black border-[#C89B58] shadow-md scale-[1.02] cursor-pointer"
+                                      ? "bg-[#C89B58] text-black font-bold border-[#C89B58] shadow-md scale-[1.02] cursor-pointer"
                                       : "bg-[#18181B] text-white border-[#18181B] shadow-md scale-[1.02] cursor-pointer"
                                     : isDark
                                       ? "bg-[#10131A] border-white/10 text-[#FAF8F5] hover:border-[#C89B58]/50 hover:bg-[#141722] cursor-pointer"
@@ -822,7 +822,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             )}
 
             {/* Step 3 Footer */}
-            <div className="pt-2 sm:pt-3 flex items-center justify-between border-t border-black/5 dark:border-white/5 shrink-0">
+            <div className="pt-3 mt-1 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -835,10 +835,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 type="button"
                 disabled={!selectedTime}
                 onClick={() => setStep(4)}
-                className="bg-[#18181B] hover:bg-black disabled:opacity-40 text-white px-7 py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.01]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-40 text-black font-extrabold px-8 py-3 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
               >
                 <span>Avançar para Dados</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>
@@ -848,7 +848,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 4: OS SEUS DADOS (SUMMARY CARD + CLEAN FORM INPUTS)                 */}
         {/* ========================================================================= */}
         {step === 4 && (
-          <form onSubmit={handleBookingSubmit} className="flex-1 min-h-0 flex flex-col justify-between py-2 animate-fadeIn">
+          <form onSubmit={handleBookingSubmit} className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-1">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
@@ -969,7 +969,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 4 Footer */}
-            <div className="pt-2 sm:pt-3 flex items-center justify-between border-t border-black/5 dark:border-white/5 shrink-0">
+            <div className="pt-3 mt-1 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(3)}
@@ -981,16 +981,16 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-[#18181B] hover:bg-black disabled:opacity-50 text-white px-7 py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-md hover:scale-[1.01]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-50 text-black font-extrabold px-8 py-3 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                     <span>A Confirmar...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
                     <span>Confirmar Agendamento</span>
                   </>
                 )}
