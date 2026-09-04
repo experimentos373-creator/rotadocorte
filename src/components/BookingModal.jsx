@@ -863,11 +863,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 4: OS SEUS DADOS (SUMMARY CARD + CLEAN FORM INPUTS)                 */}
+        {/* PASSO 4: OS SEUS DADOS (GENEROUS SPACING, PREMIUM INPUTS)                */}
         {/* ========================================================================= */}
         {step === 4 && (
           <form onSubmit={handleBookingSubmit} className="flex-1 min-h-0 flex flex-col justify-between pt-2 animate-fadeIn">
-            <div className="shrink-0 pb-3">
+            <div className="shrink-0 pb-4">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
               }`}>
@@ -880,35 +880,35 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* Clean Summary Card */}
-            <div className={`p-4 sm:p-5 rounded-2xl border flex items-center justify-between text-xs sm:text-sm shrink-0 mb-3 ${
+            {/* Clean, Spacious Summary Card */}
+            <div className={`p-4 sm:p-5 md:p-6 rounded-2xl border flex items-center justify-between text-xs sm:text-sm shrink-0 mb-4 ${
               isDark
                 ? "bg-[#11141C] border-white/10 text-white"
                 : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B]"
             }`}>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Scissors className="w-4 h-4 text-[#C89B58]" />
-                  <p className="font-bold text-sm sm:text-base">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5">
+                  <Scissors className="w-4 h-4 sm:w-5 sm:h-5 text-[#C89B58]" />
+                  <p className="font-bold text-sm sm:text-base md:text-lg">
                     {currentService.name}
                   </p>
                 </div>
-                <p className={`text-xs capitalize ${isDark ? "text-[#E5C268]" : "text-[#8C601E]"}`}>
+                <p className={`text-xs sm:text-sm capitalize font-medium ${isDark ? "text-[#E5C268]" : "text-[#8C601E]"}`}>
                   {formattedDatePortuguese} às <strong>{selectedTime}</strong>
                 </p>
               </div>
               <div className="text-right">
-                <span className="font-bold text-base sm:text-lg font-mono text-[#C89B58]">
+                <span className="font-bold text-base sm:text-xl font-mono text-[#C89B58]">
                   {currentService.priceFormatted}
                 </span>
-                <p className={`text-xs ${isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}`}>
+                <p className={`text-xs sm:text-sm ${isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}`}>
                   {currentService.duration}
                 </p>
               </div>
             </div>
 
             {errorMessage && (
-              <div className={`p-3.5 rounded-xl border text-xs sm:text-sm flex items-center gap-2.5 shrink-0 mb-2 ${
+              <div className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center gap-3 shrink-0 mb-3 ${
                 isDark
                   ? "bg-red-500/20 border-red-500/40 text-red-300"
                   : "bg-red-50 border-red-200 text-red-700"
@@ -918,14 +918,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
             )}
 
-            {/* Input Fields (2 columns on md with generous spacing) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 my-auto py-2">
+            {/* Input Fields (2 columns on md with comfortable spacing) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 md:gap-6 my-auto py-2">
               {/* Name */}
-              <div className="space-y-1.5">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
+              <div className="space-y-2">
+                <label className={`text-xs sm:text-sm font-semibold flex items-center gap-2 ${
                   isDark ? "text-[#9E9EA7]" : "text-[#18181B]"
                 }`}>
-                  <User className="w-3.5 h-3.5 text-[#C89B58]" />
+                  <User className="w-4 h-4 text-[#C89B58]" />
                   <span>O seu nome completo *</span>
                 </label>
                 <input
@@ -934,7 +934,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   placeholder="Ex: João Silva"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
-                  className={`w-full px-4 py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
+                  className={`w-full px-4 py-3 sm:py-3.5 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
                     isDark
                       ? "border-white/10 bg-black/40 text-white placeholder-white/30 focus:border-[#C89B58]"
                       : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-sm"
@@ -943,11 +943,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
 
               {/* Phone */}
-              <div className="space-y-1.5">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
+              <div className="space-y-2">
+                <label className={`text-xs sm:text-sm font-semibold flex items-center gap-2 ${
                   isDark ? "text-[#9E9EA7]" : "text-[#18181B]"
                 }`}>
-                  <Phone className="w-3.5 h-3.5 text-[#C89B58]" />
+                  <Phone className="w-4 h-4 text-[#C89B58]" />
                   <span>Telemóvel / WhatsApp *</span>
                 </label>
                 <input
@@ -956,7 +956,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   placeholder="Ex: +351 912 345 678"
                   value={clientPhone}
                   onChange={(e) => setClientPhone(e.target.value)}
-                  className={`w-full px-4 py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
+                  className={`w-full px-4 py-3 sm:py-3.5 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
                     isDark
                       ? "border-white/10 bg-black/40 text-white placeholder-white/30 focus:border-[#C89B58]"
                       : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-sm"
@@ -965,11 +965,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
 
               {/* Notes (Span 2 cols on md) */}
-              <div className="space-y-1.5 md:col-span-2">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
+              <div className="space-y-2 md:col-span-2">
+                <label className={`text-xs sm:text-sm font-semibold flex items-center gap-2 ${
                   isDark ? "text-[#9E9EA7]" : "text-[#18181B]"
                 }`}>
-                  <FileText className="w-3.5 h-3.5 text-[#C89B58]" />
+                  <FileText className="w-4 h-4 text-[#C89B58]" />
                   <span>Observações (opcional)</span>
                 </label>
                 <input
@@ -977,7 +977,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   placeholder="Ex: Pretendo corte à tesoura e barba com toalha aquecida"
                   value={clientNotes}
                   onChange={(e) => setClientNotes(e.target.value)}
-                  className={`w-full px-4 py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
+                  className={`w-full px-4 py-3 sm:py-3.5 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
                     isDark
                       ? "border-white/10 bg-black/40 text-white placeholder-white/30 focus:border-[#C89B58]"
                       : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-sm"
@@ -987,7 +987,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 4 Footer */}
-            <div className="pt-4 mt-2 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
+            <div className="pt-4 sm:pt-5 mt-2 flex items-center justify-between border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(3)}
@@ -999,7 +999,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-50 text-black font-extrabold px-8 py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
+                className="bg-[#C89B58] hover:bg-[#d8ab66] disabled:opacity-50 text-black font-extrabold px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C89B58]/20 hover:scale-[1.02]"
               >
                 {isSubmitting ? (
                   <>
@@ -1018,15 +1018,15 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 5: SUCESSO & CONFIRMAÇÃO IMEDIATA                                   */}
+        {/* PASSO 5: SUCESSO & CONFIRMAÇÃO IMEDIATA (SPACIOUS & DELIGHTFUL)           */}
         {/* ========================================================================= */}
         {step === 5 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 animate-fadeIn max-w-2xl mx-auto w-full">
-            <div className="w-14 h-14 rounded-full bg-[#C89B58]/20 border-2 border-[#C89B58] flex items-center justify-center text-[#E5C268] mx-auto shadow-lg shadow-[#C89B58]/20 shrink-0 mb-1">
-              <CheckCircle2 className="w-8 h-8 text-[#C89B58]" />
+          <div className="flex-1 min-h-0 flex flex-col justify-between items-center text-center py-3 sm:py-4 animate-fadeIn max-w-2xl mx-auto w-full">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#C89B58]/20 border-2 border-[#C89B58] flex items-center justify-center text-[#E5C268] mx-auto shadow-lg shadow-[#C89B58]/20 shrink-0 mb-2">
+              <CheckCircle2 className="w-8 h-8 sm:w-9 sm:h-9 text-[#C89B58]" />
             </div>
 
-            <div className="space-y-1.5 shrink-0">
+            <div className="space-y-2 shrink-0">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${
                 isDark ? "text-white" : "text-[#18181B]"
               }`}>
@@ -1038,28 +1038,28 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Booking Details Card */}
-            <div className={`p-5 rounded-2xl border text-left space-y-2.5 text-xs sm:text-sm shrink-0 w-full my-3 ${
+            <div className={`p-5 sm:p-6 rounded-2xl border text-left space-y-3 text-xs sm:text-sm shrink-0 w-full my-4 ${
               isDark ? "bg-[#11141C] border-white/10" : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B] shadow-xs"
             }`}>
-              <div className="flex justify-between items-center pb-2 border-b border-black/5 dark:border-white/5">
+              <div className="flex justify-between items-center pb-2.5 border-b border-black/5 dark:border-white/5">
                 <span className={isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}>Serviço:</span>
                 <span className="font-bold">
                   {currentService.name}
                 </span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-black/5 dark:border-white/5">
+              <div className="flex justify-between items-center pb-2.5 border-b border-black/5 dark:border-white/5">
                 <span className={isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}>Barbeiro:</span>
                 <span className="font-bold text-[#C89B58]">
                   Gabriel Silva
                 </span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-black/5 dark:border-white/5">
+              <div className="flex justify-between items-center pb-2.5 border-b border-black/5 dark:border-white/5">
                 <span className={isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}>Data & Hora:</span>
                 <span className="font-bold capitalize">
                   {formattedDatePortuguese} às {selectedTime}
                 </span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-black/5 dark:border-white/5">
+              <div className="flex justify-between items-center pb-2.5 border-b border-black/5 dark:border-white/5">
                 <span className={isDark ? "text-[#9E9EA7]" : "text-[#71717A]"}>Valor:</span>
                 <span className="font-bold text-[#C89B58]">
                   {currentService.priceFormatted}
@@ -1074,7 +1074,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-2.5 pt-1 shrink-0 w-full">
+            <div className="space-y-3 pt-1 shrink-0 w-full">
               {/* WhatsApp 1-Click Confirmation */}
               <a
                 href={`https://wa.me/351935190491?text=${buildWhatsAppMessage({
@@ -1088,14 +1088,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 })}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3.5 text-xs sm:text-sm uppercase tracking-wider font-bold rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center gap-2.5 transition-all shadow-md shadow-[#25D366]/20 cursor-pointer"
+                className="w-full py-3.5 sm:py-4 text-xs sm:text-sm uppercase tracking-wider font-bold rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center gap-2.5 transition-all shadow-md shadow-[#25D366]/20 cursor-pointer"
               >
                 <WhatsAppIcon className="w-5 h-5 fill-white" />
                 <span>Enviar Confirmação por WhatsApp</span>
               </a>
 
               {/* Calendar Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <a
                   href={buildGoogleCalendarUrl({
                     serviceName: currentService.name,
@@ -1105,7 +1105,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   })}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`py-2.5 px-4 rounded-full border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                  className={`py-3 px-4 rounded-full border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
                     isDark
                       ? "border-white/10 bg-white/5 hover:bg-white/10 text-white"
                       : "border-[#E8E4DC] bg-white hover:bg-neutral-50 text-[#18181B] shadow-xs"
@@ -1126,7 +1126,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       clientName
                     })
                   }
-                  className={`py-2.5 px-4 rounded-full border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  className={`py-3 px-4 rounded-full border text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                     isDark
                       ? "border-white/10 bg-white/5 hover:bg-white/10 text-white"
                       : "border-[#E8E4DC] bg-white hover:bg-neutral-50 text-[#18181B] shadow-xs"
@@ -1138,7 +1138,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
             </div>
 
-            <div className="pt-2 shrink-0">
+            <div className="pt-3 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
