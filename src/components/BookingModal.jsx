@@ -14,7 +14,9 @@ import {
   AlertCircle,
   Scissors,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Sun,
+  Moon
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { WhatsAppIcon } from "./WhatsAppButton";
@@ -614,7 +616,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
                       isDark ? "text-[#E5C268]" : "text-[#8C601E]"
                     }`}>
-                      <span>☀️ MANHÃ (10:00 - 13:00)</span>
+                      <Sun className="w-3.5 h-3.5 text-[#C89B58]" />
+                      <span>MANHÃ (10:00 - 13:00)</span>
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {availableSlots
@@ -665,7 +668,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
                       isDark ? "text-[#E5C268]" : "text-[#8C601E]"
                     }`}>
-                      <span>☀️ TARDE & NOITE (14:00 - 22:00)</span>
+                      <Moon className="w-3.5 h-3.5 text-[#C89B58]" />
+                      <span>TARDE & NOITE (14:00 - 22:00)</span>
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {availableSlots
