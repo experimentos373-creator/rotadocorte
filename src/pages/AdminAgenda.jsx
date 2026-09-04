@@ -929,16 +929,6 @@ export default function AdminAgenda() {
 
         {/* Sidebar Footer */}
         <div className="space-y-3 pt-4 border-t border-neutral-200 dark:border-white/10">
-          {/* Live Sync Badge */}
-          <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-xl border ${
-            isLight
-              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-              : "bg-emerald-950/20 border-emerald-500/20 text-emerald-400"
-          }`}>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span className="truncate">Base de Dados Sincronizada</span>
-          </div>
-
           {/* User Profile & Logout */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2.5 min-w-0">
