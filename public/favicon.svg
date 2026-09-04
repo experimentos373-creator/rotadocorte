@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E5C268" />
+      <stop offset="50%" stop-color="#C89B58" />
+      <stop offset="100%" stop-color="#9A7032" />
+    </linearGradient>
+  </defs>
+  <!-- Background Circle -->
+  <rect width="100" height="100" rx="24" fill="#0D0E11" />
+  <rect x="3" y="3" width="94" height="94" rx="21" fill="none" stroke="url(#goldGrad)" stroke-width="2" stroke-opacity="0.4" />
+  
+  <!-- Razor / Scissor Crest Symbol -->
+  <g transform="translate(50, 48) scale(0.9)">
+    <!-- Scissor Blades Cross -->
+    <path d="M-18,-24 L18,18 M18,-24 L-18,18" stroke="url(#goldGrad)" stroke-width="4" stroke-linecap="round" />
+    <!-- Scissor Finger Loops -->
+    <circle cx="-22" cy="22" r="7" fill="none" stroke="url(#goldGrad)" stroke-width="3.5" />
+    <circle cx="22" cy="22" r="7" fill="none" stroke="url(#goldGrad)" stroke-width="3.5" />
+    <!-- Central Pivot Dot -->
+    <circle cx="0" cy="-3" r="3" fill="#E5C268" />
+    <!-- Crown / Barber Pole Accent -->
+    <path d="M-12,-30 L0,-38 L12,-30 L7,-24 L-7,-24 Z" fill="url(#goldGrad)" />
+  </g>
+  
+  <!-- Text Monogram "RC" -->
+  <text x="50" y="88" font-family="'Cinzel', serif" font-size="13" font-weight="800" fill="url(#goldGrad)" text-anchor="middle" letter-spacing="2">ROTA</text>
+</svg>
