@@ -1,12 +1,25 @@
+import { useEffect } from "react";
 import { X, Shield, FileText } from "lucide-react";
 import { shopInfo } from "../data/services";
 
 export default function LegalModals({ activeModal, onClose }) {
+  // 🔒 Lock body scroll when legal modal is open
+  useEffect(() => {
+    if (activeModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [activeModal]);
+
   if (!activeModal) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn"
       onClick={onClose}
     >
       <div
@@ -16,7 +29,8 @@ export default function LegalModals({ activeModal, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/5 border border-white/10 text-[#9e9ea7] hover:text-white flex items-center justify-center cursor-pointer"
+          className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/5 border border-white/10 text-[#9e9ea7] hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+          aria-label="Fechar"
         >
           <X className="w-5 h-5" />
         </button>
@@ -24,8 +38,8 @@ export default function LegalModals({ activeModal, onClose }) {
         {activeModal === "privacy" ? (
           <div className="space-y-4 text-left text-xs sm:text-sm text-[#c4c4cc] leading-relaxed">
             <div className="flex items-center gap-2 text-[#e5c268]">
-              <Shield className="w-5 h-5" />
-              <h2 className="text-xl sm:text-2xl font-bold font-display text-white">
+              <Shield className="w-5 h-5 text-[#C89B58]" />
+              <h2 className="text-xl sm:text-2xl font-bold font-serif text-white">
                 Política de Privacidade
               </h2>
             </div>
@@ -41,9 +55,9 @@ export default function LegalModals({ activeModal, onClose }) {
               Os dados facultados (como nome, contacto telefónico ou mensagens de WhatsApp) destinam-se exclusivamente à gestão de agendamentos na barbearia, confirmação de horários e esclarecimento de dúvidas.
             </p>
 
-            <h3 className="font-bold text-white text-sm pt-2">3. Plataformas Terceiras</h3>
+            <h3 className="font-bold text-white text-sm pt-2">3. Plataformas e Segurança</h3>
             <p>
-              Os agendamentos online automáticos são processados de forma segura através da plataforma <strong>TuaAgenda</strong> e do <strong>WhatsApp</strong>, cumprindo os padrões de segurança e privacidade em vigor.
+              Os agendamentos online automáticos são processados de forma segura cumprindo os padrões de segurança e privacidade em vigor pelo RGPD.
             </p>
 
             <h3 className="font-bold text-white text-sm pt-2">4. Direitos do Titular, CNPD e RAL</h3>
@@ -68,8 +82,8 @@ export default function LegalModals({ activeModal, onClose }) {
         ) : (
           <div className="space-y-4 text-left text-xs sm:text-sm text-[#c4c4cc] leading-relaxed">
             <div className="flex items-center gap-2 text-[#e5c268]">
-              <FileText className="w-5 h-5" />
-              <h2 className="text-xl sm:text-2xl font-bold font-display text-white">
+              <FileText className="w-5 h-5 text-[#C89B58]" />
+              <h2 className="text-xl sm:text-2xl font-bold font-serif text-white">
                 Termos e Condições de Serviço
               </h2>
             </div>
@@ -96,7 +110,7 @@ export default function LegalModals({ activeModal, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="btn-gold px-5 py-2 rounded-xl text-xs font-bold"
+            className="btn-pill-gold px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider cursor-pointer"
           >
             Compreendi
           </button>
