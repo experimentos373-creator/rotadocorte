@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
@@ -213,18 +213,29 @@ export default function AdminAgenda() {
     setPinError("");
   };
 
-  // Load All Appointments (Both for Day View, Multi-Period Stats & CRM)
-  const loadAppointments = async () => {
-    if (!isAuthenticated || !currentAdminPin) return;
-    setIsLoading(true);
-    const data = await getAllAppointments(currentAdminPin);
-    setAllAppointments(data || []);
+  const isFetchingRef = useRef(false);
 
-    // Filter day appointments
-    const forDay = (data || []).filter((a) => a.date === selectedDate);
-    forDay.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-    setDayAppointments(forDay);
-    setIsLoading(false);
+  // Load All Appointments (Both for Day View, Multi-Period Stats & CRM)
+  const loadAppointments = async (silent = false) => {
+    if (!isAuthenticated || !currentAdminPin) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (!silent) setIsLoading(true);
+
+    try {
+      const data = await getAllAppointments(currentAdminPin);
+      if (Array.isArray(data)) {
+        setAllAppointments(data);
+        const forDay = data.filter((a) => a.date === selectedDate);
+        forDay.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+        setDayAppointments(forDay);
+      }
+    } catch (_) {
+      // Handled silently with cache fallback in supabase.js
+    } finally {
+      if (!silent) setIsLoading(false);
+      isFetchingRef.current = false;
+    }
   };
 
   useEffect(() => {
@@ -233,17 +244,27 @@ export default function AdminAgenda() {
 
       // Realtime live sync whenever any new booking is made
       const unsubscribe = subscribeToAppointments(() => {
-        loadAppointments();
+        loadAppointments(true);
       });
 
-      // Background auto-refresh polling interval (every 10s)
+      // Background auto-refresh polling interval (every 25s, only when tab is visible)
       const pollInterval = setInterval(() => {
-        loadAppointments();
-      }, 10000);
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          loadAppointments(true);
+        }
+      }, 25000);
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          loadAppointments(true);
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
 
       return () => {
         unsubscribe();
         clearInterval(pollInterval);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
       };
     }
   }, [selectedDate, isAuthenticated, currentAdminPin]);
@@ -1004,127 +1025,158 @@ export default function AdminAgenda() {
       {/* ========================================================================= */}
       {/* 2. MAIN APP CANVAS CONTAINER                                              */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-24 lg:pb-8">
 
         {/* Top Header App Bar */}
-        <header className={`sticky top-0 z-30 px-4 sm:px-8 py-4 border-b flex items-center justify-between gap-4 backdrop-blur-md transition-colors ${
+        <header className={`sticky top-0 z-30 px-3 sm:px-8 py-3.5 sm:py-4 border-b backdrop-blur-md transition-colors ${
           isLight
-            ? "bg-white/80 border-neutral-200"
-            : "bg-[#0A0B0E]/80 border-white/10"
+            ? "bg-white/90 border-neutral-200 shadow-xs"
+            : "bg-[#0A0B0E]/90 border-white/10 shadow-xs"
         }`}>
-          {/* Left: Mobile Menu Toggle + Search */}
-          <div className="flex items-center gap-3 flex-1 max-w-md">
-            <button
-              type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-xl border border-neutral-200 dark:border-white/10"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
+          {/* Main Top Row */}
+          <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+            {/* Left: Mobile Menu Toggle + Studio Brand */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-xl border border-neutral-200 dark:border-white/10 shrink-0 text-neutral-400 hover:text-white"
+                title="Abrir Menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
 
-            <div className="relative w-full">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="Pesquisar cliente, contacto ou serviço..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-9 pr-4 py-2.5 text-xs rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+              <div className="lg:hidden flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-xl bg-[#C89B58] flex items-center justify-center text-black font-black shrink-0">
+                  <Scissors className="w-3.5 h-3.5" />
+                </div>
+                <h2 className="font-bold text-xs leading-tight font-serif truncate">
+                  Rota Do Corte
+                </h2>
+              </div>
+
+              {/* Desktop Search */}
+              <div className="relative hidden lg:block w-72">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  type="text"
+                  placeholder="Pesquisar cliente, contacto..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight
+                      ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
+                      : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+              {/* Theme Toggle */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
                   isLight
-                    ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
-                    : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
+                    ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
+                    : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
                 }`}
-              />
+                title={isLight ? "Ativar Modo Escuro" : "Ativar Modo Claro"}
+              >
+                {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-[#C89B58]" />}
+              </button>
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={() => loadAppointments(false)}
+                className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
+                  isLight
+                    ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
+                    : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
+                }`}
+                title="Atualizar Dados"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#C89B58]" : ""}`} />
+              </button>
+
+              {/* Block Slot Button (Desktop) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setBlockDate(selectedDate);
+                  setIsBlockModalOpen(true);
+                }}
+                className={`hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border text-xs font-semibold cursor-pointer transition-colors ${
+                  isLight
+                    ? "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-100"
+                    : "bg-[#111319] border-white/10 text-neutral-200 hover:bg-white/5"
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5 text-[#C89B58]" />
+                <span>Bloquear Horário</span>
+              </button>
+
+              {/* New Manual Booking Button */}
+              <button
+                type="button"
+                onClick={() => setIsNewModalOpen(true)}
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold shadow-md cursor-pointer transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden xs:inline">Marcar Cliente</span>
+                <span className="xs:hidden">Marcar</span>
+              </button>
             </div>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Theme Toggle (Light / Dark Mode) */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
+          {/* Mobile Search Input (full width on small screens) */}
+          <div className="mt-2.5 lg:hidden relative w-full">
+            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Pesquisar cliente, contacto ou serviço..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full pl-9 pr-4 py-2 text-xs rounded-xl sm:rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
                 isLight
-                  ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
-                  : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
+                  ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
+                  : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
               }`}
-              title={isLight ? "Ativar Modo Escuro" : "Ativar Modo Claro"}
-            >
-              {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-[#C89B58]" />}
-            </button>
-
-            {/* Refresh Button */}
-            <button
-              type="button"
-              onClick={loadAppointments}
-              className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
-                isLight
-                  ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
-                  : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
-              }`}
-              title="Atualizar Dados"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            </button>
-
-            {/* Block Slot Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setBlockDate(selectedDate);
-                setIsBlockModalOpen(true);
-              }}
-              className={`hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border text-xs font-semibold cursor-pointer transition-colors ${
-                isLight
-                  ? "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-100"
-                  : "bg-[#111319] border-white/10 text-neutral-200 hover:bg-white/5"
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5 text-[#C89B58]" />
-              <span>Bloquear Horário</span>
-            </button>
-
-            {/* New Manual Booking Button */}
-            <button
-              type="button"
-              onClick={() => setIsNewModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold shadow-md cursor-pointer transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Marcar Cliente</span>
-            </button>
+            />
           </div>
         </header>
 
         {/* Main Content View Switcher */}
-        <main className="p-4 sm:p-8 space-y-6 flex-1">
+        <main className="p-3.5 sm:p-8 space-y-5 sm:space-y-6 flex-1 max-w-7xl w-full mx-auto">
 
           {/* ========================================================================= */}
           {/* TAB: AGENDA & MARCAÇÕES (TIMELINE + CONTROLS)                             */}
           {/* ========================================================================= */}
           {activeTab === "agenda" && (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="space-y-4 sm:space-y-6 animate-fadeIn">
               {/* Agenda Scope, Stepper & Filters */}
-              <div className={`p-5 rounded-3xl border shadow-xs space-y-4 ${
+              <div className={`p-4 sm:p-5 rounded-3xl border shadow-xs space-y-3 sm:space-y-4 ${
                 isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
               }`}>
                 {/* Row 1: Scope & Stepper */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-neutral-100 dark:border-white/5">
-                  <div className={`flex items-center gap-1.5 p-1 rounded-2xl border w-fit ${
+                  <div className={`grid grid-cols-2 sm:flex items-center gap-1.5 p-1 rounded-2xl border w-full sm:w-fit ${
                     isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/40 border-white/10"
                   }`}>
                     <button
                       type="button"
                       onClick={() => setAgendaScope("day")}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                      className={`px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
                         agendaScope === "day"
                           ? "bg-[#C89B58] text-black shadow-xs font-bold"
                           : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
                       }`}
                     >
-                      <CalendarDays className="w-3.5 h-3.5" />
-                      <span>Agenda do Dia</span>
+                      <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Agenda do Dia</span>
                       <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-black/20 text-black font-bold">
                         {dayAppointments.length}
                       </span>
@@ -1133,14 +1185,14 @@ export default function AdminAgenda() {
                     <button
                       type="button"
                       onClick={() => setAgendaScope("all")}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                      className={`px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
                         agendaScope === "all"
                           ? "bg-[#C89B58] text-black shadow-xs font-bold"
                           : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
                       }`}
                     >
-                      <Layers className="w-3.5 h-3.5" />
-                      <span>Todas as Marcações</span>
+                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Todas</span>
                       <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-white/10 text-neutral-300">
                         {allAppointments.length}
                       </span>
@@ -1149,33 +1201,37 @@ export default function AdminAgenda() {
 
                   {/* Day Stepper */}
                   {agendaScope === "day" && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => changeDay(-1)}
-                        className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                          isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                        className="px-3.5 py-2 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold cursor-pointer font-mono"
-                      >
-                        Hoje
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => changeDay(1)}
-                        className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                          isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                      <span className="text-sm font-bold capitalize ml-1 font-serif">
+                    <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => changeDay(-1)}
+                          className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                            isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                          }`}
+                          title="Dia Anterior"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+                          className="px-3 py-2 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold cursor-pointer font-mono"
+                        >
+                          Hoje
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => changeDay(1)}
+                          className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                            isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                          }`}
+                          title="Dia Seguinte"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <span className="text-xs sm:text-sm font-bold capitalize font-serif text-[#C89B58]">
                         {formattedPortugueseDate}
                       </span>
                     </div>
@@ -1183,8 +1239,8 @@ export default function AdminAgenda() {
                 </div>
 
                 {/* Row 2: Status Filter & Sorting */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  <div className={`flex items-center gap-1 overflow-x-auto p-1 rounded-2xl border ${
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+                  <div className={`flex items-center gap-1 overflow-x-auto scrollbar-none p-1 rounded-2xl border ${
                     isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/30 border-white/5"
                   }`}>
                     {["all", "confirmed", "completed", "cancelled", "blocked"].map((st) => (
@@ -1192,7 +1248,7 @@ export default function AdminAgenda() {
                         key={st}
                         type="button"
                         onClick={() => setFilterStatus(st)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
                           filterStatus === st
                             ? "bg-[#C89B58] text-black shadow-xs font-bold"
                             : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
@@ -1212,25 +1268,27 @@ export default function AdminAgenda() {
                   </div>
 
                   {/* Sorting Mode Dropdown */}
-                  <div className="relative">
+                  <div className="relative shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                      className={`px-4 py-2 rounded-2xl border text-xs font-medium flex items-center justify-between gap-2.5 cursor-pointer ${
+                      className={`w-full sm:w-auto px-3.5 py-2 rounded-xl sm:rounded-2xl border text-xs font-medium flex items-center justify-between gap-2.5 cursor-pointer ${
                         isLight ? "bg-white border-neutral-200" : "bg-black/40 border-white/10"
                       }`}
                     >
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#C89B58]" />
-                      <span className="text-neutral-400">Ordenar:</span>
-                      <span className="font-bold text-[#C89B58]">
-                        {sortBy === "newest"
-                          ? "Mais Recentes"
-                          : sortBy === "oldest"
-                            ? "Mais Antigos"
-                            : sortBy === "price_desc"
-                              ? "Preço: Maior"
-                              : "Preço: Menor"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-[#C89B58]" />
+                        <span className="text-neutral-400 hidden xs:inline">Ordenar:</span>
+                        <span className="font-bold text-[#C89B58]">
+                          {sortBy === "newest"
+                            ? "Mais Recentes"
+                            : sortBy === "oldest"
+                              ? "Mais Antigos"
+                              : sortBy === "price_desc"
+                                ? "Preço: Maior"
+                                : "Preço: Menor"}
+                        </span>
+                      </div>
                       <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
                     </button>
 
@@ -1349,35 +1407,35 @@ export default function AdminAgenda() {
                     return (
                       <div
                         key={appt.id}
-                        className={`p-5 rounded-3xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        className={`p-4 sm:p-5 rounded-3xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4 ${
                           isCancelled
-                            ? "opacity-50 bg-red-500/5 border-red-500/20"
+                            ? "opacity-60 bg-red-500/5 border-red-500/20"
                             : isCompleted
                               ? isLight ? "bg-emerald-50/50 border-emerald-200" : "bg-emerald-950/10 border-emerald-500/20"
-                              : isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]" : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
+                              : isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]/60 shadow-xs" : "bg-[#111319] border-white/10 hover:border-[#C89B58]/60 shadow-xs"
                         }`}
                       >
                         {/* Time & Details */}
-                        <div className="flex items-start gap-4">
-                          <div className={`px-4 py-3 rounded-2xl border text-center font-mono shrink-0 shadow-inner min-w-[76px] ${
+                        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+                          <div className={`px-3 py-2 sm:px-4 sm:py-3 rounded-2xl border text-center font-mono shrink-0 shadow-inner min-w-[70px] sm:min-w-[76px] ${
                             isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/40 border-white/10"
                           }`}>
                             {appt.date && (
-                              <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block border-b border-neutral-200 dark:border-white/5 pb-0.5 mb-1">
+                              <span className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider block border-b border-neutral-200 dark:border-white/5 pb-0.5 mb-1 truncate">
                                 {apptFormattedDate}
                               </span>
                             )}
-                            <span className="text-base font-bold text-[#C89B58] block">
+                            <span className="text-sm sm:text-base font-bold text-[#C89B58] block">
                               {appt.time}
                             </span>
-                            <span className="text-[10px] text-neutral-400 block mt-0.5">
+                            <span className="text-[9px] sm:text-[10px] text-neutral-400 block mt-0.5">
                               {appt.service_duration} min
                             </span>
                           </div>
 
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2.5 flex-wrap">
-                              <h3 className="font-bold text-sm font-serif">
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-sm font-serif truncate">
                                 {appt.customer_name}
                               </h3>
                               <span
@@ -1389,26 +1447,32 @@ export default function AdminAgenda() {
                                       : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
                                 }`}
                               >
-                                {appt.status}
+                                {appt.status === "confirmed"
+                                  ? "Confirmado"
+                                  : appt.status === "completed"
+                                    ? "Concluído"
+                                    : appt.status === "cancelled"
+                                      ? "Cancelado"
+                                      : appt.status}
                               </span>
                             </div>
 
-                            <p className="text-xs text-[#C89B58] font-medium flex items-center gap-2">
+                            <p className="text-xs text-[#C89B58] font-medium flex items-center gap-1.5 sm:gap-2 flex-wrap">
                               <Scissors className="w-3.5 h-3.5 shrink-0" />
-                              <span>{appt.service_name}</span>
+                              <span className="truncate">{appt.service_name}</span>
                               <span>•</span>
                               <span className="font-mono font-bold">{appt.service_price}</span>
                             </p>
 
-                            <div className="flex items-center gap-3 text-xs text-neutral-400 pt-0.5">
+                            <div className="flex items-center gap-2.5 text-xs text-neutral-400 pt-0.5 flex-wrap">
                               <a
                                 href={`tel:${appt.customer_phone?.replace(/\s/g, "")}`}
-                                className="flex items-center gap-1 hover:text-[#C89B58] transition-colors"
+                                className="flex items-center gap-1 hover:text-[#C89B58] transition-colors font-mono font-medium"
                               >
                                 <Phone className="w-3 h-3 text-[#C89B58]" /> {appt.customer_phone}
                               </a>
                               {appt.customer_notes && (
-                                <span className="italic line-clamp-1">
+                                <span className="italic line-clamp-1 text-[11px]">
                                   "{appt.customer_notes}"
                                 </span>
                               )}
@@ -1416,24 +1480,24 @@ export default function AdminAgenda() {
                           </div>
                         </div>
 
-                        {/* Action Controls */}
-                        <div className="flex items-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-neutral-200 dark:border-white/5 flex-wrap">
+                        {/* Action Controls (Responsive on Mobile) */}
+                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-neutral-200 dark:border-white/5">
                           {appt.customer_phone && appt.customer_phone !== "---" && (
                             <a
                               href={`https://wa.me/${appt.customer_phone.replace(/\D/g, "")}?text=${whatsAppClientText}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-3.5 py-2 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
                             >
                               <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                              <span className="hidden sm:inline">WhatsApp</span>
+                              <span>WhatsApp</span>
                             </a>
                           )}
 
                           <button
                             type="button"
                             onClick={() => openEditModal(appt)}
-                            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                             <span>Editar</span>
@@ -1443,7 +1507,7 @@ export default function AdminAgenda() {
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "completed")}
-                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>Concluir</span>
@@ -1454,7 +1518,7 @@ export default function AdminAgenda() {
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "confirmed")}
-                              className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
                             >
                               <Clock className="w-3.5 h-3.5" />
                               <span>Reabrir</span>
@@ -1465,7 +1529,7 @@ export default function AdminAgenda() {
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "cancelled")}
-                              className="px-3 py-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/15 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/15 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               <span>Cancelar</span>
@@ -1475,10 +1539,11 @@ export default function AdminAgenda() {
                           <button
                             type="button"
                             onClick={() => handleDeleteAppointment(appt.id)}
-                            className="p-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/20 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
+                            className="col-span-2 sm:col-span-1 p-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/20 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer flex items-center justify-center min-h-[38px]"
                             title="Eliminar"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
+                            <span className="sm:hidden text-xs font-semibold ml-1.5">Eliminar</span>
                           </button>
                         </div>
                       </div>
@@ -1531,85 +1596,85 @@ export default function AdminAgenda() {
                 </div>
               </div>
 
-              {/* 4 Top KPI Cards Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 4 Top KPI Cards Row (2x2 on Mobile, 4 on Desktop) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {/* 1. Faturação Concluída */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
                   isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Faturação Real</span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3" />
-                      <span>{statsData.completedCount} cortes</span>
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Faturação Real</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
+                      <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                      <span>{statsData.completedCount}</span>
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-[#C89B58]">
+                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight text-[#C89B58] truncate">
                       {statsData.completedRevenue.toFixed(2)} €
                     </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      Previsto com agendamentos: <strong className="text-neutral-300 font-mono">{statsData.estimatedRevenue.toFixed(2)} €</strong>
+                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
+                      Previsto: <strong className="text-neutral-300 font-mono">{statsData.estimatedRevenue.toFixed(0)} €</strong>
                     </p>
                   </div>
                 </div>
 
                 {/* 2. Total de Atendimentos */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
                   isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Total Marcações</span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                      {statsData.uniqueClientsCount} clientes
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Total Marcações</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      {statsData.uniqueClientsCount} cli.
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
                       {statsData.total}
                     </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      {statsData.confirmedCount} confirmados em carteira
+                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
+                      {statsData.confirmedCount} confirmados
                     </p>
                   </div>
                 </div>
 
                 {/* 3. Ticket Médio */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
                   isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Ticket Médio / Cliente</span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Ticket Médio</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                       Média
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
                       {statsData.avgTicket.toFixed(2)} €
                     </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      Rendimento médio por marcação
+                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
+                      Rendimento / marcação
                     </p>
                   </div>
                 </div>
 
                 {/* 4. Taxa de Comparência */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
                   isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Taxa de Comparência</span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Comparência</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                       {statsData.completionRate}%
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
                       {statsData.completionRate}%
                     </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      {statsData.cancelledCount} cancelamentos registados
+                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
+                      {statsData.cancelledCount} cancelados
                     </p>
                   </div>
                 </div>
@@ -2307,6 +2372,106 @@ export default function AdminAgenda() {
           )}
 
         </main>
+
+        {/* ========================================================================= */}
+        {/* MOBILE BOTTOM NAVIGATION DOCK (Native App Feel)                           */}
+        {/* ========================================================================= */}
+        <nav
+          className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 px-2 py-1.5 border-t backdrop-blur-xl transition-colors shadow-2xl ${
+            isLight
+              ? "bg-white/95 border-neutral-200"
+              : "bg-[#0C0E14]/95 border-white/10"
+          }`}
+        >
+          <div className="flex items-center justify-around max-w-md mx-auto">
+            {/* 1. Agenda */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("agenda");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer relative ${
+                activeTab === "agenda"
+                  ? "text-[#C89B58] font-bold"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <div className="relative">
+                <CalendarDays className="w-5 h-5" />
+                {dayAppointments.length > 0 && (
+                  <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-[#C89B58] text-black text-[9px] font-mono font-bold flex items-center justify-center">
+                    {dayAppointments.length}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] tracking-tight">Agenda</span>
+            </button>
+
+            {/* 2. Métricas */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("stats");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer ${
+                activeTab === "stats"
+                  ? "text-[#C89B58] font-bold"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span className="text-[10px] tracking-tight">Métricas</span>
+            </button>
+
+            {/* 3. Center Elevated Action: Marcar */}
+            <button
+              type="button"
+              onClick={() => setIsNewModalOpen(true)}
+              className="flex flex-col items-center -mt-4 cursor-pointer group"
+            >
+              <div className="w-11 h-11 rounded-full bg-[#C89B58] hover:bg-[#D4A966] text-black flex items-center justify-center shadow-lg shadow-[#C89B58]/30 group-active:scale-95 transition-transform border-2 border-[#0C0E14]">
+                <Plus className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <span className="text-[9px] font-bold text-[#C89B58] mt-0.5">Marcar</span>
+            </button>
+
+            {/* 4. CRM / Clientes */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("crm");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer relative ${
+                activeTab === "crm"
+                  ? "text-[#C89B58] font-bold"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <Users className="w-5 h-5" />
+              <span className="text-[10px] tracking-tight">Clientes</span>
+            </button>
+
+            {/* 5. Pausas / Bloqueios */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("blocks");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer ${
+                activeTab === "blocks"
+                  ? "text-[#C89B58] font-bold"
+                  : "text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              <Lock className="w-5 h-5" />
+              <span className="text-[10px] tracking-tight">Pausas</span>
+            </button>
+          </div>
+        </nav>
       </div>
 
       {/* ========================================================================= */}

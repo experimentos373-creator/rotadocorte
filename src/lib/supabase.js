@@ -17,11 +17,42 @@ export const isSupabaseConfigured = Boolean(
 );
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 2
+        },
+        timeout: 8000
+      }
+    })
   : null;
+
+// Safe promise wrapper with timeout to prevent hanging connections
+function withTimeout(promise, ms = 7500) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("NETWORK_TIMEOUT"));
+    }, ms);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 // LocalStorage Persistence Key for Local/Offline/Demo mode
 const STORAGE_KEY_APPOINTMENTS = "rotadocorte_appointments_v1";
+const CACHE_ALL_APPOINTMENTS_KEY = "rotadocorte_admin_cache_all_v1";
 
 export function getLocalAppointments() {
   try {
@@ -51,17 +82,19 @@ export async function verifyAdminPin(pin, shopSlug = "rotadocorte") {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.rpc("admin_verify_pin", {
-        p_admin_pin: pin.trim(),
-        p_shop_slug: shopSlug
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("admin_verify_pin", {
+          p_admin_pin: pin.trim(),
+          p_shop_slug: shopSlug
+        }),
+        7000
+      );
       if (!error && data?.authorized) {
         return { success: true };
       }
       return { success: false, message: data?.message || "PIN de administrador incorreto." };
     } catch (err) {
-      console.warn("Supabase PIN verification error:", err);
-      return { success: false, message: "Erro ao validar PIN no servidor." };
+      return { success: false, message: "Erro ao validar PIN no servidor (tempo esgotado ou ligação lenta)." };
     }
   }
 
@@ -80,11 +113,14 @@ export async function getAvailableSlots({
 }) {
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.rpc("get_available_slots", {
-        p_shop_slug: shopSlug,
-        p_date: date,
-        p_service_id: serviceId
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("get_available_slots", {
+          p_shop_slug: shopSlug,
+          p_date: date,
+          p_service_id: serviceId
+        }),
+        6000
+      );
 
       if (!error && Array.isArray(data)) {
         return {
@@ -101,8 +137,8 @@ export async function getAvailableSlots({
           }))
         };
       }
-    } catch (err) {
-      console.warn("Supabase RPC fallback to local engine:", err);
+    } catch (_) {
+      // Fallback cleanly to local calculation engine
     }
   }
 
@@ -142,15 +178,18 @@ export async function createBooking({
   if (isSupabaseConfigured && supabase) {
     try {
       const startTimeIso = new Date(`${date}T${time}:00`).toISOString();
-      const { data, error } = await supabase.rpc("book_appointment", {
-        p_shop_slug: shopSlug,
-        p_service_id: serviceId,
-        p_start_time: startTimeIso,
-        p_customer_name: customerName,
-        p_customer_phone: customerPhone,
-        p_customer_email: customerEmail || null,
-        p_notes: customerNotes || null
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("book_appointment", {
+          p_shop_slug: shopSlug,
+          p_service_id: serviceId,
+          p_start_time: startTimeIso,
+          p_customer_name: customerName,
+          p_customer_phone: customerPhone,
+          p_customer_email: customerEmail || null,
+          p_notes: customerNotes || null
+        }),
+        8000
+      );
 
       if (error) {
         return { success: false, error: error.message };
@@ -164,8 +203,8 @@ export async function createBooking({
         success: true,
         appointment: data.appointment
       };
-    } catch (err) {
-      console.warn("Supabase booking error, falling back to local storage:", err);
+    } catch (_) {
+      // Continue to local storage fallback
     }
   }
 
@@ -221,10 +260,6 @@ export async function createBooking({
 export async function updateAppointment(appointmentId, updatedFields, pin) {
   if (!pin) return { success: false, error: "PIN_REQUIRED" };
 
-  const service = updatedFields.service_id
-    ? servicesData.find((s) => s.id === updatedFields.service_id)
-    : null;
-
   if (isSupabaseConfigured && supabase) {
     try {
       let startTimeIso = null;
@@ -232,22 +267,25 @@ export async function updateAppointment(appointmentId, updatedFields, pin) {
         startTimeIso = new Date(`${updatedFields.date}T${updatedFields.time}:00`).toISOString();
       }
 
-      const { data, error } = await supabase.rpc("admin_update_appointment", {
-        p_admin_pin: pin,
-        p_appointment_id: appointmentId,
-        p_status: updatedFields.status || null,
-        p_start_time: startTimeIso,
-        p_customer_name: updatedFields.customer_name || null,
-        p_customer_phone: updatedFields.customer_phone || null,
-        p_notes: updatedFields.customer_notes || updatedFields.notes || null,
-        p_service_id: updatedFields.service_id || null
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("admin_update_appointment", {
+          p_admin_pin: pin,
+          p_appointment_id: appointmentId,
+          p_status: updatedFields.status || null,
+          p_start_time: startTimeIso,
+          p_customer_name: updatedFields.customer_name || null,
+          p_customer_phone: updatedFields.customer_phone || null,
+          p_notes: updatedFields.customer_notes || updatedFields.notes || null,
+          p_service_id: updatedFields.service_id || null
+        }),
+        8000
+      );
 
       if (!error && data?.success) {
         return { success: true };
       }
-    } catch (err) {
-      console.warn("Supabase update RPC error:", err);
+    } catch (_) {
+      // Handled
     }
   }
 
@@ -263,15 +301,18 @@ export async function deleteAppointment(appointmentId, pin) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.rpc("admin_delete_appointment", {
-        p_admin_pin: pin,
-        p_appointment_id: appointmentId
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("admin_delete_appointment", {
+          p_admin_pin: pin,
+          p_appointment_id: appointmentId
+        }),
+        8000
+      );
       if (!error && data?.success) {
         return { success: true };
       }
-    } catch (err) {
-      console.warn("Supabase delete RPC error:", err);
+    } catch (_) {
+      // Handled
     }
   }
 
@@ -281,19 +322,23 @@ export async function deleteAppointment(appointmentId, pin) {
 /**
  * 🔒 SECURE ADMIN RPC: Fetch all appointments across all dates (CRM & Stats)
  * Protected strictly by Admin PIN verification on PostgreSQL side.
+ * Features resilient timeout & localStorage fallback.
  */
 export async function getAllAppointments(pin, shopSlug = "rotadocorte") {
   if (!pin) return [];
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.rpc("admin_get_appointments", {
-        p_admin_pin: pin,
-        p_shop_slug: shopSlug
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("admin_get_appointments", {
+          p_admin_pin: pin,
+          p_shop_slug: shopSlug
+        }),
+        8000
+      );
 
       if (!error && data?.success && Array.isArray(data.appointments)) {
-        return data.appointments.map((d) => {
+        const formatted = data.appointments.map((d) => {
           let dateStr = "";
           let timeStr = "";
           if (d.start_time) {
@@ -324,9 +369,25 @@ export async function getAllAppointments(pin, shopSlug = "rotadocorte") {
             created_at: d.created_at
           };
         });
+
+        // Store latest snapshot in local cache
+        try {
+          localStorage.setItem(CACHE_ALL_APPOINTMENTS_KEY, JSON.stringify(formatted));
+        } catch (_) {}
+
+        return formatted;
       }
-    } catch (err) {
-      console.warn("Supabase fetch all RPC error:", err);
+    } catch (_) {
+      // Attempt to load from offline cache on timeout or network blip
+      try {
+        const cached = localStorage.getItem(CACHE_ALL_APPOINTMENTS_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch (_) {}
     }
   }
 
@@ -351,13 +412,16 @@ export function subscribeToAppointments(callback) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Status handled silently
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch (_) {}
     };
-  } catch (err) {
-    console.warn("Realtime subscription error:", err);
+  } catch (_) {
     return () => {};
   }
 }
@@ -387,21 +451,25 @@ export async function createBlockSlot({
       const startTimeIso = new Date(`${date}T${startTime}:00`).toISOString();
       const endTimeIso = new Date(`${date}T${endTime}:00`).toISOString();
 
-      const { data, error } = await supabase.rpc("admin_create_block", {
-        p_admin_pin: pin,
-        p_shop_slug: shopSlug,
-        p_start_time: startTimeIso,
-        p_end_time: endTimeIso,
-        p_reason: reason
-      });
+      const { data, error } = await withTimeout(
+        supabase.rpc("admin_create_block", {
+          p_admin_pin: pin,
+          p_shop_slug: shopSlug,
+          p_start_time: startTimeIso,
+          p_end_time: endTimeIso,
+          p_reason: reason
+        }),
+        8000
+      );
 
       if (!error && data?.success) {
         return { success: true, id: data.id };
       }
-    } catch (err) {
-      console.warn("Supabase block slot insert RPC error:", err);
+    } catch (_) {
+      // Handled
     }
   }
 
   return { success: false, error: "BLOCK_FAILED" };
 }
+
