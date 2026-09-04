@@ -46,7 +46,13 @@ import {
   EyeOff,
   LogOut,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Activity,
+  Timer,
+  Zap,
+  Target,
+  TrendingDown,
+  ArrowRight
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -102,6 +108,9 @@ export default function AdminAgenda() {
 
   // Stats Period Selector: 'today' | 'week' | 'month' | '30days' | 'all'
   const [statsPeriod, setStatsPeriod] = useState("month");
+  const [hoveredService, setHoveredService] = useState(null);
+  const [hoveredHourlySlot, setHoveredHourlySlot] = useState(null);
+  const [hoveredTimelineBar, setHoveredTimelineBar] = useState(null);
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -481,20 +490,158 @@ export default function AdminAgenda() {
       serviceMap[sName].revenue += price;
     });
 
-    const serviceRanking = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue);
-    const maxServiceRevenue = serviceRanking.reduce((max, s) => Math.max(max, s.revenue), 1);
+    const rawServiceRanking = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue);
+    const maxServiceRevenue = rawServiceRanking.reduce((max, s) => Math.max(max, s.revenue), 1);
 
-    // Peak Hours Breakdown
+    // Curated Luxury Palette (Strictly zero purple/violet colors)
+    const PALETTE = [
+      { stroke: "#C89B58", text: "#E5C268", bg: "bg-[#C89B58]/15 border-[#C89B58]/35 text-[#FAF8F5]", dot: "bg-[#C89B58]", shadow: "rgba(200, 155, 88, 0.3)" },
+      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/15 border-sky-500/35 text-sky-300", dot: "bg-sky-400", shadow: "rgba(56, 189, 248, 0.3)" },
+      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300", dot: "bg-emerald-400", shadow: "rgba(52, 211, 153, 0.3)" },
+      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/15 border-orange-500/35 text-orange-300", dot: "bg-orange-400", shadow: "rgba(251, 146, 60, 0.3)" },
+      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/15 border-lime-500/35 text-lime-300", dot: "bg-lime-400", shadow: "rgba(163, 230, 53, 0.3)" },
+      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/15 border-slate-500/35 text-slate-300", dot: "bg-slate-400", shadow: "rgba(148, 163, 184, 0.3)" }
+    ];
+
+    let accumulatedAngle = 0;
+    const perimeter = 2 * Math.PI * 65; // ~408.407 for r=65
+
+    const serviceRanking = rawServiceRanking.map((s, idx) => {
+      const colorScheme = PALETTE[idx % PALETTE.length];
+      const percent = estimatedRev > 0 ? (s.revenue / estimatedRev) * 100 : 0;
+      const countPercent = active.length > 0 ? (s.count / active.length) * 100 : 0;
+
+      const dashLength = Math.max((percent / 100) * perimeter, percent > 0 ? 3 : 0);
+      const dashOffset = -(accumulatedAngle / 100) * perimeter;
+      accumulatedAngle += percent;
+
+      // Find matched service duration in servicesData
+      const matched = servicesData.find(
+        (sd) => sd.name?.toLowerCase() === s.name?.toLowerCase() || sd.id === s.id
+      );
+      const durationMin = matched ? parseInt(matched.duration, 10) || 30 : 30;
+      const avgPrice = s.count > 0 ? s.revenue / s.count : 0;
+      const hourlyYield = durationMin > 0 ? (avgPrice / durationMin) * 60 : 0;
+      const totalHours = (s.count * durationMin) / 60;
+
+      return {
+        ...s,
+        percent: Math.round(percent),
+        exactPercent: percent,
+        countPercent: Math.round(countPercent),
+        color: colorScheme.stroke,
+        textColor: colorScheme.text,
+        bgClass: colorScheme.bg,
+        dotClass: colorScheme.dot,
+        shadowColor: colorScheme.shadow,
+        dashLength,
+        dashOffset,
+        durationMin,
+        avgPrice,
+        hourlyYield,
+        totalHours
+      };
+    });
+
+    // Peak Hours Breakdown (Hourly Matrix 10h to 21h)
     let morningCount = 0; // 10:00 - 13:00
     let afternoonCount = 0; // 14:00 - 17:00
     let eveningCount = 0; // 17:00 - 22:00
 
-    active.forEach((a) => {
-      const h = parseInt((a.time || "10:00").split(":")[0], 10);
-      if (h < 13) morningCount++;
-      else if (h < 17) afternoonCount++;
-      else eveningCount++;
+    const hourlySlots = [
+      "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+      "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"
+    ];
+
+    const hourlyDistribution = hourlySlots.map((slot) => {
+      const slotHour = parseInt(slot.split(":")[0], 10);
+      const apptsInHour = active.filter((a) => {
+        const h = parseInt((a.time || "10:00").split(":")[0], 10);
+        return h === slotHour;
+      });
+
+      const count = apptsInHour.length;
+      const rev = apptsInHour.reduce((acc, a) => acc + parsePrice(a.service_price), 0);
+      const periodTag = slotHour < 13 ? "Manhã" : slotHour < 17 ? "Tarde" : "Noite";
+
+      if (slotHour < 13) morningCount += count;
+      else if (slotHour < 17) afternoonCount += count;
+      else eveningCount += count;
+
+      return {
+        slot,
+        hour: slotHour,
+        label: `${slotHour}h`,
+        count,
+        revenue: rev,
+        periodTag,
+        isPrime: slotHour >= 17 && slotHour <= 21
+      };
     });
+
+    const maxHourlyCount = Math.max(...hourlyDistribution.map((h) => h.count), 1);
+    const peakSlot = hourlyDistribution.reduce((max, curr) => (curr.count > max.count ? curr : max), hourlyDistribution[0]);
+
+    // Timeline / Daily Trend Data
+    const dateMap = {};
+    if (statsPeriod === "week") {
+      const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      for (let i = 0; i < 7; i++) {
+        const cur = new Date(monday);
+        cur.setDate(cur.getDate() + i);
+        const dStr = cur.toISOString().split("T")[0];
+        dateMap[dStr] = {
+          date: dStr,
+          label: dayNames[cur.getDay()],
+          fullLabel: cur.toLocaleDateString("pt-PT", { weekday: "short", day: "numeric", month: "numeric" }),
+          count: 0,
+          completedCount: 0,
+          revenue: 0
+        };
+      }
+    }
+
+    active.forEach((a) => {
+      const dStr = a.date;
+      if (!dStr) return;
+      if (!dateMap[dStr]) {
+        const dObj = new Date(dStr);
+        const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+        dateMap[dStr] = {
+          date: dStr,
+          label: dayNames[dObj.getDay()] || dStr.slice(5),
+          fullLabel: dObj.toLocaleDateString("pt-PT", { day: "numeric", month: "short" }),
+          count: 0,
+          completedCount: 0,
+          revenue: 0
+        };
+      }
+      dateMap[dStr].count += 1;
+      if (a.status === "completed") {
+        dateMap[dStr].completedCount += 1;
+      }
+      dateMap[dStr].revenue += parsePrice(a.service_price);
+    });
+
+    const timelineData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+    const maxTimelineRevenue = Math.max(...timelineData.map((d) => d.revenue), 1);
+    const maxTimelineCount = Math.max(...timelineData.map((d) => d.count), 1);
+
+    // Yield Ranking (€/hour of chair time)
+    const yieldRanking = [...serviceRanking].sort((a, b) => b.hourlyYield - a.hourlyYield);
+    const maxHourlyYield = Math.max(...yieldRanking.map((y) => y.hourlyYield), 1);
+
+    // Status Funnel
+    const totalAll = nonBlocked.length || 1;
+    const funnelData = {
+      total: nonBlocked.length,
+      confirmed: confirmed.length,
+      completed: completed.length,
+      cancelled: cancelled.length,
+      completedPct: Math.round((completed.length / totalAll) * 100),
+      confirmedPct: Math.round((confirmed.length / totalAll) * 100),
+      cancelledPct: Math.round((cancelled.length / totalAll) * 100),
+    };
 
     return {
       total: nonBlocked.length,
@@ -508,6 +655,16 @@ export default function AdminAgenda() {
       completionRate,
       serviceRanking,
       maxServiceRevenue,
+      hourlyDistribution,
+      maxHourlyCount,
+      peakSlot,
+      timelineData,
+      maxTimelineRevenue,
+      maxTimelineCount,
+      yieldRanking,
+      maxHourlyYield,
+      funnelData,
+      perimeter,
       peakHours: {
         morning: morningCount,
         afternoon: afternoonCount,
@@ -1459,151 +1616,484 @@ export default function AdminAgenda() {
               </div>
             </div>
 
-            {/* In-Depth Analytics Section (Service Ranking & Peak Hours) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              {/* Service Mix & Revenue Ranking (2 Cols) */}
-              <div className="lg:col-span-2 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl">
-                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            {/* Visual Charts Grid 1: Donut Mix & Chair Yield Matrix */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* 1. Interactive SVG Donut Chart: Mix de Serviços & Faturação (7 Cols) */}
+              <div className="lg:col-span-7 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-4">
                   <div>
                     <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                      <PieChart className="w-4 h-4 text-[#C89B58]" />
-                      <span>Ranking de Serviços & Receita Gerada</span>
+                      <PieChart className="w-5 h-5 text-[#C89B58]" />
+                      <span>Mix de Serviços & Faturação</span>
                     </h3>
                     <p className="text-xs text-[#9E9EA7]">
-                      Distribuição de faturação por cada corte e tratamento no período.
+                      Distribuição visual da faturação e volume por tratamento.
                     </p>
                   </div>
-                  <span className="text-xs font-mono font-bold text-[#E5C268]">
-                    Total: {statsData.estimatedRevenue.toFixed(2)} €
-                  </span>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono font-bold text-[#E5C268]">
+                    <span>Faturação:</span>
+                    <span className="text-white">{statsData.estimatedRevenue.toFixed(2)} €</span>
+                  </div>
                 </div>
 
                 {statsData.serviceRanking.length === 0 ? (
-                  <div className="py-10 text-center text-xs text-[#9E9EA7]">
-                    Sem dados suficientes no período selecionado.
+                  <div className="py-16 text-center text-xs text-[#9E9EA7] flex flex-col items-center justify-center gap-2">
+                    <PieChart className="w-8 h-8 text-white/20" />
+                    <span>Sem dados no período selecionado.</span>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {statsData.serviceRanking.map((s, idx) => {
-                      const percent = statsData.estimatedRevenue > 0
-                        ? Math.round((s.revenue / statsData.estimatedRevenue) * 100)
-                        : 0;
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
+                    {/* Donut Ring Visual (5 Cols on SM) */}
+                    <div className="sm:col-span-5 flex flex-col items-center justify-center relative py-2">
+                      <div className="relative w-44 h-44 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
+                          {/* Background Track Ring */}
+                          <circle
+                            cx="80"
+                            cy="80"
+                            r="60"
+                            className="stroke-white/5"
+                            strokeWidth="16"
+                            fill="transparent"
+                          />
 
-                      return (
-                        <div key={s.name} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-full bg-white/5 text-[10px] font-mono font-bold flex items-center justify-center text-[#E5C268]">
-                                {idx + 1}
-                              </span>
-                              <span className="font-bold text-white">{s.name}</span>
-                              <span className="text-[11px] text-[#9E9EA7]">({s.count} marcações)</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono font-bold text-sky-300">
-                                {s.revenue.toFixed(2)} €
-                              </span>
-                              <span className="font-mono font-bold text-[#C89B58] text-[11px] w-9 text-right">
-                                {percent}%
-                              </span>
-                            </div>
-                          </div>
+                          {/* Colored Segments */}
+                          {statsData.serviceRanking.map((s) => {
+                            const isHovered = hoveredService === s.name;
+                            const r = 60;
+                            const circ = 2 * Math.PI * r;
+                            const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
+                            const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
 
-                          {/* Visual Progress Bar */}
-                          <div className="w-full h-2.5 rounded-full bg-black/40 border border-white/5 overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-[#C89B58] to-[#E5C268] rounded-full transition-all duration-500"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
+                            return (
+                              <circle
+                                key={s.name}
+                                cx="80"
+                                cy="80"
+                                r="60"
+                                fill="transparent"
+                                stroke={s.color}
+                                strokeWidth={isHovered ? "20" : "16"}
+                                strokeDasharray={`${dashL} ${circ}`}
+                                strokeDashoffset={dashOff}
+                                strokeLinecap="round"
+                                className="transition-all duration-300 cursor-pointer"
+                                style={{
+                                  filter: isHovered ? `drop-shadow(0 0 8px ${s.color})` : "none"
+                                }}
+                                onMouseEnter={() => setHoveredService(s.name)}
+                                onMouseLeave={() => setHoveredService(null)}
+                              />
+                            );
+                          })}
+                        </svg>
+
+                        {/* Center Hub Metrics */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-2">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#9E9EA7]">
+                            Total Estimado
+                          </span>
+                          <span className="text-xl font-mono font-black text-white">
+                            {statsData.estimatedRevenue.toFixed(2)} €
+                          </span>
+                          <span className="text-[10px] text-[#C89B58] font-bold">
+                            {statsData.total} {statsData.total === 1 ? "marcação" : "marcações"}
+                          </span>
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
+
+                    {/* Interactive Color Legend Cards (7 Cols on SM) */}
+                    <div className="sm:col-span-7 space-y-2.5">
+                      {statsData.serviceRanking.map((s, idx) => {
+                        const isHovered = hoveredService === s.name;
+
+                        return (
+                          <div
+                            key={s.name}
+                            onMouseEnter={() => setHoveredService(s.name)}
+                            onMouseLeave={() => setHoveredService(null)}
+                            className={`p-3 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                              isHovered
+                                ? "bg-white/10 border-[#C89B58]/60 shadow-lg scale-[1.02]"
+                                : "bg-black/30 border-white/5 hover:border-white/20"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                                  style={{ backgroundColor: s.color }}
+                                />
+                                <span className="font-bold text-xs text-white truncate">
+                                  {s.name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono font-bold text-xs text-sky-300">
+                                  {s.revenue.toFixed(2)} €
+                                </span>
+                                <span
+                                  className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full"
+                                  style={{
+                                    backgroundColor: `${s.color}25`,
+                                    color: s.color,
+                                    border: `1px solid ${s.color}50`
+                                  }}
+                                >
+                                  {s.percent}%
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Subtext and Progress line */}
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center justify-between text-[11px] text-[#9E9EA7]">
+                                <span>{s.count} {s.count === 1 ? "cliente" : "clientes"} • {s.durationMin} min</span>
+                                <span>Média: {s.avgPrice.toFixed(2)} €</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${s.percent}%`,
+                                    backgroundColor: s.color
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Peak Hours & Shift Distribution (1 Col) */}
-              <div className="p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl">
-                <div className="border-b border-white/5 pb-3">
-                  <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-amber-400" />
-                    <span>Horários de Maior Procura</span>
-                  </h3>
-                  <p className="text-xs text-[#9E9EA7]">
-                    Distribuição da procura por faixa horária.
-                  </p>
+              {/* 2. Rentabilidade por Hora de Cadeira (€/h) (5 Cols) */}
+              <div className="lg:col-span-5 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div>
+                      <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                        <Zap className="w-5 h-5 text-[#C89B58]" />
+                        <span>Rentabilidade por Hora</span>
+                      </h3>
+                      <p className="text-xs text-[#9E9EA7]">
+                        Rendimento em € gerado por cada 60 minutos de cadeira.
+                      </p>
+                    </div>
+                  </div>
+
+                  {statsData.yieldRanking.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-[#9E9EA7]">
+                      Sem dados de rentabilidade suficientes.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 mt-4">
+                      {statsData.yieldRanking.map((s, idx) => {
+                        const isTop = idx === 0;
+                        const yieldPercent = (s.hourlyYield / statsData.maxHourlyYield) * 100;
+
+                        return (
+                          <div
+                            key={s.name}
+                            className={`p-3 rounded-2xl border transition-all ${
+                              isTop
+                                ? "bg-gradient-to-r from-[#111319] to-[#C89B58]/10 border-[#C89B58]/40 shadow-md"
+                                : "bg-black/30 border-white/5"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {isTop ? (
+                                  <span className="w-5 h-5 rounded-full bg-[#C89B58]/20 text-[#E5C268] flex items-center justify-center shrink-0">
+                                    <Award className="w-3.5 h-3.5" />
+                                  </span>
+                                ) : (
+                                  <span className="w-5 h-5 rounded-full bg-white/5 text-[#9E9EA7] font-mono text-[10px] flex items-center justify-center shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                )}
+                                <span className="font-bold text-white truncate">{s.name}</span>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-mono font-black text-sm text-[#E5C268]">
+                                  {s.hourlyYield.toFixed(2)} €
+                                </span>
+                                <span className="text-[10px] text-[#9E9EA7] block">/ hora</span>
+                              </div>
+                            </div>
+
+                            {/* Yield Bar */}
+                            <div className="mt-2.5 space-y-1">
+                              <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    isTop
+                                      ? "bg-gradient-to-r from-[#C89B58] to-[#E5C268]"
+                                      : "bg-white/30"
+                                  }`}
+                                  style={{ width: `${yieldPercent}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-[#9E9EA7]">
+                                <span>{s.durationMin} min por corte</span>
+                                <span>Faturado: {s.revenue.toFixed(2)} €</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-4">
-                  {/* Morning Shift */}
-                  <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#9E9EA7] font-medium flex items-center gap-2">
+                <div className="p-3.5 rounded-2xl bg-[#C89B58]/10 border border-[#C89B58]/25 text-[11px] text-[#E5C268] leading-relaxed flex items-start gap-2.5 mt-2">
+                  <Lightbulb className="w-4 h-4 text-[#C89B58] shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-white">Dica Estratégica:</strong> Priorize promover serviços com maior rendimento horário nos horários nobres (17h - 21h) para maximizar o ganho por hora.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Charts Grid 2: Evolução Temporal & Matriz de Horários */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* 3. Evolução de Faturação & Volume no Período (7 Cols) */}
+              <div className="lg:col-span-7 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-6 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+                  <div>
+                    <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-[#C89B58]" />
+                      <span>Evolução Cronológica</span>
+                    </h3>
+                    <p className="text-xs text-[#9E9EA7]">
+                      Volume e faturação distribuídos ao longo dos dias do período.
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-sky-300">
+                    Média / Atendimento: {statsData.avgTicket.toFixed(2)} €
+                  </span>
+                </div>
+
+                {statsData.timelineData.length === 0 ? (
+                  <div className="py-14 text-center text-xs text-[#9E9EA7]">
+                    Sem dados suficientes para construir a evolução temporal.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Visual Vertical Bars Container */}
+                    <div className="h-44 pt-6 flex items-end justify-between gap-2 sm:gap-3 border-b border-white/10 pb-2">
+                      {statsData.timelineData.map((day) => {
+                        const heightPct = statsData.maxTimelineRevenue > 0
+                          ? Math.max((day.revenue / statsData.maxTimelineRevenue) * 100, day.revenue > 0 ? 12 : 4)
+                          : 4;
+                        const isHovered = hoveredTimelineBar === day.date;
+
+                        return (
+                          <div
+                            key={day.date}
+                            className="flex-1 flex flex-col items-center gap-2 group relative h-full justify-end"
+                            onMouseEnter={() => setHoveredTimelineBar(day.date)}
+                            onMouseLeave={() => setHoveredTimelineBar(null)}
+                          >
+                            {/* Hover Tooltip */}
+                            <div
+                              className={`absolute -top-12 left-1/2 -translate-x-1/2 px-2.5 py-1.5 rounded-xl bg-black/95 border border-[#C89B58]/60 text-center pointer-events-none transition-all duration-200 z-20 shadow-2xl whitespace-nowrap ${
+                                isHovered ? "opacity-100 scale-100" : "opacity-0 scale-90"
+                              }`}
+                            >
+                              <p className="text-[10px] font-bold text-[#E5C268]">{day.fullLabel || day.date}</p>
+                              <p className="text-xs font-mono font-bold text-white">
+                                {day.revenue.toFixed(2)} € • {day.count} {day.count === 1 ? "corte" : "cortes"}
+                              </p>
+                            </div>
+
+                            {/* Bar Visual */}
+                            <div className="w-full max-w-[40px] rounded-t-xl bg-white/5 relative flex items-end justify-center overflow-hidden h-full">
+                              <div
+                                className={`w-full rounded-t-xl transition-all duration-500 ${
+                                  isHovered
+                                    ? "bg-gradient-to-t from-[#C89B58] to-[#FAF8F5] shadow-lg shadow-[#C89B58]/30"
+                                    : day.revenue > 0
+                                      ? "bg-gradient-to-t from-[#C89B58]/80 to-[#E5C268]"
+                                      : "bg-white/10"
+                                }`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+
+                            {/* X-axis Label */}
+                            <span className="text-[10px] font-mono font-bold text-[#9E9EA7] group-hover:text-white transition-colors">
+                              {day.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-[#9E9EA7] pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded bg-gradient-to-t from-[#C89B58] to-[#E5C268]" />
+                        <span>Faturação Diária Gerada</span>
+                      </div>
+                      <span className="font-mono font-bold text-white">
+                        Pico Máximo: {statsData.maxTimelineRevenue.toFixed(2)} €
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Matriz de Fluxo Horário (10h às 21h) (5 Cols) */}
+              <div className="lg:col-span-5 p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-5 shadow-xl">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                  <div>
+                    <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-amber-400" />
+                      <span>Matriz de Fluxo Horário</span>
+                    </h3>
+                    <p className="text-xs text-[#9E9EA7]">
+                      Distribuição de clientes das 10:00 às 21:00.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 12-Hour Micro Bar Matrix */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {statsData.hourlyDistribution.map((h) => {
+                      const isPeak = h.count === statsData.maxHourlyCount && h.count > 0;
+                      const isHovered = hoveredHourlySlot === h.slot;
+
+                      return (
+                        <div
+                          key={h.slot}
+                          onMouseEnter={() => setHoveredHourlySlot(h.slot)}
+                          onMouseLeave={() => setHoveredHourlySlot(null)}
+                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            isPeak
+                              ? "bg-amber-500/20 border-amber-500/50 shadow-md scale-105"
+                              : h.isPrime
+                                ? "bg-orange-500/10 border-orange-500/25 hover:border-orange-500/50"
+                                : "bg-black/30 border-white/5 hover:border-white/20"
+                          } ${isHovered ? "ring-1 ring-[#C89B58]" : ""}`}
+                        >
+                          <span className="text-[10px] font-mono font-bold text-[#9E9EA7] block">
+                            {h.label}
+                          </span>
+                          <span
+                            className={`text-sm font-mono font-black block mt-0.5 ${
+                              isPeak
+                                ? "text-amber-300"
+                                : h.count > 0
+                                  ? "text-white"
+                                  : "text-white/20"
+                            }`}
+                          >
+                            {h.count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Shift Summary Badges */}
+                  <div className="space-y-2 pt-2">
+                    {/* Morning */}
+                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-black/30 border border-white/5">
+                      <span className="text-[#9E9EA7] flex items-center gap-2">
                         <Sunrise className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Manhã (10:00 - 13:00)</span>
+                        <span>Manhã (10h - 13h)</span>
                       </span>
                       <span className="font-mono font-bold text-white">
                         {statsData.peakHours.morning} marcações
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                      <div
-                        className="h-full bg-amber-400/80 rounded-full"
-                        style={{
-                          width: `${Math.round((statsData.peakHours.morning / statsData.peakHours.total) * 100)}%`
-                        }}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Early Afternoon Shift */}
-                  <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#9E9EA7] font-medium flex items-center gap-2">
+                    {/* Afternoon */}
+                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-black/30 border border-white/5">
+                      <span className="text-[#9E9EA7] flex items-center gap-2">
                         <Sun className="w-4 h-4 text-[#C89B58] shrink-0" />
-                        <span>Início da Tarde (14:00 - 17:00)</span>
+                        <span>Tarde (14h - 17h)</span>
                       </span>
                       <span className="font-mono font-bold text-white">
                         {statsData.peakHours.afternoon} marcações
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                      <div
-                        className="h-full bg-[#C89B58] rounded-full"
-                        style={{
-                          width: `${Math.round((statsData.peakHours.afternoon / statsData.peakHours.total) * 100)}%`
-                        }}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Evening Shift */}
-                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                    {/* Evening Prime */}
+                    <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
                       <span className="text-amber-300 font-bold flex items-center gap-2">
                         <Moon className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Fim da Tarde / Noite (17:00 - 22:00)</span>
+                        <span>Horário Nobre (17h - 22h)</span>
                       </span>
                       <span className="font-mono font-bold text-amber-300">
                         {statsData.peakHours.evening} marcações
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-black/40 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"
-                        style={{
-                          width: `${Math.round((statsData.peakHours.evening / statsData.peakHours.total) * 100)}%`
-                        }}
-                      />
-                    </div>
                   </div>
+                </div>
+              </div>
+            </div>
 
-                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-[11px] text-[#9E9EA7] leading-relaxed flex items-start gap-2.5">
-                    <Lightbulb className="w-4 h-4 text-[#C89B58] shrink-0 mt-0.5" />
-                    <span>
-                      <strong className="text-white">Dica de Gestão:</strong> O período das 17h às 21h concentra a maior procura. Programe as pausas preferencialmente no intervalo das 13h às 14h.
-                    </span>
+            {/* Visual Funnel Card: Eficiência Operacional & Conversão */}
+            <div className="p-6 rounded-3xl bg-[#111319] border border-white/10 space-y-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-emerald-400" />
+                    <span>Funil de Eficiência Operacional & Conversão</span>
+                  </h3>
+                  <p className="text-xs text-[#9E9EA7]">
+                    Acompanhamento do status de atendimento e retenção de agenda.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="text-emerald-400 font-bold">{statsData.completedCount} Concluídos</span>
+                  <span className="text-white/20">•</span>
+                  <span className="text-sky-300 font-bold">{statsData.confirmedCount} Confirmados</span>
+                  <span className="text-white/20">•</span>
+                  <span className="text-rose-400 font-bold">{statsData.cancelledCount} Cancelados</span>
+                </div>
+              </div>
+
+              {/* Segmented Funnel Progress Bar */}
+              <div className="space-y-2">
+                <div className="w-full h-3 rounded-full bg-black/40 border border-white/5 overflow-hidden flex">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-500"
+                    style={{ width: `${statsData.funnelData.completedPct}%` }}
+                    title={`Concluídos: ${statsData.funnelData.completedPct}%`}
+                  />
+                  <div
+                    className="h-full bg-sky-500 transition-all duration-500"
+                    style={{ width: `${statsData.funnelData.confirmedPct}%` }}
+                    title={`Confirmados: ${statsData.funnelData.confirmedPct}%`}
+                  />
+                  <div
+                    className="h-full bg-rose-500 transition-all duration-500"
+                    style={{ width: `${statsData.funnelData.cancelledPct}%` }}
+                    title={`Cancelados: ${statsData.funnelData.cancelledPct}%`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Taxa de Conclusão</span>
+                    <span className="text-lg font-mono font-bold text-emerald-300">{statsData.completionRate}%</span>
+                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Atendimentos finalizados com sucesso</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 block">Em Carteira / Confirmados</span>
+                    <span className="text-lg font-mono font-bold text-sky-300">{statsData.confirmedCount}</span>
+                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Marcações ativas no sistema</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#9E9EA7] block">Cancelamentos</span>
+                    <span className="text-lg font-mono font-bold text-rose-400">{statsData.cancelledCount}</span>
+                    <p className="text-[11px] text-[#9E9EA7] mt-0.5">Cancelados ou reagendados</p>
                   </div>
                 </div>
               </div>
