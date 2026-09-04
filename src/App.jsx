@@ -35,6 +35,9 @@ function ScrollToTop() {
 
 function MainLayout() {
   const { theme } = useTheme();
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith("/admin") || location.pathname.startsWith("/agenda");
+
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
   const [activeLegalModal, setActiveLegalModal] = useState(null);
@@ -55,14 +58,16 @@ function MainLayout() {
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${
-      theme === "dark"
-        ? "bg-[#07080A] text-[#FAF8F5] selection:bg-[#C89B58] selection:text-black"
-        : "bg-[#F6F4EE] text-[#1C1A17] selection:bg-[#C89B58] selection:text-white"
+      isAdmin
+        ? "bg-[#0A0B0E] text-[#FAF8F5]"
+        : theme === "dark"
+          ? "bg-[#07080A] text-[#FAF8F5] selection:bg-[#C89B58] selection:text-black"
+          : "bg-[#F6F4EE] text-[#1C1A17] selection:bg-[#C89B58] selection:text-white"
     }`}>
       <ScrollToTop />
 
-      {/* Global Clean Navigation Header with generous spacing */}
-      <Navbar onOpenBooking={handleOpenBooking} />
+      {/* Global Navigation Header (Hidden in Admin Dashboard) */}
+      {!isAdmin && <Navbar onOpenBooking={handleOpenBooking} />}
 
       {/* Page Routing */}
       <div className="flex-grow">
@@ -96,16 +101,18 @@ function MainLayout() {
         </Routes>
       </div>
 
-      {/* Footer */}
-      <Footer
-        onOpenBooking={handleOpenBooking}
-        onOpenPrivacy={() => setActiveLegalModal("privacy")}
-        onOpenTerms={() => setActiveLegalModal("terms")}
-      />
+      {/* Footer (Hidden in Admin Dashboard) */}
+      {!isAdmin && (
+        <Footer
+          onOpenBooking={handleOpenBooking}
+          onOpenPrivacy={() => setActiveLegalModal("privacy")}
+          onOpenTerms={() => setActiveLegalModal("terms")}
+        />
+      )}
 
-      {/* Floating Widgets */}
-      <WhatsAppButton />
-      <FloatingCTA onOpenBooking={handleOpenBooking} />
+      {/* Floating Widgets (Hidden in Admin Dashboard) */}
+      {!isAdmin && <WhatsAppButton />}
+      {!isAdmin && <FloatingCTA onOpenBooking={handleOpenBooking} />}
 
       {/* Modals & Consent */}
       <BookingModal

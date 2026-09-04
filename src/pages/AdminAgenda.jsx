@@ -762,32 +762,25 @@ export default function AdminAgenda() {
   // 🔒 Lock Screen View when not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#07080A] text-[#FAF8F5] flex flex-col items-center justify-center p-4 selection:bg-[#C89B58] selection:text-black font-sans relative overflow-hidden">
-        {/* Ambient Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#C89B58]/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="w-full max-w-md bg-[#121318] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10 space-y-6">
+      <div className="min-h-screen bg-[#090A0E] text-[#FAF8F5] flex flex-col items-center justify-center p-4 selection:bg-[#C89B58] selection:text-black font-sans">
+        <div className="w-full max-w-sm bg-[#111319] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-[#C89B58]/10 border border-[#C89B58]/30 flex items-center justify-center mx-auto mb-3 shadow-[0_0_20px_rgba(200,155,88,0.15)]">
-              <KeyRound className="w-8 h-8 text-[#E5C268]" />
+            <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3 text-[#C89B58]">
+              <Lock className="w-5 h-5" />
             </div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#E5C268] text-[11px] font-mono uppercase tracking-wider font-bold">
-              <ShieldCheck className="w-3 h-3" />
-              <span>Painel Administrativo</span>
-            </div>
-            <h1 className="font-serif text-2xl sm:text-3xl font-bold text-white pt-1">
-              Acesso do Barbeiro
+            <h1 className="text-xl font-bold text-white tracking-tight">
+              Acesso à Gestão
             </h1>
-            <p className="text-xs text-[#9E9EA7] leading-relaxed">
-              Introduza a senha ou PIN de segurança para aceder à agenda, faturação e dados de clientes.
+            <p className="text-xs text-[#8E929E] leading-relaxed">
+              Introduza o PIN de segurança para aceder à agenda e dados de clientes.
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-[#C5C3BC] uppercase tracking-wider">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-medium text-[#8E929E] uppercase tracking-wider">
                 Senha / Código PIN
               </label>
               <div className="relative">
@@ -800,12 +793,12 @@ export default function AdminAgenda() {
                   }}
                   placeholder="••••••••"
                   autoFocus
-                  className="w-full bg-[#0A0B0E] border border-white/15 focus:border-[#C89B58] rounded-xl px-4 py-3.5 text-center text-lg sm:text-xl tracking-widest text-white placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:ring-1 focus:ring-[#C89B58] transition-all"
+                  className="w-full bg-black/40 border border-white/10 focus:border-[#C89B58] rounded-xl px-4 py-3 text-center text-lg tracking-widest text-white placeholder:text-white/20 focus:outline-none transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9E9EA7] hover:text-white transition-colors cursor-pointer p-1"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8E929E] hover:text-white transition-colors cursor-pointer p-1"
                   title={showPin ? "Ocultar senha" : "Ver senha"}
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -814,7 +807,7 @@ export default function AdminAgenda() {
             </div>
 
             {pinError && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 flex items-center gap-2 text-xs text-red-400 animate-shake">
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-400">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{pinError}</span>
               </div>
@@ -823,7 +816,7 @@ export default function AdminAgenda() {
             <button
               type="submit"
               disabled={isVerifyingPin}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#C89B58] to-[#E5C268] text-black font-bold text-sm tracking-wide hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer shadow-lg shadow-[#C89B58]/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-[#C89B58] hover:bg-[#D4A966] text-black font-bold text-sm tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isVerifyingPin ? (
                 <>
@@ -831,10 +824,7 @@ export default function AdminAgenda() {
                   <span>A verificar...</span>
                 </>
               ) : (
-                <>
-                  <Lock className="w-4 h-4" />
-                  <span>Entrar no Painel</span>
-                </>
+                <span>Entrar no Painel</span>
               )}
             </button>
           </form>
@@ -843,10 +833,10 @@ export default function AdminAgenda() {
           <div className="pt-2 text-center border-t border-white/5">
             <Link
               to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-[#9E9EA7] hover:text-[#E5C268] transition-colors group"
+              className="inline-flex items-center gap-1.5 text-xs text-[#8E929E] hover:text-white transition-colors"
             >
-              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Voltar ao Website Principal</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar ao website</span>
             </Link>
           </div>
         </div>
@@ -855,35 +845,30 @@ export default function AdminAgenda() {
   }
 
   return (
-    <div className="min-h-screen bg-[#090A0D] text-[#FAF8F5] p-4 sm:p-8 selection:bg-[#C89B58] selection:text-black pt-24 font-sans">
+    <div className="min-h-screen bg-[#090A0E] text-[#FAF8F5] p-4 sm:p-8 selection:bg-[#C89B58] selection:text-black font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
 
-        {/* Studio System Header */}
+        {/* Clean Dashboard Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div className="space-y-1">
             <Link
               to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-[#9E9EA7] hover:text-[#E5C268] transition-colors mb-1 group"
+              className="inline-flex items-center gap-1.5 text-xs text-[#8E929E] hover:text-[#C89B58] transition-colors mb-1"
             >
-              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Voltar ao Website Oficial</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar ao Website</span>
             </Link>
 
-            <div className="flex items-center gap-3">
-              <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Painel do Barbeiro
-              </h1>
-              <span className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full font-bold bg-[#C89B58]/20 text-[#E5C268] border border-[#C89B58]/35">
-                Rota Do Corte OS
-              </span>
-            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              Painel de Marcações
+            </h1>
 
-            <div className="flex items-center gap-3 text-xs text-[#9E9EA7] pt-0.5">
+            <div className="flex items-center gap-2 text-xs text-[#8E929E] pt-0.5">
               <span>Gabriel Silva • Paião</span>
               <span>•</span>
               <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                {isSupabaseConfigured ? "Supabase Live Sync" : "Armazenamento Seguro Ativo"}
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Base de Dados Sincronizada</span>
               </span>
             </div>
           </div>
@@ -892,7 +877,7 @@ export default function AdminAgenda() {
             <button
               type="button"
               onClick={loadAppointments}
-              className="p-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-[#9E9EA7] hover:text-white transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-[#8E929E] hover:text-white transition-colors cursor-pointer"
               title="Atualizar Dados"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -905,10 +890,10 @@ export default function AdminAgenda() {
                 setBlockDate(selectedDate);
                 setIsBlockModalOpen(true);
               }}
-              className="px-3.5 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-[#FAF8F5] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
               title="Bloquear Horário / Pausa"
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Lock className="w-3.5 h-3.5 text-[#C89B58]" />
               <span>Bloquear Horário</span>
             </button>
 
@@ -916,8 +901,8 @@ export default function AdminAgenda() {
             <button
               type="button"
               onClick={handleLogout}
-              className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Terminar Sessão de Administrador"
+              className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
+              title="Terminar Sessão"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sair</span>
@@ -927,7 +912,7 @@ export default function AdminAgenda() {
             <button
               type="button"
               onClick={() => setIsNewModalOpen(true)}
-              className="btn-pill-gold px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-[#C89B58]/15 hover:scale-[1.02] transition-transform"
+              className="px-4 py-2.5 rounded-xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold tracking-wide flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Marcar Cliente</span>
@@ -936,20 +921,20 @@ export default function AdminAgenda() {
         </div>
 
         {/* ========================================================================= */}
-        {/* MAIN NAVIGATION TABS                                                      */}
+        {/* MAIN NAVIGATION TABS (CLEAN SEGMENTED CONTROL)                             */}
         {/* ========================================================================= */}
-        <div className="flex items-center gap-2 p-1.5 bg-[#111319] border border-white/10 rounded-2xl overflow-x-auto shadow-md">
+        <div className="flex items-center gap-1.5 p-1.5 bg-[#111319] border border-white/10 rounded-2xl overflow-x-auto shadow-sm">
           <button
             type="button"
             onClick={() => setActiveTab("agenda")}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === "agenda"
-                ? "bg-[#C89B58] text-black shadow-lg shadow-[#C89B58]/25 font-black scale-[1.01]"
-                : "text-[#9E9EA7] hover:text-white hover:bg-white/5"
+                ? "bg-[#C89B58] text-black font-bold shadow-sm"
+                : "text-[#8E929E] hover:text-white hover:bg-white/5"
             }`}
           >
-            <CalendarDays className="w-4 h-4" />
-            <span>Agenda & Slots Diários</span>
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>Agenda & Marcações</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
               activeTab === "agenda" ? "bg-black/20 text-black" : "bg-white/10 text-white"
             }`}>
@@ -960,30 +945,27 @@ export default function AdminAgenda() {
           <button
             type="button"
             onClick={() => setActiveTab("stats")}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === "stats"
-                ? "bg-[#C89B58] text-black shadow-lg shadow-[#C89B58]/25 font-black scale-[1.01]"
-                : "text-[#9E9EA7] hover:text-white hover:bg-white/5"
+                ? "bg-[#C89B58] text-black font-bold shadow-sm"
+                : "text-[#8E929E] hover:text-white hover:bg-white/5"
             }`}
           >
-            <BarChart3 className="w-4 h-4" />
-            <span>Estatísticas & Rentabilidade</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-              Multi-Período
-            </span>
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Estatísticas & Faturação</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("crm")}
-            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === "crm"
-                ? "bg-[#C89B58] text-black shadow-lg shadow-[#C89B58]/25 font-black scale-[1.01]"
-                : "text-[#9E9EA7] hover:text-white hover:bg-white/5"
+                ? "bg-[#C89B58] text-black font-bold shadow-sm"
+                : "text-[#8E929E] hover:text-white hover:bg-white/5"
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span>Clientes (Mini-CRM)</span>
+            <Users className="w-3.5 h-3.5" />
+            <span>Base de Clientes</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
               activeTab === "crm" ? "bg-black/20 text-black" : "bg-white/10 text-white"
             }`}>
@@ -1220,44 +1202,44 @@ export default function AdminAgenda() {
               </div>
             </div>
 
-            {/* Studio Metrics Cards for Current Scope */}
+            {/* Clean Metrics Summary */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Total Marcações */}
-              <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">
-                  {agendaScope === "all" ? "Total de Pedidos" : "Total do Dia"}
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E929E]">
+                  {agendaScope === "all" ? "Total de Marcações" : "Marcações do Dia"}
                 </p>
                 <p className="text-2xl font-mono font-bold text-white">{currentScopeList.length}</p>
               </div>
 
               {/* Confirmadas */}
-              <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Confirmadas</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Confirmadas</p>
                 <p className="text-2xl font-mono font-bold text-emerald-400">
                   {scopeConfirmed.length}
                 </p>
               </div>
 
               {/* Concluídas */}
-              <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Concluídas</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">Concluídas</p>
                 <p className="text-2xl font-mono font-bold text-sky-400">
                   {scopeCompleted.length}
                 </p>
               </div>
 
               {/* Faturação Concluída */}
-              <div className="p-4 rounded-2xl bg-[#111319] border border-sky-500/30 bg-gradient-to-br from-[#111319] to-sky-500/10 space-y-1 shadow-lg shadow-sky-500/5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Faturação Realizada</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-300">Faturado Real</p>
                 <p className="text-2xl font-mono font-bold text-sky-300">
                   {scopeCompletedRevenue.toFixed(2)} €
                 </p>
               </div>
 
               {/* Faturação Prevista Total */}
-              <div className="p-4 rounded-2xl bg-[#111319] border border-[#C89B58]/40 bg-gradient-to-br from-[#111319] to-[#C89B58]/15 space-y-1 shadow-lg shadow-[#C89B58]/10 col-span-2 sm:col-span-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#E5C268]">Faturação Prevista</p>
-                <p className="text-2xl font-mono font-bold text-[#E5C268]">{scopeEstimatedRevenue.toFixed(2)} €</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1 col-span-2 sm:col-span-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C89B58]">Faturação Prevista</p>
+                <p className="text-2xl font-mono font-bold text-[#FAF8F5]">{scopeEstimatedRevenue.toFixed(2)} €</p>
               </div>
             </div>
 
@@ -2048,22 +2030,22 @@ export default function AdminAgenda() {
               </div>
             </div>
 
-            {/* Quick CRM Overview Cards */}
+            {/* Clean CRM Overview Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 rounded-2xl bg-[#111319] border border-white/10">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">Total Clientes Registados</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E929E]">Total de Clientes</p>
                 <p className="text-2xl font-mono font-bold text-white">{crmClients.length}</p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#111319] border border-[#C89B58]/35 bg-gradient-to-br from-[#111319] to-[#C89B58]/10">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#E5C268]">Clientes Recorrentes (VIP)</p>
-                <p className="text-2xl font-mono font-bold text-[#E5C268]">
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C89B58]">Clientes Recorrentes (VIP)</p>
+                <p className="text-2xl font-mono font-bold text-[#FAF8F5]">
                   {crmClients.filter((c) => c.isVip).length}
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#111319] border border-sky-500/30 bg-gradient-to-br from-[#111319] to-sky-500/10">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Total Histórico Acumulado</p>
+              <div className="p-4 rounded-xl bg-[#111319] border border-white/10 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">Total Histórico Acumulado</p>
                 <p className="text-2xl font-mono font-bold text-sky-300">
                   {crmClients.reduce((acc, c) => acc + c.totalSpent, 0).toFixed(2)} €
                 </p>

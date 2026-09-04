@@ -37,10 +37,9 @@ export default function WhatsAppButton() {
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Contactar Barbearia Rota Do Corte no WhatsApp"
-        className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all relative group"
+        className="w-13 h-13 rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all relative group"
       >
-        <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-30"></span>
-        <WhatsAppIcon className="w-7 h-7 relative z-10 fill-white" />
+        <WhatsAppIcon className="w-6 h-6 relative z-10 fill-white" />
       </a>
     </div>
   );
