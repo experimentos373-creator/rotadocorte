@@ -367,9 +367,13 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-hidden animate-fadeIn"
       onClick={onClose}
     >
-      {/* 90% Screen Width AND 90% Screen Height Modal Container */}
+      {/* Dynamic Modal Container: Step 1 is 95% wide for spacious grid, Steps 2-5 are ~75% wide and highly responsive */}
       <div
-        className={`relative w-[90vw] h-[90vh] max-w-6xl flex flex-col rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 md:p-7 shadow-2xl justify-between border transition-all overflow-hidden ${
+        className={`relative ${
+          step === 1
+            ? "w-[95vw] h-[90vh] max-w-6xl"
+            : "w-[94vw] sm:w-[85vw] md:w-[75vw] max-w-3xl lg:max-w-4xl max-h-[90vh]"
+        } flex flex-col rounded-[24px] sm:rounded-[32px] p-4 sm:p-6 md:p-7 shadow-2xl justify-between border transition-all duration-300 overflow-hidden ${
           isDark
             ? "bg-[#0B0D13] border-white/10 text-[#FAF8F5] shadow-black/95"
             : "bg-white border-[#E8E4DC] text-[#18181B] shadow-2xl shadow-black/15"
