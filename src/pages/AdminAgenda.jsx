@@ -107,8 +107,8 @@ export default function AdminAgenda() {
   // Sidebar Open on Mobile
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Navigation Tabs: 'dashboard' | 'agenda' | 'stats' | 'crm' | 'blocks'
-  const [activeTab, setActiveTab] = useState("dashboard");
+  // Navigation Tabs: 'agenda' | 'stats' | 'crm' | 'blocks'
+  const [activeTab, setActiveTab] = useState("agenda");
 
   // Selected Date for Agenda View
   const [selectedDate, setSelectedDate] = useState(
@@ -135,7 +135,7 @@ export default function AdminAgenda() {
   // Stats Period Selector: 'today' | 'week' | 'month' | '30days' | 'all'
   const [statsPeriod, setStatsPeriod] = useState("month");
   const [hoveredService, setHoveredService] = useState(null);
-  const [hoveredTimelineBar, setHoveredTimelineBar] = useState(null);
+  const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -550,12 +550,12 @@ export default function AdminAgenda() {
     const rawServiceRanking = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue);
 
     const PALETTE = [
-      { stroke: "#C89B58", text: "#C89B58", bg: "bg-[#C89B58]/10 text-[#C89B58] border-[#C89B58]/30" },
-      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/10 text-sky-400 border-sky-500/30" },
-      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
-      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/10 text-orange-400 border-orange-500/30" },
-      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/10 text-lime-400 border-lime-500/30" },
-      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/10 text-slate-400 border-slate-500/30" }
+      { stroke: "#C89B58", text: "#C89B58", bg: "bg-[#C89B58]/10 text-[#C89B58] border-[#C89B58]/30", hex: "#C89B58" },
+      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/10 text-sky-400 border-sky-500/30", hex: "#38BDF8" },
+      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30", hex: "#34D399" },
+      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/10 text-orange-400 border-orange-500/30", hex: "#FB923C" },
+      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/10 text-lime-400 border-lime-500/30", hex: "#A3E635" },
+      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/10 text-slate-400 border-slate-500/30", hex: "#94A3B8" }
     ];
 
     let accumulatedAngle = 0;
@@ -573,6 +573,7 @@ export default function AdminAgenda() {
       );
       const durationMin = matched ? parseInt(matched.duration, 10) || 30 : 30;
       const avgPrice = s.count > 0 ? s.revenue / s.count : 0;
+      const hourlyYield = durationMin > 0 ? (avgPrice / (durationMin / 60)) : 0;
 
       return {
         ...s,
@@ -581,14 +582,16 @@ export default function AdminAgenda() {
         color: colorScheme.stroke,
         textColor: colorScheme.text,
         bgClass: colorScheme.bg,
+        hex: colorScheme.hex,
         dashLength,
         dashOffset,
         durationMin,
-        avgPrice
+        avgPrice,
+        hourlyYield
       };
     });
 
-    // Timeline Trend for Smooth Chart
+    // Timeline Trend for Smooth Bezier Curve
     const dateMap = {};
     active.forEach((a) => {
       const dStr = a.date;
@@ -608,24 +611,62 @@ export default function AdminAgenda() {
     });
 
     const timelineData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
-    const maxTimelineRevenue = Math.max(...timelineData.map((d) => d.revenue), 1);
+    const maxTimelineRevenue = Math.max(...timelineData.map((d) => d.revenue), 20);
 
-    // Build SVG Path for Area/Line Chart
+    // High-Resolution Smooth Spline Generator
     let chartSvgPath = "";
     let chartAreaPath = "";
-    if (timelineData.length > 1) {
-      const w = 500;
-      const h = 140;
-      const padding = 15;
-      const points = timelineData.map((d, i) => {
-        const x = padding + (i / (timelineData.length - 1)) * (w - 2 * padding);
-        const y = h - padding - (d.revenue / maxTimelineRevenue) * (h - 2 * padding);
-        return { x, y };
+    let chartPoints = [];
+    const chartW = 600;
+    const chartH = 180;
+    const padL = 45;
+    const padR = 20;
+    const padT = 20;
+    const padB = 30;
+
+    if (timelineData.length > 0) {
+      chartPoints = timelineData.map((d, i) => {
+        const x = timelineData.length === 1
+          ? chartW / 2
+          : padL + (i / (timelineData.length - 1)) * (chartW - padL - padR);
+        const y = chartH - padB - (d.revenue / maxTimelineRevenue) * (chartH - padT - padB);
+        return { ...d, x, y };
       });
 
-      chartSvgPath = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map((p) => `L ${p.x} ${p.y}`).join(" ");
-      chartAreaPath = `${chartSvgPath} L ${points[points.length - 1].x} ${h} L ${points[0].x} ${h} Z`;
+      if (chartPoints.length === 1) {
+        chartSvgPath = `M ${chartPoints[0].x - 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartPoints[0].y}`;
+        chartAreaPath = `M ${chartPoints[0].x - 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartH - padB} L ${chartPoints[0].x - 20} ${chartH - padB} Z`;
+      } else if (chartPoints.length === 2) {
+        chartSvgPath = `M ${chartPoints[0].x.toFixed(1)} ${chartPoints[0].y.toFixed(1)} L ${chartPoints[1].x.toFixed(1)} ${chartPoints[1].y.toFixed(1)}`;
+        chartAreaPath = `${chartSvgPath} L ${chartPoints[1].x.toFixed(1)} ${chartH - padB} L ${chartPoints[0].x.toFixed(1)} ${chartH - padB} Z`;
+      } else {
+        // Cubic Bezier Spline
+        let d = `M ${chartPoints[0].x.toFixed(1)} ${chartPoints[0].y.toFixed(1)}`;
+        for (let i = 0; i < chartPoints.length - 1; i++) {
+          const p0 = chartPoints[Math.max(i - 1, 0)];
+          const p1 = chartPoints[i];
+          const p2 = chartPoints[i + 1];
+          const p3 = chartPoints[Math.min(i + 2, chartPoints.length - 1)];
+
+          const cp1x = p1.x + (p2.x - p0.x) / 6;
+          const cp1y = p1.y + (p2.y - p0.y) / 6;
+          const cp2x = p2.x - (p3.x - p1.x) / 6;
+          const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+          d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+        }
+        chartSvgPath = d;
+        chartAreaPath = `${d} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${chartH - padB} L ${chartPoints[0].x.toFixed(1)} ${chartH - padB} Z`;
+      }
     }
+
+    // Grid line values
+    const gridLevels = [
+      { pct: 1.0, val: maxTimelineRevenue, y: padT },
+      { pct: 0.66, val: maxTimelineRevenue * 0.66, y: padT + (chartH - padT - padB) * 0.33 },
+      { pct: 0.33, val: maxTimelineRevenue * 0.33, y: padT + (chartH - padT - padB) * 0.66 },
+      { pct: 0.0, val: 0, y: chartH - padB }
+    ];
 
     return {
       total: nonBlocked.length,
@@ -646,6 +687,14 @@ export default function AdminAgenda() {
       maxTimelineRevenue,
       chartSvgPath,
       chartAreaPath,
+      chartPoints,
+      gridLevels,
+      chartW,
+      chartH,
+      padL,
+      padR,
+      padT,
+      padB,
       perimeter
     };
   }, [allAppointments, statsPeriod]);
@@ -880,9 +929,8 @@ export default function AdminAgenda() {
           {/* Main Navigation Links */}
           <nav className="space-y-1.5">
             {[
-              { id: "dashboard", label: "Visão Geral", icon: LayoutDashboard },
               { id: "agenda", label: "Agenda & Marcações", icon: CalendarDays, badge: dayAppointments.length },
-              { id: "stats", label: "Métricas & Faturação", icon: BarChart3 },
+              { id: "stats", label: "Faturação & Métricas", icon: BarChart3 },
               { id: "crm", label: "Base de Clientes", icon: Users, badge: crmClients.length },
               { id: "blocks", label: "Pausas & Bloqueios", icon: Lock }
             ].map((item) => {
@@ -1051,392 +1099,6 @@ export default function AdminAgenda() {
 
         {/* Main Content View Switcher */}
         <main className="p-4 sm:p-8 space-y-6 flex-1">
-
-          {/* ========================================================================= */}
-          {/* TAB: DASHBOARD (INSPIRATION IMAGE 1 & 2)                                  */}
-          {/* ========================================================================= */}
-          {activeTab === "dashboard" && (
-            <div className="space-y-6 animate-fadeIn">
-              
-              {/* Dashboard Subheader & Period Selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight">Dashboard Executivo</h1>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Métricas e desempenho em tempo real do Barber Studio.
-                  </p>
-                </div>
-
-                {/* Period Pills */}
-                <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
-                  isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
-                }`}>
-                  {[
-                    { id: "today", label: "Hoje" },
-                    { id: "week", label: "Esta Semana" },
-                    { id: "month", label: "Este Mês" },
-                    { id: "30days", label: "Últimos 30 Dias" },
-                    { id: "all", label: "Total" }
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setStatsPeriod(p.id)}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                        statsPeriod === p.id
-                          ? "bg-[#C89B58] text-black shadow-xs"
-                          : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 4 Top KPI Cards Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Faturação Concluída */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Faturação Real</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      {statsData.completedCount} cortes
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-[#C89B58]">
-                      {statsData.completedRevenue.toFixed(2)} €
-                    </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      Previsto: {statsData.estimatedRevenue.toFixed(2)} €
-                    </p>
-                  </div>
-                </div>
-
-                {/* 2. Total de Atendimentos */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Total Marcações</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                      {statsData.uniqueClientsCount} clientes
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
-                      {statsData.total}
-                    </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      {statsData.confirmedCount} confirmados em carteira
-                    </p>
-                  </div>
-                </div>
-
-                {/* 3. Ticket Médio */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Ticket Médio / Cliente</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      Média
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
-                      {statsData.avgTicket.toFixed(2)} €
-                    </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      Valor médio por visita
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4. Taxa de Comparência */}
-                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-400">Taxa de Comparência</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      {statsData.completionRate}%
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
-                      {statsData.completionRate}%
-                    </h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">
-                      {statsData.cancelledCount} cancelamentos registados
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Middle Section Grid: Revenue Chart (8 cols) & Side Widgets (4 cols) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Large Chart Card (8 cols) */}
-                <div className={`lg:col-span-8 p-6 rounded-3xl border shadow-xs space-y-5 flex flex-col justify-between ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-base">Evolução de Faturação</h3>
-                      <p className="text-xs text-neutral-400">
-                        Receita diária acumulada ao longo do período selecionado.
-                      </p>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-[#C89B58]">
-                      Pico: {statsData.maxTimelineRevenue.toFixed(2)} €
-                    </span>
-                  </div>
-
-                  {/* SVG Line / Area Graph */}
-                  {statsData.timelineData.length === 0 ? (
-                    <div className="py-20 text-center text-xs text-neutral-400">
-                      Sem dados suficientes de faturação para este período.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="h-44 w-full relative flex items-end">
-                        {statsData.timelineData.length > 1 ? (
-                          <svg className="w-full h-full overflow-visible" viewBox="0 0 500 140" preserveAspectRatio="none">
-                            <defs>
-                              <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#C89B58" stopOpacity="0.35" />
-                                <stop offset="100%" stopColor="#C89B58" stopOpacity="0.0" />
-                              </linearGradient>
-                            </defs>
-                            <path d={statsData.chartAreaPath} fill="url(#revenueGrad)" />
-                            <path d={statsData.chartSvgPath} fill="none" stroke="#C89B58" strokeWidth="3" strokeLinecap="round" />
-                          </svg>
-                        ) : (
-                          <div className="w-full flex items-end justify-center h-32">
-                            <div className="w-24 rounded-t-2xl bg-[#C89B58] h-full flex items-center justify-center font-bold text-black text-xs font-mono">
-                              {statsData.timelineData[0]?.revenue.toFixed(0)} €
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* X-axis labels */}
-                      <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 pt-2 border-t border-neutral-100 dark:border-white/5">
-                        {statsData.timelineData.slice(0, 6).map((d) => (
-                          <span key={d.date}>{d.fullLabel || d.label}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Highlights Bar */}
-                  <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs ${
-                    isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#C89B58]" />
-                      <span>Faturação Total Registada:</span>
-                    </div>
-                    <span className="font-mono font-bold text-base text-[#C89B58]">
-                      {statsData.completedRevenue.toFixed(2)} €
-                    </span>
-                  </div>
-                </div>
-
-                {/* Side Column Widgets (4 cols) */}
-                <div className="lg:col-span-4 space-y-5">
-                  {/* Widget 1: Dias Mais Ativos (Bar Chart) */}
-                  <div className={`p-6 rounded-3xl border shadow-xs space-y-4 ${
-                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-sm">Dias Mais Ativos</h4>
-                      <span className="text-[10px] font-bold text-[#C89B58] uppercase">Seg - Sáb</span>
-                    </div>
-
-                    <div className="grid grid-cols-6 gap-2 items-end h-28 pt-2">
-                      {statsData.daysActivity.map((d) => {
-                        const isPeak = d.count === statsData.maxDayCount && d.count > 0;
-                        const heightPct = statsData.maxDayCount > 0
-                          ? Math.max((d.count / statsData.maxDayCount) * 100, d.count > 0 ? 20 : 8)
-                          : 8;
-
-                        return (
-                          <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                            <div className="w-full rounded-t-xl bg-neutral-100 dark:bg-white/5 relative flex items-end justify-center h-full overflow-hidden">
-                              <div
-                                className={`w-full rounded-t-xl transition-all duration-500 ${
-                                  isPeak
-                                    ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
-                                    : d.count > 0
-                                      ? "bg-[#C89B58]/40"
-                                      : "bg-neutral-200 dark:bg-white/10"
-                                }`}
-                                style={{ height: `${heightPct}%` }}
-                              />
-                            </div>
-                            <span className={`text-[10px] font-bold ${isPeak ? "text-[#C89B58]" : "text-neutral-400"}`}>
-                              {d.label}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <p className="text-[11px] text-neutral-400 text-center">
-                      Dia com maior procura: <strong>{statsData.peakDay?.name || "Sábado"}</strong>
-                    </p>
-                  </div>
-
-                  {/* Widget 2: Taxa de Retenção de Clientes (Radial Gauge) */}
-                  <div className={`p-6 rounded-3xl border shadow-xs space-y-3 text-center ${
-                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                  }`}>
-                    <div className="flex items-center justify-between text-left">
-                      <h4 className="font-bold text-sm">Fidelização de Clientes</h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
-                        Recorrentes
-                      </span>
-                    </div>
-
-                    <div className="py-2">
-                      <div className="text-3xl font-mono font-bold text-emerald-500">
-                        {statsData.repeatRate}%
-                      </div>
-                      <p className="text-[11px] text-neutral-400 mt-0.5">
-                        Clientes que agendam mais de uma vez
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("crm")}
-                      className={`w-full py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer ${
-                        isLight
-                          ? "bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-700"
-                          : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-                      }`}
-                    >
-                      Ver Base de Clientes (CRM)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Row Grid: Service Ranking Table (7 cols) & Upcoming Clients (5 cols) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Ranking de Serviços (7 cols) */}
-                <div className={`lg:col-span-7 p-6 rounded-3xl border shadow-xs space-y-4 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-base">Serviços Mais Solicitados</h3>
-                    <span className="text-xs text-neutral-400">{statsData.serviceRanking.length} categorias</span>
-                  </div>
-
-                  {statsData.serviceRanking.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-neutral-400">
-                      Sem marcações no período selecionado.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {statsData.serviceRanking.map((s, idx) => (
-                        <div
-                          key={s.name}
-                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-colors ${
-                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="w-6 h-6 rounded-full bg-[#C89B58]/20 text-[#C89B58] text-xs font-bold flex items-center justify-center shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-bold text-xs truncate">{s.name}</p>
-                              <p className="text-[10px] text-neutral-400">
-                                {s.count} {s.count === 1 ? "marcação" : "marcações"} • {s.durationMin} min
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="text-right shrink-0">
-                            <span className="font-mono font-bold text-xs text-[#C89B58]">
-                              {s.revenue.toFixed(2)} €
-                            </span>
-                            <p className="text-[10px] text-neutral-400">{s.percent}% do total</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Upcoming Today Appointments (5 cols) */}
-                <div className={`lg:col-span-5 p-6 rounded-3xl border shadow-xs space-y-4 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-base">Marcações do Dia</h3>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("agenda")}
-                      className="text-xs font-bold text-[#C89B58] hover:underline"
-                    >
-                      Ver Agenda Completa
-                    </button>
-                  </div>
-
-                  {dayAppointments.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-neutral-400 space-y-2">
-                      <CalendarIcon className="w-8 h-8 mx-auto opacity-40" />
-                      <p>Sem marcações registadas para hoje.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                      {dayAppointments.map((appt) => (
-                        <div
-                          key={appt.id}
-                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-                            appt.status === "completed"
-                              ? isLight ? "bg-emerald-50 border-emerald-200" : "bg-emerald-950/20 border-emerald-500/30"
-                              : appt.status === "cancelled"
-                                ? "opacity-50 line-through"
-                                : isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="px-2.5 py-1.5 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 font-mono font-bold text-xs text-[#C89B58] shrink-0">
-                              {appt.time}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-xs truncate">{appt.customer_name}</p>
-                              <p className="text-[10px] text-neutral-400 truncate">{appt.service_name}</p>
-                            </div>
-                          </div>
-
-                          {appt.customer_phone && appt.customer_phone !== "---" && (
-                            <a
-                              href={`https://wa.me/${appt.customer_phone.replace(/\D/g, "")}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 rounded-xl bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 transition-colors shrink-0"
-                              title="WhatsApp"
-                            >
-                              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          )}
 
           {/* ========================================================================= */}
           {/* TAB: AGENDA & MARCAÇÕES (TIMELINE + CONTROLS)                             */}
@@ -1828,37 +1490,522 @@ export default function AdminAgenda() {
           )}
 
           {/* ========================================================================= */}
-          {/* TAB: MÉTRICAS & FATURAÇÃO (DONUT MIX + DETAILS)                           */}
+          {/* TAB: FATURAÇÃO & MÉTRICAS (EXECUTIVE ANALYTICS & REVENUE)                 */}
           {/* ========================================================================= */}
           {activeTab === "stats" && (
             <div className="space-y-6 animate-fadeIn">
-              <div className={`p-6 rounded-3xl border shadow-xs space-y-6 ${
-                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-              }`}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 dark:border-white/5 pb-4">
-                  <div>
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                      <PieChart className="w-5 h-5 text-[#C89B58]" />
-                      <span>Mix de Serviços & Faturação Real</span>
-                    </h3>
-                    <p className="text-xs text-neutral-400">
-                      Distribuição percentual e financeira por serviço prestado.
-                    </p>
+              
+              {/* Header & Period Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">Faturação & Métricas</h1>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Análise financeira, rentabilidade por serviço e comportamento de clientes.
+                  </p>
+                </div>
+
+                {/* Period Pills */}
+                <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
+                  isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
+                }`}>
+                  {[
+                    { id: "today", label: "Hoje" },
+                    { id: "week", label: "Esta Semana" },
+                    { id: "month", label: "Este Mês" },
+                    { id: "30days", label: "Últimos 30 Dias" },
+                    { id: "all", label: "Total Histórico" }
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setStatsPeriod(p.id)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        statsPeriod === p.id
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4 Top KPI Cards Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Faturação Concluída */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Faturação Real</span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      <span>{statsData.completedCount} cortes</span>
+                    </span>
                   </div>
-                  <div className="text-sm font-mono font-bold text-[#C89B58]">
-                    Faturação Total: {statsData.estimatedRevenue.toFixed(2)} €
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight text-[#C89B58]">
+                      {statsData.completedRevenue.toFixed(2)} €
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Previsto com agendamentos: <strong className="text-neutral-300 font-mono">{statsData.estimatedRevenue.toFixed(2)} €</strong>
+                    </p>
                   </div>
                 </div>
 
-                {statsData.serviceRanking.length === 0 ? (
-                  <div className="py-16 text-center text-xs text-neutral-400">
-                    Sem dados de faturação no período selecionado.
+                {/* 2. Total de Atendimentos */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Total Marcações</span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      {statsData.uniqueClientsCount} clientes
+                    </span>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                    {/* Donut Ring Visual */}
-                    <div className="lg:col-span-4 flex flex-col items-center justify-center relative py-4">
-                      <div className="relative w-48 h-48 flex items-center justify-center">
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.total}
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {statsData.confirmedCount} confirmados em carteira
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Ticket Médio */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Ticket Médio / Cliente</span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Média
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.avgTicket.toFixed(2)} €
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Rendimento médio por marcação
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4. Taxa de Comparência */}
+                <div className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-400">Taxa de Comparência</span>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {statsData.completionRate}%
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-bold font-mono tracking-tight">
+                      {statsData.completionRate}%
+                    </h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {statsData.cancelledCount} cancelamentos registados
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Middle Section Grid: Revenue Chart (8 cols) & Side Widgets (4 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Large Chart Card (8 cols) */}
+                <div className={`lg:col-span-8 p-6 rounded-3xl border shadow-xs space-y-5 flex flex-col justify-between ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-base">Evolução de Faturação</h3>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/15 text-[#C89B58] border border-[#C89B58]/30">
+                          {statsPeriod === "today" ? "Hoje" : statsPeriod === "week" ? "Semanal" : statsPeriod === "month" ? "Mensal" : statsPeriod === "30days" ? "30 Dias" : "Geral"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        Receita diária acumulada ao longo do período selecionado.
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <span className="text-xs text-neutral-400 block">Total no Período</span>
+                      <span className="text-lg font-mono font-bold text-[#C89B58]">
+                        {statsData.completedRevenue.toFixed(2)} €
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* High-Resolution SVG Chart with Bezier curve, horizontal grid lines & Y-Axis labels */}
+                  {statsData.timelineData.length === 0 ? (
+                    <div className="py-20 text-center text-xs text-neutral-400">
+                      Sem dados suficientes de faturação para este período.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 relative">
+                      {/* Floating Tooltip when hovering any point */}
+                      {hoveredChartPoint && (
+                        <div
+                          className="absolute z-20 pointer-events-none -translate-x-1/2 -translate-y-full mb-3 px-3 py-2 rounded-xl bg-black/90 border border-white/20 text-white shadow-2xl backdrop-blur-md text-[11px] whitespace-nowrap transition-all"
+                          style={{
+                            left: `${(hoveredChartPoint.x / statsData.chartW) * 100}%`,
+                            top: `${(hoveredChartPoint.y / statsData.chartH) * 100}%`
+                          }}
+                        >
+                          <p className="font-bold text-neutral-300">{hoveredChartPoint.fullLabel || hoveredChartPoint.date}</p>
+                          <p className="font-mono font-bold text-[#C89B58] text-xs">
+                            {hoveredChartPoint.revenue.toFixed(2)} €
+                          </p>
+                          <p className="text-[10px] text-neutral-400">
+                            {hoveredChartPoint.count} {hoveredChartPoint.count === 1 ? "marcação" : "marcações"}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="w-full relative">
+                        <svg
+                          className="w-full h-52 overflow-visible"
+                          viewBox={`0 0 ${statsData.chartW} ${statsData.chartH}`}
+                          preserveAspectRatio="none"
+                        >
+                          <defs>
+                            <linearGradient id="execRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#C89B58" stopOpacity="0.45" />
+                              <stop offset="50%" stopColor="#C89B58" stopOpacity="0.15" />
+                              <stop offset="100%" stopColor="#C89B58" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+
+                          {/* Horizontal Grid Lines & Y-Axis Ticks */}
+                          {statsData.gridLevels.map((lvl, idx) => (
+                            <g key={idx}>
+                              <line
+                                x1={statsData.padL}
+                                y1={lvl.y}
+                                x2={statsData.chartW - statsData.padR}
+                                y2={lvl.y}
+                                stroke={isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.07)"}
+                                strokeDasharray="3 3"
+                                strokeWidth="1"
+                              />
+                              <text
+                                x={statsData.padL - 8}
+                                y={lvl.y + 3.5}
+                                textAnchor="end"
+                                fontSize="9"
+                                fill={isLight ? "#9CA3AF" : "#6B7280"}
+                                fontFamily="monospace"
+                              >
+                                {lvl.val.toFixed(0)}€
+                              </text>
+                            </g>
+                          ))}
+
+                          {/* Area Fill */}
+                          {statsData.chartAreaPath && (
+                            <path d={statsData.chartAreaPath} fill="url(#execRevenueGrad)" />
+                          )}
+
+                          {/* Spline Stroke Line */}
+                          {statsData.chartSvgPath && (
+                            <path
+                              d={statsData.chartSvgPath}
+                              fill="none"
+                              stroke="#C89B58"
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          )}
+
+                          {/* Data Points on Curve with Hover Effects */}
+                          {statsData.chartPoints.map((pt, i) => (
+                            <g
+                              key={i}
+                              className="cursor-pointer group"
+                              onMouseEnter={() => setHoveredChartPoint(pt)}
+                              onMouseLeave={() => setHoveredChartPoint(null)}
+                            >
+                              <circle
+                                cx={pt.x}
+                                cy={pt.y}
+                                r="4.5"
+                                fill="#C89B58"
+                                stroke={isLight ? "#FFFFFF" : "#111319"}
+                                strokeWidth="2"
+                                className="transition-transform group-hover:scale-150"
+                              />
+                              <circle
+                                cx={pt.x}
+                                cy={pt.y}
+                                r="12"
+                                fill="transparent"
+                              />
+                            </g>
+                          ))}
+                        </svg>
+                      </div>
+
+                      {/* X-Axis Date Labels */}
+                      <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 pt-2 border-t border-neutral-100 dark:border-white/5 pl-10 pr-4">
+                        {statsData.timelineData.length <= 8 ? (
+                          statsData.timelineData.map((d) => (
+                            <span key={d.date}>{d.label || d.date}</span>
+                          ))
+                        ) : (
+                          <>
+                            <span>{statsData.timelineData[0]?.label}</span>
+                            <span>{statsData.timelineData[Math.floor(statsData.timelineData.length / 3)]?.label}</span>
+                            <span>{statsData.timelineData[Math.floor((statsData.timelineData.length * 2) / 3)]?.label}</span>
+                            <span>{statsData.timelineData[statsData.timelineData.length - 1]?.label}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service Composition Segment Bar */}
+                  {statsData.serviceRanking.length > 0 && (
+                    <div className="space-y-2 pt-3 border-t border-neutral-100 dark:border-white/5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-neutral-400 font-medium">Distribuição por Tipo de Serviço</span>
+                        <span className="text-[11px] font-mono font-bold text-[#C89B58]">
+                          {statsData.serviceRanking.length} categorias
+                        </span>
+                      </div>
+
+                      {/* Proportional horizontal bar */}
+                      <div className="h-3 w-full rounded-full bg-neutral-100 dark:bg-white/5 flex overflow-hidden p-0.5 gap-0.5">
+                        {statsData.serviceRanking.map((s) => (
+                          <div
+                            key={s.name}
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.max(s.percent, 3)}%`,
+                              backgroundColor: s.hex || s.color
+                            }}
+                            title={`${s.name}: ${s.revenue.toFixed(2)} € (${s.percent}%)`}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Chips */}
+                      <div className="flex items-center gap-3 flex-wrap pt-1 text-[11px]">
+                        {statsData.serviceRanking.slice(0, 4).map((s) => (
+                          <div key={s.name} className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.hex || s.color }} />
+                            <span className="text-neutral-300 font-medium truncate">{s.name}:</span>
+                            <span className="font-mono font-bold text-neutral-400">{s.percent}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Side Column Widgets (4 cols) */}
+                <div className="lg:col-span-4 space-y-5 flex flex-col justify-between">
+                  {/* Widget 1: Dias Mais Ativos (Bar Chart) */}
+                  <div className={`p-6 rounded-3xl border shadow-xs space-y-4 ${
+                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm">Dias Mais Ativos</h4>
+                      <span className="text-[10px] font-bold text-[#C89B58] uppercase">Seg - Sáb</span>
+                    </div>
+
+                    <div className="grid grid-cols-6 gap-2 items-end h-32 pt-2">
+                      {statsData.daysActivity.map((d) => {
+                        const isPeak = d.count === statsData.maxDayCount && d.count > 0;
+                        const heightPct = statsData.maxDayCount > 0
+                          ? Math.max((d.count / statsData.maxDayCount) * 100, d.count > 0 ? 22 : 10)
+                          : 10;
+
+                        return (
+                          <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end group">
+                            {/* Value badge over peak */}
+                            {isPeak && (
+                              <span className="text-[9px] font-mono font-bold text-[#C89B58] bg-[#C89B58]/15 px-1 py-0.2 rounded-md">
+                                {d.count}
+                              </span>
+                            )}
+                            <div className="w-full rounded-xl bg-neutral-100 dark:bg-white/5 relative flex items-end justify-center h-full overflow-hidden">
+                              <div
+                                className={`w-full rounded-xl transition-all duration-500 ${
+                                  isPeak
+                                    ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
+                                    : d.count > 0
+                                      ? "bg-[#C89B58]/40 hover:bg-[#C89B58]/60"
+                                      : "bg-neutral-200 dark:bg-white/10"
+                                }`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-bold ${isPeak ? "text-[#C89B58]" : "text-neutral-400"}`}>
+                              {d.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className={`p-3 rounded-2xl border text-center text-xs ${
+                      isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                    }`}>
+                      <p className="text-neutral-400">
+                        Pico de movimento: <strong className="text-[#C89B58] font-bold">{statsData.peakDay?.name || "Sábado"}</strong>
+                      </p>
+                      <p className="text-[10px] text-neutral-400 font-mono mt-0.5">
+                        {statsData.peakDay?.count || 0} cortes • {(statsData.peakDay?.revenue || 0).toFixed(2)} €
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Widget 2: Taxa de Retenção de Clientes (Radial Gauge) */}
+                  <div className={`p-6 rounded-3xl border shadow-xs space-y-3 text-center ${
+                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                  }`}>
+                    <div className="flex items-center justify-between text-left">
+                      <h4 className="font-bold text-sm">Fidelização de Clientes</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                        Recorrentes
+                      </span>
+                    </div>
+
+                    {/* Semi-circular Speedometer Arc */}
+                    <div className="relative w-36 h-20 mx-auto mt-2 flex items-center justify-center">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
+                        {/* Background track arc */}
+                        <path
+                          d="M 10 50 A 40 40 0 0 1 90 50"
+                          fill="none"
+                          stroke={isLight ? "#E5E7EB" : "rgba(255,255,255,0.08)"}
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                        />
+                        {/* Foreground value arc */}
+                        <path
+                          d="M 10 50 A 40 40 0 0 1 90 50"
+                          fill="none"
+                          stroke="#10B981"
+                          strokeWidth="10"
+                          strokeDasharray={`${(statsData.repeatRate / 100) * 125.6} 125.6`}
+                          strokeLinecap="round"
+                          className="transition-all duration-700"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-end pb-1 text-center">
+                        <span className="text-2xl font-mono font-bold text-emerald-500 leading-none">
+                          {statsData.repeatRate}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-neutral-400">
+                      Clientes que agendam 2 ou mais vezes na barbearia.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("crm")}
+                      className={`w-full py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer ${
+                        isLight
+                          ? "bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-700"
+                          : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                      }`}
+                    >
+                      Ver Base de Clientes (CRM)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Row Grid: Service Ranking Table (7 cols) & Donut Mix (5 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Ranking de Rentabilidade de Serviços (7 cols - Inspired by Image 1) */}
+                <div className={`lg:col-span-7 p-6 rounded-3xl border shadow-xs space-y-4 ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base">Ranking de Rentabilidade por Serviço</h3>
+                      <p className="text-xs text-neutral-400">
+                        Volume, receita gerada e rendimento por cada 60 minutos de cadeira.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#C89B58]">
+                      {statsData.serviceRanking.length} Serviços
+                    </span>
+                  </div>
+
+                  {statsData.serviceRanking.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-neutral-400">
+                      Sem marcações no período selecionado.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {statsData.serviceRanking.map((s, idx) => (
+                        <div
+                          key={s.name}
+                          className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                            isLight ? "bg-neutral-50 hover:bg-white border-neutral-200" : "bg-black/30 hover:bg-white/5 border-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <span className="w-7 h-7 rounded-xl bg-[#C89B58]/20 text-[#C89B58] text-xs font-bold font-mono flex items-center justify-center shrink-0">
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-xs truncate">{s.name}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
+                                <span>{s.count} {s.count === 1 ? "marcação" : "marcações"}</span>
+                                <span>•</span>
+                                <span>{s.durationMin} min</span>
+                                <span>•</span>
+                                <span className="font-mono text-[#C89B58]">{s.percent}% total</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="font-mono font-bold text-sm text-[#C89B58] block">
+                              {s.revenue.toFixed(2)} €
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-500 font-bold">
+                              {s.hourlyYield.toFixed(0)} € / hora
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Donut Mix (5 cols) */}
+                <div className={`lg:col-span-5 p-6 rounded-3xl border shadow-xs space-y-4 flex flex-col justify-between ${
+                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base">Mix de Faturação</h3>
+                      <p className="text-xs text-neutral-400">Distribuição percentual por serviço.</p>
+                    </div>
+                    <PieChart className="w-4 h-4 text-[#C89B58]" />
+                  </div>
+
+                  {statsData.serviceRanking.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-neutral-400">
+                      Sem dados no período.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Donut graphic */}
+                      <div className="relative w-40 h-40 mx-auto flex items-center justify-center">
                         <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
                           <circle
                             cx="80"
@@ -1899,46 +2046,36 @@ export default function AdminAgenda() {
                           <span className="text-[10px] uppercase font-bold text-neutral-400">
                             Faturado Real
                           </span>
-                          <span className="text-xl font-mono font-bold mt-0.5">
+                          <span className="text-lg font-mono font-bold mt-0.5 text-[#C89B58]">
                             {statsData.completedRevenue.toFixed(2)} €
                           </span>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Service Legend & Metrics Cards */}
-                    <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {statsData.serviceRanking.map((s) => (
-                        <div
-                          key={s.name}
-                          className={`p-4 rounded-2xl border transition-all ${
-                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
+                      {/* Legend List */}
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {statsData.serviceRanking.map((s) => (
+                          <div
+                            key={s.name}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                              isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
+                            }`}
+                          >
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                              <span className="font-bold text-xs truncate">{s.name}</span>
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                              <span className="font-bold truncate">{s.name}</span>
                             </div>
-                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full" style={{ color: s.color, backgroundColor: `${s.color}20` }}>
+                            <span className="font-mono font-bold text-[#C89B58] shrink-0">
                               {s.percent}%
                             </span>
                           </div>
-
-                          <div className="mt-3 flex items-end justify-between">
-                            <span className="text-[11px] text-neutral-400">
-                              {s.count} {s.count === 1 ? "corte" : "cortes"} • {s.durationMin} min
-                            </span>
-                            <span className="font-mono font-bold text-sm text-[#C89B58]">
-                              {s.revenue.toFixed(2)} €
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
+
             </div>
           )}
 
