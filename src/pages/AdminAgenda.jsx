@@ -36,7 +36,12 @@ import {
   ShieldAlert,
   DollarSign,
   Percent,
-  CalendarDays
+  CalendarDays,
+  Sunrise,
+  Sun,
+  Moon,
+  Lightbulb,
+  Star
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -134,7 +139,7 @@ export default function AdminAgenda() {
     loadAppointments();
   }, [selectedDate]);
 
-  // 🔒 Lock background scroll when any modal is open
+  // Lock background scroll when any modal is open
   useEffect(() => {
     const isAnyModalOpen = isNewModalOpen || editingAppt || isBlockModalOpen;
     if (isAnyModalOpen) {
@@ -285,7 +290,6 @@ export default function AdminAgenda() {
   const dayActive = dayAppointments.filter((a) => a.status !== "cancelled" && a.status !== "blocked");
   const dayConfirmed = dayAppointments.filter((a) => a.status === "confirmed");
   const dayCompleted = dayAppointments.filter((a) => a.status === "completed");
-  const dayBlocked = dayAppointments.filter((a) => a.status === "blocked");
   const dayCompletedRevenue = dayCompleted.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
   const dayEstimatedRevenue = dayActive.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
 
@@ -355,25 +359,20 @@ export default function AdminAgenda() {
     const completedRev = completed.reduce((acc, c) => acc + parsePrice(c.service_price), 0);
     const estimatedRev = active.reduce((acc, c) => acc + parsePrice(c.service_price), 0);
 
+    // Unique Clients Count in Period
+    const uniqueClientsInPeriod = new Set(
+      nonBlocked
+        .map((a) => (a.customer_phone || a.customer_name || "").trim())
+        .filter((k) => k && k !== "---")
+    );
+    const uniqueClientsCount = uniqueClientsInPeriod.size || nonBlocked.length;
+
     // Ticket Médio (€)
     const avgTicket = completed.length > 0 ? completedRev / completed.length : active.length > 0 ? estimatedRev / active.length : 0;
 
     // Taxa de Conclusão / Comparecimento (%)
     const totalFinishedOrCancelled = completed.length + cancelled.length;
     const completionRate = totalFinishedOrCancelled > 0 ? Math.round((completed.length / totalFinishedOrCancelled) * 100) : 100;
-
-    // Taxa de Ocupação da Cadeira (base: 22 slots disponíveis por dia útil x dias)
-    const daysInPeriod =
-      statsPeriod === "today"
-        ? 1
-        : statsPeriod === "week"
-          ? 6
-          : statsPeriod === "month"
-            ? 26
-            : 30;
-    const totalPossibleSlots = daysInPeriod * 22; // ~22 slots de 30 min por dia (10h-22h sem almoço)
-    const totalOccupiedSlots = active.length;
-    const occupancyRate = Math.min(100, Math.round((totalOccupiedSlots / totalPossibleSlots) * 100));
 
     // Service Breakdown & Ranking
     const serviceMap = {};
@@ -404,6 +403,7 @@ export default function AdminAgenda() {
 
     return {
       total: nonBlocked.length,
+      uniqueClientsCount,
       completedCount: completed.length,
       confirmedCount: confirmed.length,
       cancelledCount: cancelled.length,
@@ -411,7 +411,6 @@ export default function AdminAgenda() {
       estimatedRevenue: estimatedRev,
       avgTicket,
       completionRate,
-      occupancyRate,
       serviceRanking,
       maxServiceRevenue,
       peakHours: {
@@ -778,7 +777,7 @@ export default function AdminAgenda() {
                     const isBlocked = appt.status === "blocked";
 
                     const whatsAppClientText = encodeURIComponent(
-                      `Olá *${appt.customer_name}*! Confirmamos o seu agendamento na *Rota Do Corte* para *${formattedPortugueseDate}* às *${appt.time}* (${appt.service_name}). Até já! 💈✂️`
+                      `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota Do Corte para ${formattedPortugueseDate} às ${appt.time} (${appt.service_name}). Até já!`
                     );
 
                     // Render Blocked Slot differently
@@ -959,7 +958,7 @@ export default function AdminAgenda() {
                   <span>Análise de Performance do Barber Studio</span>
                 </h2>
                 <p className="text-xs text-[#9E9EA7]">
-                  Métricas agregadas de receita, rentabilidade e taxas de ocupação.
+                  Métricas agregadas de receita, rentabilidade e fidelização.
                 </p>
               </div>
 
@@ -1026,21 +1025,21 @@ export default function AdminAgenda() {
                 </p>
               </div>
 
-              {/* 3. Taxa de Ocupação da Cadeira */}
+              {/* 3. Total de Clientes (Substituindo taxa de ocupação genérica) */}
               <div className="p-5 rounded-2xl bg-[#111319] border border-emerald-500/30 bg-gradient-to-br from-[#111319] to-emerald-500/10 shadow-lg space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                    Taxa de Ocupação
+                    Total de Clientes
                   </span>
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <Percent className="w-4 h-4" />
+                    <Users className="w-4 h-4" />
                   </div>
                 </div>
                 <p className="text-3xl font-mono font-bold text-emerald-300">
-                  {statsData.occupancyRate}%
+                  {statsData.uniqueClientsCount}
                 </p>
                 <p className="text-[11px] text-[#9E9EA7]">
-                  Capacidade utilizada da cadeira
+                  {statsData.total} {statsData.total === 1 ? "marcação no período" : "marcações no período"}
                 </p>
               </div>
 
@@ -1132,7 +1131,7 @@ export default function AdminAgenda() {
                 <div className="border-b border-white/5 pb-3">
                   <h3 className="font-serif text-lg font-bold text-white flex items-center gap-2">
                     <Flame className="w-4 h-4 text-amber-400" />
-                    <span>Horários de Pico</span>
+                    <span>Horários de Maior Procura</span>
                   </h3>
                   <p className="text-xs text-[#9E9EA7]">
                     Distribuição da procura por faixa horária.
@@ -1143,8 +1142,9 @@ export default function AdminAgenda() {
                   {/* Morning Shift */}
                   <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#9E9EA7] font-medium flex items-center gap-1.5">
-                        🌅 Manhã (10:00 - 13:00)
+                      <span className="text-[#9E9EA7] font-medium flex items-center gap-2">
+                        <Sunrise className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Manhã (10:00 - 13:00)</span>
                       </span>
                       <span className="font-mono font-bold text-white">
                         {statsData.peakHours.morning} marcações
@@ -1163,8 +1163,9 @@ export default function AdminAgenda() {
                   {/* Early Afternoon Shift */}
                   <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#9E9EA7] font-medium flex items-center gap-1.5">
-                        ☀️ Início Tarde (14:00 - 17:00)
+                      <span className="text-[#9E9EA7] font-medium flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-[#C89B58] shrink-0" />
+                        <span>Início da Tarde (14:00 - 17:00)</span>
                       </span>
                       <span className="font-mono font-bold text-white">
                         {statsData.peakHours.afternoon} marcações
@@ -1180,11 +1181,12 @@ export default function AdminAgenda() {
                     </div>
                   </div>
 
-                  {/* Evening Shift (Peak) */}
+                  {/* Evening Shift */}
                   <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-amber-300 font-bold flex items-center gap-1.5">
-                        🌆 Fim Tarde / Noite (17:00 - 22:00) 🔥
+                      <span className="text-amber-300 font-bold flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Fim da Tarde / Noite (17:00 - 22:00)</span>
                       </span>
                       <span className="font-mono font-bold text-amber-300">
                         {statsData.peakHours.evening} marcações
@@ -1200,8 +1202,11 @@ export default function AdminAgenda() {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-[11px] text-[#9E9EA7] leading-relaxed">
-                    💡 <strong>Dica de Gestão:</strong> O período das 17h às 21h representa o pico de maior rentabilidade. Mantenha pausas preferencialmente entre as 13h e 14h.
+                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-[11px] text-[#9E9EA7] leading-relaxed flex items-start gap-2.5">
+                    <Lightbulb className="w-4 h-4 text-[#C89B58] shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="text-white">Dica de Gestão:</strong> O período das 17h às 21h concentra a maior procura. Programe as pausas preferencialmente no intervalo das 13h às 14h.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1275,7 +1280,7 @@ export default function AdminAgenda() {
                 {crmClients.map((client) => {
                   const whatsAppChatUrl = client.phone && client.phone !== "---"
                     ? `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                        `Olá *${client.name}*! Daqui é o *Gabriel Silva* da *Rota Do Corte*. Espero que esteja tudo bem! 💈✂️`
+                        `Olá ${client.name}! Daqui é o Gabriel Silva da Rota Do Corte. Espero que esteja tudo bem!`
                       )}`
                     : null;
 
@@ -1304,8 +1309,9 @@ export default function AdminAgenda() {
                           </div>
 
                           {client.isVip && (
-                            <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/25 text-[#E5C268] border border-[#C89B58]/40">
-                              ⭐ VIP
+                            <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/25 text-[#E5C268] border border-[#C89B58]/40 flex items-center gap-1">
+                              <Star className="w-2.5 h-2.5 text-[#E5C268] fill-[#E5C268]" />
+                              <span>VIP</span>
                             </span>
                           )}
                         </div>
@@ -1459,8 +1465,9 @@ export default function AdminAgenda() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
-                          🌅 Manhã (10:00 - 13:00)
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
+                          <Sunrise className="w-3 h-3 text-[#C89B58]" />
+                          <span>Manhã (10:00 - 13:00)</span>
                         </span>
                         <div className="grid grid-cols-3 gap-1">
                           {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => (
@@ -1484,8 +1491,9 @@ export default function AdminAgenda() {
                       </div>
 
                       <div className="pt-1 border-t border-white/5">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
-                          ☀️ Tarde & Noite (14:00 - 22:00)
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
+                          <Sun className="w-3 h-3 text-[#C89B58]" />
+                          <span>Tarde & Noite (14:00 - 22:00)</span>
                         </span>
                         <div className="grid grid-cols-3 gap-1">
                           {[
@@ -1717,8 +1725,9 @@ export default function AdminAgenda() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
-                          🌅 Manhã (10:00 - 13:00)
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
+                          <Sunrise className="w-3 h-3 text-[#C89B58]" />
+                          <span>Manhã (10:00 - 13:00)</span>
                         </span>
                         <div className="grid grid-cols-3 gap-1">
                           {["10:00", "10:30", "11:00", "11:30", "12:00", "12:30"].map((t) => (
@@ -1742,8 +1751,9 @@ export default function AdminAgenda() {
                       </div>
 
                       <div className="pt-1 border-t border-white/5">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 block mb-1.5">
-                          ☀️ Tarde & Noite (14:00 - 22:00)
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#C89B58] px-1 flex items-center gap-1.5 mb-1.5">
+                          <Sun className="w-3 h-3 text-[#C89B58]" />
+                          <span>Tarde & Noite (14:00 - 22:00)</span>
                         </span>
                         <div className="grid grid-cols-3 gap-1">
                           {[

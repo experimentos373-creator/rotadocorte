@@ -130,16 +130,16 @@ export function buildWhatsAppMessage({
   phone,
   notes
 }) {
-  let msg = `Olá *Gabriel*! Fiz a minha marcação através do website da *Rota Do Corte* 💈✨\n\n`;
-  msg += `📋 *RESUMO DO AGENDAMENTO:*\n`;
-  msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
-  msg += `📅 *Data:* ${dateFormatted}\n`;
-  msg += `⏰ *Hora:* ${time}\n`;
-  msg += `👤 *Nome:* ${clientName}\n`;
-  if (phone) msg += `📱 *Contacto:* ${phone}\n`;
-  if (notes) msg += `📝 *Obs:* ${notes}\n`;
-  msg += `\n📍 *Localização:* ${shopInfo.addressShort}\n`;
-  msg += `\n_Confirmação imediata via P&D Booking._`;
+  let msg = `Olá *Gabriel*! Fiz a minha marcação através do website da *Rota Do Corte* (Paião).\n\n`;
+  msg += `*RESUMO DO AGENDAMENTO:*\n`;
+  msg += `• *Serviço:* ${serviceName} (${servicePrice})\n`;
+  msg += `• *Data:* ${dateFormatted}\n`;
+  msg += `• *Hora:* ${time}\n`;
+  msg += `• *Nome:* ${clientName}\n`;
+  if (phone) msg += `• *Contacto:* ${phone}\n`;
+  if (notes) msg += `• *Obs:* ${notes}\n`;
+  msg += `\n• *Localização:* ${shopInfo.addressShort}\n`;
+  msg += `\n_Confirmação imediata via Rota Do Corte OS._`;
 
   return encodeURIComponent(msg);
 }
