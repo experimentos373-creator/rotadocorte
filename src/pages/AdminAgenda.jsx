@@ -72,7 +72,7 @@ export default function AdminAgenda() {
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [currentAdminPin, setCurrentAdminPin] = useState(() => {
-    return sessionStorage.getItem("rotadocorte_admin_pin") || "2026";
+    return sessionStorage.getItem("rotadocorte_admin_pin") || "";
   });
 
   // Navigation Tabs: 'agenda' | 'stats' | 'crm'
@@ -600,7 +600,7 @@ export default function AdminAgenda() {
                     setAdminPinInput(e.target.value);
                     if (pinError) setPinError("");
                   }}
-                  placeholder="Introduza o PIN (ex: 2026)"
+                  placeholder="••••••••"
                   autoFocus
                   className="w-full bg-[#0A0B0E] border border-white/15 focus:border-[#C89B58] rounded-xl px-4 py-3.5 text-center text-lg sm:text-xl tracking-widest text-white placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:ring-1 focus:ring-[#C89B58] transition-all"
                 />
