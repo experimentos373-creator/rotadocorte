@@ -88,6 +88,13 @@ export default function AdminAgenda() {
   const [dayAppointments, setDayAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Scope: 'all' (Todas as Marcações) | 'day' (Agenda do Dia Selecionado)
+  const [agendaScope, setAgendaScope] = useState("all");
+
+  // Sorting Mode: 'newest' | 'oldest' | 'price_desc' | 'price_asc'
+  const [sortBy, setSortBy] = useState("newest");
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+
   // Filters & Search
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -340,30 +347,64 @@ export default function AdminAgenda() {
     }
   };
 
-  // Day Agenda Metrics
-  const dayActive = dayAppointments.filter((a) => a.status !== "cancelled" && a.status !== "blocked");
-  const dayConfirmed = dayAppointments.filter((a) => a.status === "confirmed");
-  const dayCompleted = dayAppointments.filter((a) => a.status === "completed");
-  const dayCompletedRevenue = dayCompleted.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
-  const dayEstimatedRevenue = dayActive.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
+  // Active list based on scope (all or day)
+  const currentScopeList = agendaScope === "day" ? dayAppointments : allAppointments;
 
-  // Day Agenda Filtered List
-  const filteredDayAppointments = dayAppointments.filter((a) => {
-    const matchesStatus =
-      filterStatus === "all"
-        ? true
-        : filterStatus === "blocked"
-          ? a.status === "blocked"
-          : a.status === filterStatus;
-    const query = searchQuery.toLowerCase().trim();
-    const matchesQuery =
-      !query ||
-      a.customer_name?.toLowerCase().includes(query) ||
-      a.customer_phone?.includes(query) ||
-      a.service_name?.toLowerCase().includes(query) ||
-      a.customer_notes?.toLowerCase().includes(query);
-    return matchesStatus && matchesQuery;
-  });
+  // Metrics for Current Scope
+  const scopeActive = currentScopeList.filter((a) => a.status !== "cancelled" && a.status !== "blocked");
+  const scopeConfirmed = currentScopeList.filter((a) => a.status === "confirmed");
+  const scopeCompleted = currentScopeList.filter((a) => a.status === "completed");
+  const scopeCompletedRevenue = scopeCompleted.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
+  const scopeEstimatedRevenue = scopeActive.reduce((acc, curr) => acc + parsePrice(curr.service_price), 0);
+
+  // Filtered & Sorted Appointments List
+  const sortedAndFilteredAppointments = useMemo(() => {
+    const sourceList = agendaScope === "day" ? dayAppointments : allAppointments;
+
+    const filtered = sourceList.filter((a) => {
+      const matchesStatus =
+        filterStatus === "all"
+          ? true
+          : filterStatus === "blocked"
+            ? a.status === "blocked"
+            : a.status === filterStatus;
+
+      const query = searchQuery.toLowerCase().trim();
+      const matchesQuery =
+        !query ||
+        a.customer_name?.toLowerCase().includes(query) ||
+        a.customer_phone?.includes(query) ||
+        a.service_name?.toLowerCase().includes(query) ||
+        a.customer_notes?.toLowerCase().includes(query) ||
+        a.date?.includes(query);
+
+      return matchesStatus && matchesQuery;
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "newest") {
+        // Most recent first
+        const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
+        const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
+        return timeB - timeA;
+      }
+      if (sortBy === "oldest") {
+        // Oldest first
+        const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
+        const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
+        return timeA - timeB;
+      }
+      if (sortBy === "price_desc") {
+        // Highest price first
+        return parsePrice(b.service_price) - parsePrice(a.service_price);
+      }
+      if (sortBy === "price_asc") {
+        // Lowest price first
+        return parsePrice(a.service_price) - parsePrice(b.service_price);
+      }
+      return 0;
+    });
+  }, [agendaScope, dayAppointments, allAppointments, filterStatus, searchQuery, sortBy]);
 
   // =========================================================================
   // MULTI-PERIOD STATS CALCULATIONS (FASE 1 & FASE 2)
@@ -795,97 +836,248 @@ export default function AdminAgenda() {
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: AGENDA & SLOTS DIÁRIOS                                             */}
+        {/* TAB 1: AGENDA & MARCAÇÕES (COM FILTROS & ORDENAÇÃO)                       */}
         {/* ========================================================================= */}
         {activeTab === "agenda" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Date Navigator & Filter Control Bar */}
-            <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
-              {/* Day Stepper */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => changeDay(-1)}
-                  className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
-                  title="Dia Anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                  className="px-3.5 py-2 rounded-xl border border-[#C89B58]/30 bg-[#C89B58]/15 hover:bg-[#C89B58]/25 text-[#E5C268] text-xs font-bold cursor-pointer transition-colors font-mono"
-                >
-                  Hoje
-                </button>
-                <button
-                  type="button"
-                  onClick={() => changeDay(1)}
-                  className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
-                  title="Dia Seguinte"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <span className="text-sm font-bold capitalize ml-2 text-white font-serif">
-                  {formattedPortugueseDate}
-                </span>
-              </div>
+            {/* View Scope & Controls Header */}
+            <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-4 shadow-lg">
+              
+              {/* Row 1: Scope Toggle & Date Stepper */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-white/5">
+                {/* Scope Toggle */}
+                <div className="flex items-center gap-1.5 p-1 bg-black/40 border border-white/10 rounded-xl w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setAgendaScope("all")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                      agendaScope === "all"
+                        ? "bg-[#C89B58] text-black shadow-md font-black"
+                        : "text-[#9E9EA7] hover:text-white"
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Todas as Marcações</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      agendaScope === "all" ? "bg-black/20 text-black font-bold" : "bg-white/10 text-white"
+                    }`}>
+                      {allAppointments.length}
+                    </span>
+                  </button>
 
-              {/* Search & Status Filters */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                {/* Search Input */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E9EA7]" />
-                  <input
-                    type="text"
-                    placeholder="Pesquisar cliente ou corte..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58] w-full sm:w-48"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setAgendaScope("day")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                      agendaScope === "day"
+                        ? "bg-[#C89B58] text-black shadow-md font-black"
+                        : "text-[#9E9EA7] hover:text-white"
+                    }`}
+                  >
+                    <CalendarDays className="w-3.5 h-3.5" />
+                    <span>Agenda do Dia</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      agendaScope === "day" ? "bg-black/20 text-black font-bold" : "bg-white/10 text-white"
+                    }`}>
+                      {dayAppointments.length}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Status Pills */}
-                <div className="flex items-center gap-1 overflow-x-auto p-0.5 bg-black/30 rounded-xl border border-white/5">
-                  {["all", "confirmed", "completed", "cancelled", "blocked"].map((st) => (
+                {/* Day Stepper (Active in 'day' scope) */}
+                {agendaScope === "day" && (
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
-                      key={st}
                       type="button"
-                      onClick={() => setFilterStatus(st)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        filterStatus === st
-                          ? "bg-[#C89B58] text-black shadow-sm font-bold"
-                          : "text-[#9E9EA7] hover:text-white"
-                      }`}
+                      onClick={() => changeDay(-1)}
+                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
+                      title="Dia Anterior"
                     >
-                      {st === "all"
-                        ? "Todos"
-                        : st === "confirmed"
-                          ? "Confirmados"
-                          : st === "completed"
-                            ? "Concluídos"
-                            : st === "cancelled"
-                              ? "Cancelados"
-                              : "Bloqueios"}
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+                      className="px-3.5 py-2 rounded-xl border border-[#C89B58]/30 bg-[#C89B58]/15 hover:bg-[#C89B58]/25 text-[#E5C268] text-xs font-bold cursor-pointer transition-colors font-mono"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changeDay(1)}
+                      className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white cursor-pointer transition-colors"
+                      title="Dia Seguinte"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-bold capitalize ml-1 text-white font-serif">
+                      {formattedPortugueseDate}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 2: Search, Status Filter & Sorting Dropdown */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* Search & Status Pills */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-grow">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#9E9EA7]" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar cliente, telefone ou serviço..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8 pr-3 py-2 text-xs rounded-xl bg-black/40 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#C89B58] w-full sm:w-60 transition-colors"
+                    />
+                  </div>
+
+                  {/* Status Pills */}
+                  <div className="flex items-center gap-1 overflow-x-auto p-1 bg-black/30 rounded-xl border border-white/5">
+                    {["all", "confirmed", "completed", "cancelled", "blocked"].map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setFilterStatus(st)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          filterStatus === st
+                            ? "bg-[#C89B58] text-black shadow-sm font-bold"
+                            : "text-[#9E9EA7] hover:text-white"
+                        }`}
+                      >
+                        {st === "all"
+                          ? "Todos"
+                          : st === "confirmed"
+                            ? "Confirmados"
+                            : st === "completed"
+                              ? "Concluídos"
+                              : st === "cancelled"
+                                ? "Cancelados"
+                                : "Bloqueios"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 🔽 SORTING DROPDOWN (DROPBOX DE ORDENAÇÃO) */}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-black/40 border border-white/10 hover:border-[#C89B58]/40 text-xs font-medium text-white flex items-center justify-between gap-2.5 cursor-pointer transition-all shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#C89B58]" />
+                      <span className="text-[#9E9EA7]">Ordenar:</span>
+                      <span className="font-bold text-[#E5C268]">
+                        {sortBy === "newest"
+                          ? "Mais Recentes"
+                          : sortBy === "oldest"
+                            ? "Mais Antigos"
+                            : sortBy === "price_desc"
+                              ? "Preço: Mais Caro"
+                              : "Preço: Mais Barato"}
+                      </span>
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-[#9E9EA7] transition-transform ${isSortDropdownOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {isSortDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-20" onClick={() => setIsSortDropdownOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-[#121318] border border-white/15 rounded-xl p-1.5 shadow-2xl z-30 space-y-1 animate-scaleIn">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSortBy("newest");
+                            setIsSortDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                            sortBy === "newest" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Mais recentes primeiro</span>
+                          </div>
+                          {sortBy === "newest" && <Check className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSortBy("oldest");
+                            setIsSortDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                            sortBy === "oldest" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <CalendarIcon className="w-3.5 h-3.5" />
+                            <span>Mais antigos primeiro</span>
+                          </div>
+                          {sortBy === "oldest" && <Check className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <div className="h-px bg-white/10 my-1" />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSortBy("price_desc");
+                            setIsSortDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                            sortBy === "price_desc" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Euro className="w-3.5 h-3.5" />
+                            <span>Preço: Mais Caro</span>
+                          </div>
+                          {sortBy === "price_desc" && <Check className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSortBy("price_asc");
+                            setIsSortDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                            sortBy === "price_asc" ? "bg-[#C89B58] text-black font-bold" : "text-white hover:bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Euro className="w-3.5 h-3.5" />
+                            <span>Preço: Mais Barato</span>
+                          </div>
+                          {sortBy === "price_asc" && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Studio Metrics Cards for Selected Day */}
+            {/* Studio Metrics Cards for Current Scope */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Total Marcações */}
               <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">Total Marcações</p>
-                <p className="text-2xl font-mono font-bold text-white">{dayAppointments.length}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#9E9EA7]">
+                  {agendaScope === "all" ? "Total de Pedidos" : "Total do Dia"}
+                </p>
+                <p className="text-2xl font-mono font-bold text-white">{currentScopeList.length}</p>
               </div>
 
               {/* Confirmadas */}
               <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Confirmadas</p>
                 <p className="text-2xl font-mono font-bold text-emerald-400">
-                  {dayConfirmed.length}
+                  {scopeConfirmed.length}
                 </p>
               </div>
 
@@ -893,51 +1085,61 @@ export default function AdminAgenda() {
               <div className="p-4 rounded-2xl bg-[#111319] border border-white/10 space-y-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Concluídas</p>
                 <p className="text-2xl font-mono font-bold text-sky-400">
-                  {dayCompleted.length}
+                  {scopeCompleted.length}
                 </p>
               </div>
 
               {/* Faturação Concluída */}
               <div className="p-4 rounded-2xl bg-[#111319] border border-sky-500/30 bg-gradient-to-br from-[#111319] to-sky-500/10 space-y-1 shadow-lg shadow-sky-500/5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Faturação Concluída</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">Faturação Realizada</p>
                 <p className="text-2xl font-mono font-bold text-sky-300">
-                  {dayCompletedRevenue.toFixed(2)} €
+                  {scopeCompletedRevenue.toFixed(2)} €
                 </p>
               </div>
 
               {/* Faturação Prevista Total */}
               <div className="p-4 rounded-2xl bg-[#111319] border border-[#C89B58]/40 bg-gradient-to-br from-[#111319] to-[#C89B58]/15 space-y-1 shadow-lg shadow-[#C89B58]/10 col-span-2 sm:col-span-1">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-[#E5C268]">Faturação Prevista</p>
-                <p className="text-2xl font-mono font-bold text-[#E5C268]">{dayEstimatedRevenue.toFixed(2)} €</p>
+                <p className="text-2xl font-mono font-bold text-[#E5C268]">{scopeEstimatedRevenue.toFixed(2)} €</p>
               </div>
             </div>
 
-            {/* Timeline List of Appointments for Day */}
+            {/* Timeline & Ordered List of Appointments */}
             <div className="space-y-3">
               {isLoading ? (
                 <div className="py-20 text-center space-y-3 bg-[#111319] rounded-2xl border border-white/10">
                   <div className="w-9 h-9 border-2 border-[#C89B58] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs text-[#9E9EA7] font-mono">A carregar agendamentos do dia...</p>
+                  <p className="text-xs text-[#9E9EA7] font-mono">A carregar agendamentos...</p>
                 </div>
-              ) : filteredDayAppointments.length === 0 ? (
+              ) : sortedAndFilteredAppointments.length === 0 ? (
                 <div className="p-14 text-center space-y-3 rounded-2xl bg-[#111319] border border-white/10">
                   <CalendarIcon className="w-10 h-10 text-[#9E9EA7] mx-auto opacity-40" />
                   <h3 className="text-sm font-bold text-white">Nenhuma marcação encontrada</h3>
                   <p className="text-xs text-[#9E9EA7] max-w-sm mx-auto">
                     {searchQuery
                       ? "Nenhum resultado corresponde à sua pesquisa."
-                      : `Não existem marcações registadas para ${formattedPortugueseDate}.`}
+                      : agendaScope === "all"
+                        ? "Ainda não existem marcações registadas no sistema."
+                        : `Não existem marcações registadas para ${formattedPortugueseDate}.`}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredDayAppointments.map((appt) => {
+                  {sortedAndFilteredAppointments.map((appt) => {
                     const isCancelled = appt.status === "cancelled";
                     const isCompleted = appt.status === "completed";
                     const isBlocked = appt.status === "blocked";
 
+                    const apptFormattedDate = appt.date
+                      ? new Date(appt.date).toLocaleDateString("pt-PT", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short"
+                        })
+                      : "";
+
                     const whatsAppClientText = encodeURIComponent(
-                      `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota Do Corte para ${formattedPortugueseDate} às ${appt.time} (${appt.service_name}). Até já!`
+                      `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota Do Corte para ${appt.formatted_date || appt.date} às ${appt.time} (${appt.service_name}). Até já!`
                     );
 
                     // Render Blocked Slot differently
@@ -960,6 +1162,11 @@ export default function AdminAgenda() {
                                 <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                                   Horário Bloqueado
                                 </span>
+                                {appt.date && (
+                                  <span className="text-[10px] font-mono text-amber-400/80">
+                                    • {appt.date}
+                                  </span>
+                                )}
                               </div>
                               <p className="text-[11px] text-[#9E9EA7] mt-0.5">
                                 Duração: {appt.service_duration} min • Indisponível no agendamento público
@@ -993,8 +1200,13 @@ export default function AdminAgenda() {
                       >
                         {/* Time Slot & Customer Info */}
                         <div className="flex items-start gap-4">
-                          {/* Time Badge */}
-                          <div className="px-4 py-3 rounded-2xl bg-black/40 border border-white/10 text-center font-mono shrink-0 shadow-inner">
+                          {/* Time & Date Badge */}
+                          <div className="px-4 py-3 rounded-2xl bg-black/40 border border-white/10 text-center font-mono shrink-0 shadow-inner min-w-[80px]">
+                            {appt.date && (
+                              <span className="text-[10px] font-bold text-[#9E9EA7] uppercase tracking-wider block border-b border-white/5 pb-0.5 mb-1">
+                                {apptFormattedDate}
+                              </span>
+                            )}
                             <span className="text-lg font-bold text-[#E5C268] block">
                               {appt.time}
                             </span>
@@ -1078,9 +1290,23 @@ export default function AdminAgenda() {
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "completed")}
                               className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Marcar como Concluído"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>Concluir</span>
+                            </button>
+                          )}
+
+                          {/* Re-confirm */}
+                          {isCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(appt.id, "confirmed")}
+                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Reabrir como Confirmado"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Reabrir</span>
                             </button>
                           )}
 
@@ -1089,12 +1315,23 @@ export default function AdminAgenda() {
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(appt.id, "cancelled")}
-                              className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-white/5 hover:bg-red-500/15 border border-white/10 hover:border-red-500/30 text-[#9E9EA7] hover:text-red-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Cancelar marcação"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               <span>Cancelar</span>
                             </button>
                           )}
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAppointment(appt.id)}
+                            className="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-[#9E9EA7] hover:text-red-400 transition-colors cursor-pointer"
+                            title="Eliminar definitivamente"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     );
