@@ -141,9 +141,7 @@ export default function LocationHours() {
                 src="https://maps.google.com/maps?q=40.0704142,-8.8054765&hl=pt&z=16&output=embed"
                 width="100%"
                 height="100%"
-                className={`w-full h-full min-h-[340px] rounded-2xl border-0 transition-opacity ${
-                  isDark ? "filter invert contrast-125 opacity-80 hover:opacity-100" : "grayscale-10 contrast-105"
-                }`}
+                className="w-full h-full min-h-[340px] rounded-2xl border-0 shadow-inner"
                 loading="lazy"
                 allowFullScreen
               ></iframe>
