@@ -263,3 +263,105 @@ export async function deleteAppointment(appointmentId) {
   return { success: true };
 }
 
+/**
+ * Fetch all appointments across all dates (for analytics, multi-period metrics & CRM)
+ */
+export async function getAllAppointments() {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*, services(*)")
+        .order("start_time", { ascending: false });
+
+      if (!error && data) {
+        return data.map((d) => ({
+          id: d.id,
+          customer_name: d.customer_name,
+          customer_phone: d.customer_phone,
+          customer_email: d.customer_email,
+          customer_notes: d.notes || d.customer_notes,
+          service_name: d.services?.name || "Serviço",
+          service_price: d.services?.price ? `${d.services.price} €` : "15,00 €",
+          service_duration: d.services?.duration_minutes || 30,
+          barber_name: "Gabriel Silva",
+          date: d.start_time?.split("T")[0] || "",
+          time: d.start_time
+            ? new Date(d.start_time).toLocaleTimeString("pt-PT", {
+                hour: "2-digit",
+                minute: "2-digit"
+              })
+            : "",
+          start_time: d.start_time,
+          status: d.status,
+          created_at: d.created_at
+        }));
+      }
+    } catch (err) {
+      console.warn("Supabase fetch all error, falling back to local storage:", err);
+    }
+  }
+
+  return getLocalAppointments();
+}
+
+/**
+ * Create a blocked time slot (Pausa / Formação / Folga)
+ */
+export async function createBlockSlot({
+  date,
+  startTime,
+  endTime,
+  reason = "Pausa / Indisponível"
+}) {
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [endH, endM] = endTime.split(":").map(Number);
+  const startMinutes = (startH || 10) * 60 + (startM || 0);
+  const endMinutes = (endH || 11) * 60 + (endM || 0);
+
+  const duration = Math.max(30, endMinutes - startMinutes);
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const startTimeIso = new Date(`${date}T${startTime}:00`).toISOString();
+      await supabase.from("appointments").insert({
+        customer_name: `[BLOQUEIO] ${reason}`,
+        customer_phone: "---",
+        notes: reason,
+        status: "blocked",
+        start_time: startTimeIso
+      });
+    } catch (err) {
+      console.warn("Supabase block slot insert error:", err);
+    }
+  }
+
+  const all = getLocalAppointments();
+  const newBlock = {
+    id: "block-" + Date.now(),
+    shop_name: shopInfo.name,
+    shop_phone: shopInfo.phone,
+    service_id: "bloqueio",
+    service_name: `Bloqueio: ${reason}`,
+    service_price: "0,00 €",
+    service_duration: duration,
+    barber_name: "Gabriel Silva",
+    customer_name: `[BLOQUEIO] ${reason}`,
+    customer_phone: "---",
+    customer_notes: reason,
+    date,
+    time: startTime,
+    start_time: `${date}T${startTime}:00`,
+    formatted_date: new Date(date).toLocaleDateString("pt-PT"),
+    formatted_time: startTime,
+    status: "blocked",
+    created_at: new Date().toISOString()
+  };
+
+  all.push(newBlock);
+  saveLocalAppointments(all);
+
+  return { success: true, block: newBlock };
+}
+
+

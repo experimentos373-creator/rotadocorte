@@ -126,11 +126,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const currentService =
     servicesData.find((s) => s.id === selectedServiceId) || servicesData[3];
 
-  // Helper to generate next 14 selectable days
+  // Helper to generate next 31 selectable days (Full Month)
   const getNextDays = () => {
     const days = [];
     const base = new Date();
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 31; i++) {
       const d = new Date(base);
       d.setDate(base.getDate() + i);
       const iso = d.toISOString().split("T")[0];
@@ -391,8 +391,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* Horizontal Day Carousel */}
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-1">
+            {/* Horizontal / Grid Day Selector (Full Month 31 Days) */}
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-1 max-h-[320px] overflow-y-auto pr-1">
               {getNextDays().map((d) => {
                 const isSelected = selectedDate === d.iso;
                 return (
