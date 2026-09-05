@@ -219,3 +219,42 @@ export function downloadIcsFile({
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Sends an automated real-time WhatsApp alert to Admin whenever a new booking is created
+ */
+export async function sendAdminWhatsAppNotification({
+  serviceName,
+  servicePrice,
+  dateFormatted,
+  time,
+  clientName,
+  phone,
+  notes
+}) {
+  // Active Admin Notification Config (Developer test number; easily swapped for Gabriel's)
+  const ADMIN_PHONE = import.meta.env.VITE_ADMIN_WHATSAPP_PHONE || "351926256842";
+  const ADMIN_APIKEY = import.meta.env.VITE_ADMIN_WHATSAPP_APIKEY || "1825930";
+
+  let msg = `✂️ *NOVO AGENDAMENTO — Rota do Corte*\n\n`;
+  msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
+  msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
+  msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
+  msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
+  if (notes) msg += `📝 *Notas:* ${notes}\n`;
+  msg += `\n📍 *Localização:* ${shopInfo.addressShort}\n`;
+  msg += `_Notificação automática em tempo real._`;
+
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${ADMIN_PHONE}&text=${encodeURIComponent(
+    msg
+  )}&apikey=${ADMIN_APIKEY}`;
+
+  try {
+    // Mode 'no-cors' fires the API endpoint safely in background without CORS restriction
+    await fetch(url, { mode: "no-cors" });
+    return { success: true };
+  } catch (err) {
+    console.warn("CallMeBot alert non-blocking warning:", err);
+    return { success: false, error: err };
+  }
+}

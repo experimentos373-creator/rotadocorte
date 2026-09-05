@@ -30,9 +30,9 @@ import BarberBackgroundWatermark from "./BarberWatermarks";
 import {
   buildWhatsAppMessage,
   buildGoogleCalendarUrl,
-  downloadIcsFile
+  downloadIcsFile,
+  sendAdminWhatsAppNotification
 } from "../lib/bookingEngine";
-import { sendGabrielWhatsAppNotification } from "../lib/whatsappNotification";
 
 export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const { t } = useLanguage();
@@ -195,16 +195,18 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         setBookingResult(res.appointment);
         setStep(5);
 
-        // 📲 Fire automatic WhatsApp notification to Gabriel (+351 935 190 491)
-        sendGabrielWhatsAppNotification({
-          customerName: clientName.trim(),
-          customerPhone: clientPhone.trim(),
-          serviceName: currentService.name,
-          servicePrice: currentService.priceFormatted,
-          date: formattedDatePortuguese,
+        // Dispara notificação automática em tempo real para o WhatsApp do Administrador
+        sendAdminWhatsAppNotification({
+          serviceName: currentService?.name || selectedServiceId,
+          servicePrice: currentService?.priceFormatted || "15,00 €",
+          dateFormatted: formattedDatePortuguese,
           time: selectedTime,
+          clientName: clientName.trim(),
+          phone: clientPhone.trim(),
           notes: clientNotes.trim()
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn("Falha no envio de notificação WhatsApp (não-bloqueante):", err);
+        });
 
         try {
           confetti({
