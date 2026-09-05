@@ -259,17 +259,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
             </div>
 
-            {/* Right: Step Indicator Pill + Close Button */}
+            {/* Right: Close Button */}
             <div className="flex items-center gap-2.5 shrink-0">
-              {step < 5 && (
-                <span className={`text-[10px] sm:text-xs font-semibold px-3 py-0.5 rounded-full border ${
-                  isDark
-                    ? "border-[#C6924B]/35 bg-[#C6924B]/10 text-[#D8A763]"
-                    : "border-neutral-300 bg-neutral-100 text-neutral-800"
-                }`}>
-                  Passo {step} de 4
-                </span>
-              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -310,7 +301,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {step === 1 && (
           <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             {/* Title & Subtitle with Fraunces Personality */}
-            <div className="shrink-0 pb-1.5">
+            <div className="shrink-0 pb-2">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
                 isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
               }`}>
@@ -323,8 +314,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </p>
             </div>
 
-            {/* Zero-Scroll Compact Grid: Clear hierarchy with single accent card */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
+            {/* Zero-Scroll Compact Grid: Clear hierarchy with generous spacing */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
               {servicesData.map((s, idx) => {
                 const isSelected = selectedServiceId === s.id;
                 const isTopSeller = s.id === "corte-barba-terapia";
