@@ -31,124 +31,6 @@ import {
   downloadIcsFile
 } from "../lib/bookingEngine";
 
-// Precise Line-Art Barber Icons matching authentic barbershop tools
-function ServiceAvatar({ serviceId, isSelected, isDark }) {
-  const containerClass = `w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0 border transition-colors ${
-    isSelected
-      ? isDark
-        ? "bg-[#C89B58]/25 border-[#C89B58] text-[#E5C268]"
-        : "bg-[#FAF0E4] border-[#C89B58] text-[#8C601E]"
-      : isDark
-        ? "bg-white/5 border-white/10 text-[#C89B58]"
-        : "bg-[#F7F5F0] border-[#E8E4DC] text-[#C89B58]"
-  }`;
-
-  // 1. Corte e Barba Terapia: Authentic Straight Razor + Barber Shears Combo
-  if (serviceId === "corte-barba-terapia") {
-    return (
-      <div className={containerClass}>
-        <svg
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C89B58]"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Straight razor blade & handle */}
-          <path d="M3 17l8-8 3 1-7 7H3v-2z" />
-          <path d="M11 9l6.5-6.5a2.12 2.12 0 0 1 3 3L14 12" />
-          <circle cx="11" cy="9" r="1" fill="currentColor" />
-        </svg>
-      </div>
-    );
-  }
-
-  // 2. Corte de Cabelo: Barber Scissors & Haircut Styling
-  if (serviceId === "corte-cabelo") {
-    return (
-      <div className={containerClass}>
-        <svg
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C89B58]"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="6" cy="6" r="3" />
-          <circle cx="6" cy="18" r="3" />
-          <line x1="20" y1="4" x2="8.12" y2="15.88" />
-          <line x1="14.47" y1="14.48" x2="20" y2="20" />
-          <line x1="8.12" y1="8.12" x2="12" y2="12" />
-        </svg>
-      </div>
-    );
-  }
-
-  // 3. Combo Premium: Prestige VIP Crown
-  if (serviceId === "combo-premium") {
-    return (
-      <div className={containerClass}>
-        <svg
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C89B58]"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z" />
-          <path d="M5 20h14" />
-        </svg>
-      </div>
-    );
-  }
-
-  // 4. Corte de Cabelo + Sobrancelha: Precision Detail Stylus / Eyebrow Blade
-  if (serviceId === "corte-sobrancelha") {
-    return (
-      <div className={containerClass}>
-        <svg
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C89B58]"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 14c4-4 8-6 16-6-2 3-5 5-9 6-2.5.6-5 .6-7 0z" />
-          <path d="M14 6l4-3 2 2-3 4" />
-        </svg>
-      </div>
-    );
-  }
-
-  // 5. Barba Terapia: Steaming Hot Towel & Ozónio Ritual
-  return (
-    <div className={containerClass}>
-      <svg
-        className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C89B58]"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M7 4c0 1.5-1 2-1 3.5s1 2 1 3.5" />
-        <path d="M12 4c0 1.5-1 2-1 3.5s1 2 1 3.5" />
-        <path d="M17 4c0 1.5-1 2-1 3.5s1 2 1 3.5" />
-        <path d="M5 14c0 4 3 7 7 7s7-3 7-7v-1H5v1z" />
-      </svg>
-    </div>
-  );
-}
-
 export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -460,34 +342,30 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                           : "bg-white border-[#E8E4DC] hover:border-[#C89B58]/40 hover:bg-neutral-50 shadow-xs"
                     }`}
                   >
-                    {/* Top Section: Avatar + Title & Info + Selected Indicator */}
+                    {/* Top Section: Title & Info + Selected Indicator */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2 min-w-0 flex-1">
-                        <ServiceAvatar serviceId={s.id} isSelected={isSelected} isDark={isDark} />
-
-                        <div className="min-w-0 flex-1 pt-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-xs sm:text-[13px] font-bold leading-tight truncate ${
-                              isDark ? "text-white" : "text-[#18181B]"
-                            }`}>
-                              {s.name}
-                            </span>
-                            {s.badge && (
-                              <span className={`text-[7.5px] sm:text-[8px] px-1.5 py-0.2 rounded-md font-semibold border ${
-                                isDark
-                                  ? "bg-[#C89B58]/15 text-[#E5C268] border-[#C89B58]/35"
-                                  : "bg-[#FAF0E4] text-[#8C601E] border-[#E8D4BE]"
-                              }`}>
-                                {s.badge}
-                              </span>
-                            )}
-                          </div>
-                          <p className={`text-[10px] sm:text-[11px] mt-0.5 leading-tight line-clamp-1 sm:line-clamp-2 ${
-                            isDark ? "text-[#9E9EA7]" : "text-[#71717A]"
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-xs sm:text-[13px] font-bold leading-tight truncate ${
+                            isDark ? "text-white" : "text-[#18181B]"
                           }`}>
-                            {s.shortDesc}
-                          </p>
+                            {s.name}
+                          </span>
+                          {s.badge && (
+                            <span className={`text-[7.5px] sm:text-[8px] px-1.5 py-0.2 rounded-md font-semibold border ${
+                              isDark
+                                ? "bg-[#C89B58]/15 text-[#E5C268] border-[#C89B58]/35"
+                                : "bg-[#FAF0E4] text-[#8C601E] border-[#E8D4BE]"
+                            }`}>
+                              {s.badge}
+                            </span>
+                          )}
                         </div>
+                        <p className={`text-[10px] sm:text-[11px] mt-0.5 leading-tight line-clamp-1 sm:line-clamp-2 ${
+                          isDark ? "text-[#9E9EA7]" : "text-[#71717A]"
+                        }`}>
+                          {s.shortDesc}
+                        </p>
                       </div>
 
                       {/* Subtle selection check */}
