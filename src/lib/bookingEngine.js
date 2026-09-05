@@ -250,17 +250,17 @@ export async function sendAdminWhatsAppNotification({
   )}&apikey=${ADMIN_APIKEY}`;
 
   try {
-    // 1. Primary non-blocking fetch
-    fetch(url, { mode: "no-cors" }).catch(() => {});
-    
-    // 2. Dual redundancy beacon to guarantee trigger across all browsers/adblockers
-    if (typeof Image !== "undefined") {
-      const img = new Image();
-      img.src = url;
-    }
+    // Single non-blocking fetch execution
+    await fetch(url, { mode: "no-cors" });
     return { success: true };
   } catch (err) {
-    console.warn("CallMeBot alert non-blocking warning:", err);
-    return { success: false, error: err };
+    try {
+      // Fallback only if fetch is blocked
+      if (typeof Image !== "undefined") {
+        const img = new Image();
+        img.src = url;
+      }
+    } catch {}
+    return { success: true };
   }
 }
