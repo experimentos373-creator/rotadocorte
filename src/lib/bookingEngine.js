@@ -236,7 +236,7 @@ export async function sendAdminWhatsAppNotification({
   const ADMIN_PHONE = import.meta.env.VITE_ADMIN_WHATSAPP_PHONE || "351926256842";
   const ADMIN_APIKEY = import.meta.env.VITE_ADMIN_WHATSAPP_APIKEY || "1825930";
 
-  let msg = `✂️ *NOVO AGENDAMENTO — Rota do Corte*\n\n`;
+  let msg = `✂️ *Rota do Corte — Tem um agendamento previsto!*\n\n`;
   msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
   msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
   msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
