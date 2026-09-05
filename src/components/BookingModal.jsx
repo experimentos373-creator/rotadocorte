@@ -26,6 +26,7 @@ import { servicesData, shopInfo } from "../data/services";
 import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 import { getAvailableSlots, createBooking } from "../lib/supabase";
+import BarberBackgroundWatermark from "./BarberWatermarks";
 import {
   buildWhatsAppMessage,
   buildGoogleCalendarUrl,
@@ -237,10 +238,13 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         }`}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Vintage Barber Tools Background Vector Watermarks */}
+        <BarberBackgroundWatermark isDark={isDark} />
+
         {/* ========================================================================= */}
-        {/* TOP BAR: BRAND LOGO + STEP PILL + CLOSE BUTTON                            */}
+        {/* TOP BAR: BRAND LOGO + CLOSE BUTTON                                        */}
         {/* ========================================================================= */}
-        <div className="space-y-2.5 shrink-0 pb-1.5">
+        <div className="relative z-10 space-y-2.5 shrink-0 pb-1.5">
           <div className="flex items-center justify-between gap-3">
             {/* Left: Scissors Brand Mark */}
             <div className="flex items-center gap-2.5">
@@ -299,7 +303,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 1: ESCOLHA O SERVIÇO (ZERO-SCROLL ERGONOMIC COMPACT LIST/GRID)      */}
         {/* ========================================================================= */}
         {step === 1 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             {/* Title & Subtitle with Fraunces Personality */}
             <div className="shrink-0 pb-2">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
@@ -328,14 +332,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     } ${
                       isSelected
                         ? isDark
-                          ? "bg-[#261E18] border-[#C6924B] ring-1 ring-[#C6924B] shadow-md shadow-[#C6924B]/15"
+                          ? "bg-[#241D17]/95 border-[#C6924B] ring-1 ring-[#C6924B] shadow-md shadow-[#C6924B]/15 backdrop-blur-xs"
                           : "bg-[#FAF6F0] border-[#C6924B] ring-1 ring-[#C6924B] shadow-xs"
                         : isTopSeller
                           ? isDark
-                            ? "bg-[#201A15] border-[#C6924B]/60 hover:border-[#C6924B] shadow-xs"
+                            ? "bg-[#1F1914]/95 border-[#C6924B]/60 hover:border-[#C6924B] shadow-xs backdrop-blur-xs"
                             : "bg-[#FAF8F5] border-[#C6924B]/50 hover:border-[#C6924B] shadow-xs"
                           : isDark
-                            ? "bg-[#1B1613] border-[#2D251F] hover:border-[#3F342B] hover:bg-[#201A15]"
+                            ? "bg-[#181411]/90 border-[#2D251F] hover:border-[#3F342B] hover:bg-[#1E1915]/95 backdrop-blur-xs"
                             : "bg-white border-[#E8E4DC] hover:border-[#C6924B]/40 hover:bg-neutral-50 shadow-xs"
                     }`}
                   >
@@ -424,7 +428,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 2: SELECIONE O DIA (CALENDÁRIO 7 COLUNAS X 5 SEMANAS)               */}
         {/* ========================================================================= */}
         {step === 2 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-2">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
                 isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
@@ -528,7 +532,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 3: ESCOLHA O HORÁRIO (MANHÃ & TARDE/NOITE + OCUPADOS)                */}
         {/* ========================================================================= */}
         {step === 3 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-2">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
                 isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
@@ -720,7 +724,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 4: OS SEUS DADOS (GENEROUS SPACING, PREMIUM INPUTS)                */}
         {/* ========================================================================= */}
         {step === 4 && (
-          <form onSubmit={handleBookingSubmit} className="flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
+          <form onSubmit={handleBookingSubmit} className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             <div className="shrink-0 pb-2">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
                 isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
@@ -875,7 +879,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 5: SUCESSO & CONFIRMAÇÃO IMEDIATA (SPACIOUS & DELIGHTFUL)           */}
         {/* ========================================================================= */}
         {step === 5 && (
-          <div className="flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 sm:py-3 animate-fadeIn max-w-2xl mx-auto w-full">
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 sm:py-3 animate-fadeIn max-w-2xl mx-auto w-full">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#C6924B]/20 border-2 border-[#C6924B] flex items-center justify-center text-[#D8A763] mx-auto shadow-lg shadow-[#C6924B]/20 shrink-0 mb-1.5">
               <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-[#C6924B]" />
             </div>
