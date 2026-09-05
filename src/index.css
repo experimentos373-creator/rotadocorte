@@ -1,30 +1,30 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Outfit", "Plus Jakarta Sans", sans-serif;
-  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-serif: "Fraunces", "Cormorant Garamond", Georgia, serif;
   
-  --color-gold-300: #EED48F;
-  --color-gold-400: #E5C268;
-  --color-gold-500: #C89B58;
-  --color-gold-600: #A87B38;
+  --color-brass-300: #E2B97E;
+  --color-brass-400: #D4A35F;
+  --color-brass-500: #C6924B;
+  --color-brass-600: #A87635;
   
-  --color-dark-950: #07080A;
-  --color-dark-900: #0D0E12;
-  --color-dark-850: #13151B;
-  --color-dark-800: #1B1E26;
-  --color-dark-700: #262A35;
+  --color-charcoal-950: #120F0D;
+  --color-charcoal-900: #171310;
+  --color-charcoal-850: #1E1915;
+  --color-charcoal-800: #25201B;
+  --color-charcoal-700: #322B24;
 }
 
 @layer base {
   :root {
-    --bg-page: #07080A;
-    --bg-card: #111318;
-    --text-main: #FAF8F5;
-    --text-muted: #9E9EA7;
-    --border-light: rgba(255, 255, 255, 0.08);
-    --accent-gold: #C89B58;
+    --bg-page: #171310;
+    --bg-card: #1E1915;
+    --text-main: #FAF6F0;
+    --text-muted: #A39B92;
+    --border-light: rgba(198, 146, 75, 0.15);
+    --accent-gold: #C6924B;
   }
 
   html {
