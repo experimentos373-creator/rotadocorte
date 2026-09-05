@@ -32,6 +32,7 @@ import {
   buildGoogleCalendarUrl,
   downloadIcsFile
 } from "../lib/bookingEngine";
+import { sendGabrielWhatsAppNotification } from "../lib/whatsappNotification";
 
 export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const { t } = useLanguage();
@@ -193,6 +194,18 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       if (res.success) {
         setBookingResult(res.appointment);
         setStep(5);
+
+        // 📲 Fire automatic WhatsApp notification to Gabriel (+351 935 190 491)
+        sendGabrielWhatsAppNotification({
+          customerName: clientName.trim(),
+          customerPhone: clientPhone.trim(),
+          serviceName: currentService.name,
+          servicePrice: currentService.priceFormatted,
+          date: formattedDatePortuguese,
+          time: selectedTime,
+          notes: clientNotes.trim()
+        }).catch(() => {});
+
         try {
           confetti({
             particleCount: 75,
