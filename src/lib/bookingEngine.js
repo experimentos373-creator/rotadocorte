@@ -250,8 +250,14 @@ export async function sendAdminWhatsAppNotification({
   )}&apikey=${ADMIN_APIKEY}`;
 
   try {
-    // Mode 'no-cors' fires the API endpoint safely in background without CORS restriction
-    await fetch(url, { mode: "no-cors" });
+    // 1. Primary non-blocking fetch
+    fetch(url, { mode: "no-cors" }).catch(() => {});
+    
+    // 2. Dual redundancy beacon to guarantee trigger across all browsers/adblockers
+    if (typeof Image !== "undefined") {
+      const img = new Image();
+      img.src = url;
+    }
     return { success: true };
   } catch (err) {
     console.warn("CallMeBot alert non-blocking warning:", err);
