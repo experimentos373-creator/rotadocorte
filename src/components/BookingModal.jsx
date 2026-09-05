@@ -261,21 +261,16 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* ========================================================================= */}
         <div className="relative z-10 space-y-2.5 shrink-0 pb-1.5">
           <div className="flex items-center justify-between gap-3">
-            {/* Left: Scissors Brand Mark */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#C6924B]/40 bg-[#C6924B]/10 flex items-center justify-center text-[#C6924B] shrink-0">
-                <Scissors className="w-3.5 h-3.5 sm:w-4 sm:h-4 -rotate-45" />
-              </div>
-              <div className="flex flex-col">
-                <span className={`text-xs sm:text-sm font-bold font-sans leading-tight ${
-                  isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-                }`}>
-                  Rota do Corte
-                </span>
-                <span className="text-[9px] sm:text-[10px] font-medium text-[#C6924B] leading-tight">
-                  Paião
-                </span>
-              </div>
+            {/* Left: Brand Name & Location */}
+            <div className="flex flex-col">
+              <span className={`text-xs sm:text-sm font-bold font-sans leading-tight ${
+                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
+              }`}>
+                Rota do Corte
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-medium text-[#C6924B] leading-tight">
+                Paião
+              </span>
             </div>
 
             {/* Right: Close Button */}
