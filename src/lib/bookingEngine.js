@@ -237,13 +237,13 @@ export async function sendAdminWhatsAppNotification({
   const ADMIN_APIKEY = import.meta.env.VITE_ADMIN_WHATSAPP_APIKEY || "1825930";
 
   let msg = `✂️ *Rota do Corte — Tem um agendamento previsto!*\n\n`;
+  msg += `----------------------------------------\n\n`;
   msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
   msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
   msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
   msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
   if (notes) msg += `📝 *Notas:* ${notes}\n`;
-  msg += `\n📍 *Localização:* ${shopInfo.addressShort}\n`;
-  msg += `_Notificação automática em tempo real._`;
+  msg += `\n----------------------------------------`;
 
   const url = `https://api.callmebot.com/whatsapp.php?phone=${ADMIN_PHONE}&text=${encodeURIComponent(
     msg
