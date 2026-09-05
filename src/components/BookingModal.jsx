@@ -545,7 +545,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             <div className="pt-3 sm:pt-4 mt-2 flex items-center justify-between gap-4 border-t border-white/10 dark:border-white/10 shrink-0 z-20">
               <div className="hidden sm:flex items-center gap-2 text-xs text-[#71717A] dark:text-[#9E9EA7] shrink-0">
                 <ShieldCheck className="w-4 h-4 text-[#C89B58] shrink-0" />
-                <span className="text-xs whitespace-nowrap">Ambiente seguro, higienizado e profissional</span>
+                <span className="text-xs whitespace-nowrap">{t.bookingModal.safeBadge || "Atendimento exclusivo • Gabriel Silva"}</span>
               </div>
               <button
                 type="button"

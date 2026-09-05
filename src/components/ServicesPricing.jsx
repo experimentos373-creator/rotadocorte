@@ -136,15 +136,17 @@ export default function ServicesPricing({ onSelectService }) {
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none"></div>
 
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
-                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md backdrop-blur-xs ${
-                      isDark
-                        ? "bg-black/80 text-[#E5C268] border border-[#C89B58]/30"
-                        : "bg-[#1C1A17]/85 text-[#FAF8F5]"
-                    }`}>
-                      {service.badge}
-                    </span>
-                  </div>
+                  {service.badge && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+                      <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md backdrop-blur-xs ${
+                        isDark
+                          ? "bg-black/80 text-[#E5C268] border border-[#C89B58]/30"
+                          : "bg-[#1C1A17]/85 text-[#FAF8F5]"
+                      }`}>
+                        {service.badge}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="absolute bottom-3 right-3 z-10">
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg backdrop-blur-xs flex items-center gap-1.5 ${

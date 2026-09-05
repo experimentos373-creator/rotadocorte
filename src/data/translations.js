@@ -107,7 +107,7 @@ export const translations = {
       nextData: "Avançar para Dados",
       confirmBooking: "Confirmar Agendamento",
       back: "Voltar",
-      safeBadge: "Ambiente seguro e profissional"
+      safeBadge: "Atendimento exclusivo • Gabriel Silva"
     },
     footer: {
       tagline: "Barbearia de Alta Precisão & Barbaterapia no Paião, Figueira da Foz.",
@@ -233,7 +233,7 @@ export const translations = {
       nextData: "Proceed to Details",
       confirmBooking: "Confirm Appointment",
       back: "Back",
-      safeBadge: "Safe & professional environment"
+      safeBadge: "Exclusive appointment • Gabriel Silva"
     },
     footer: {
       tagline: "High-Precision Barber Studio & Ozone Beard Therapy in Paião, Figueira da Foz.",
@@ -359,7 +359,7 @@ export const translations = {
       nextData: "Avanzar a los Datos",
       confirmBooking: "Confirmar Reserva",
       back: "Volver",
-      safeBadge: "Ambiente seguro y profesional"
+      safeBadge: "Atención exclusiva • Gabriel Silva"
     },
     footer: {
       tagline: "Barbería de Alta Precisión y Barbaterapia en Paião, Figueira da Foz.",
@@ -485,7 +485,7 @@ export const translations = {
       nextData: "Passer aux Coordonnées",
       confirmBooking: "Confirmer le Rendez-vous",
       back: "Retour",
-      safeBadge: "Environnement sûr et professionnel"
+      safeBadge: "Rendez-vous exclusif • Gabriel Silva"
     },
     footer: {
       tagline: "Barbier de Haute Précision & Barbothérapie à Paião, Figueira da Foz.",
