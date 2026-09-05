@@ -210,7 +210,7 @@ export function downloadIcsFile({
 }
 
 /**
- * Sends an automated real-time WhatsApp alert to Admin(s) whenever a new booking is created
+ * Sends an automated real-time WhatsApp alert to Gabriel whenever a new booking is created
  */
 export async function sendAdminWhatsAppNotification({
   serviceName,
@@ -221,11 +221,9 @@ export async function sendAdminWhatsAppNotification({
   phone,
   notes
 }) {
-  // Configured WhatsApp notification recipients (Gabriel + Paulo for testing)
-  const ADMIN_RECIPIENTS = [
-    { phone: "351935190491", apikey: "1726665", name: "Gabriel" },
-    { phone: "351926256842", apikey: "1825930", name: "Paulo" }
-  ];
+  // Gabriel (Rota do Corte - Barbeiro)
+  const ADMIN_PHONE = import.meta.env.VITE_ADMIN_WHATSAPP_PHONE || "351935190491";
+  const ADMIN_APIKEY = import.meta.env.VITE_ADMIN_WHATSAPP_APIKEY || "1726665";
 
   let msg = `✂️ *Rota do Corte — Tem um agendamento previsto!*\n\n`;
   msg += `----------------------------------------\n\n`;
@@ -236,24 +234,22 @@ export async function sendAdminWhatsAppNotification({
   if (notes) msg += `📝 *Notas:* ${notes}\n`;
   msg += `\n----------------------------------------`;
 
-  const encodedMsg = encodeURIComponent(msg);
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${ADMIN_PHONE}&text=${encodeURIComponent(
+    msg
+  )}&apikey=${ADMIN_APIKEY}`;
 
-  // Dispatch in parallel to all active recipients
-  const promises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
-    if (!recipientPhone || !recipientKey) return;
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${recipientPhone}&text=${encodedMsg}&apikey=${recipientKey}`;
+  try {
+    // Single non-blocking fetch execution directly to Gabriel's WhatsApp
+    await fetch(url, { mode: "no-cors" });
+    return { success: true };
+  } catch (err) {
     try {
-      await fetch(url, { mode: "no-cors" });
-    } catch (err) {
-      try {
-        if (typeof Image !== "undefined") {
-          const img = new Image();
-          img.src = url;
-        }
-      } catch {}
-    }
-  });
-
-  await Promise.allSettled(promises);
-  return { success: true };
+      // Fallback only if fetch is blocked
+      if (typeof Image !== "undefined") {
+        const img = new Image();
+        img.src = url;
+      }
+    } catch {}
+    return { success: true };
+  }
 }
