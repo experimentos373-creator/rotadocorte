@@ -15,14 +15,6 @@ export function generateAvailableSlots({
   slotIntervalMinutes = 30,
   minNoticeHours = 1
 }) {
-  const service = servicesData.find((s) => s.id === serviceId) || servicesData[3];
-  
-  let durationMinutes = 30;
-  if (service?.duration) {
-    const parsed = parseInt(service.duration, 10);
-    if (!isNaN(parsed) && parsed > 0) durationMinutes = parsed;
-  }
-
   const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay(); // 0 = Sunday
 
@@ -35,7 +27,7 @@ export function generateAvailableSlots({
   const shiftStartMinutes = 10 * 60; // 10:00
   const shiftEndMinutes = 22 * 60;   // 22:00
 
-  // Lunch break: 13:00 - 14:00
+  // Lunch break: 13:00 - 14:00 (13:00 and 13:30 are closed for lunch)
   const lunchStartMinutes = 13 * 60;
   const lunchEndMinutes = 14 * 60;
 
@@ -51,16 +43,15 @@ export function generateAvailableSlots({
 
   for (
     let slotStart = shiftStartMinutes;
-    slotStart + durationMinutes <= shiftEndMinutes;
-    slotStart += slotIntervalMinutes // Strictly 30-minute increments!
+    slotStart < shiftEndMinutes;
+    slotStart += slotIntervalMinutes // Strictly 30-minute increments: 10:00, 10:30, 11:00 ... 21:30
   ) {
-    const slotEnd = slotStart + durationMinutes;
     const timeString = minutesToTimeString(slotStart);
     const h = Math.floor(slotStart / 60);
     const period = h < 13 ? "morning" : h < 19 ? "afternoon" : "evening";
 
-    // Skip if overlapping with lunch break
-    if (slotStart < lunchEndMinutes && slotEnd > lunchStartMinutes) {
+    // Skip lunch hours (13:00 and 13:30)
+    if (slotStart >= lunchStartMinutes && slotStart < lunchEndMinutes) {
       continue;
     }
 
@@ -76,12 +67,10 @@ export function generateAvailableSlots({
       continue;
     }
 
-    // Check conflict with existing bookings (active appointments)
+    // Check conflict: exactly 1 booking = 1 slot occupied (strictly the exact time of that booking)
     const hasConflict = existingBookings.some((b) => {
       if (b.date !== date || b.status === "cancelled") return false;
-      const bStart = timeStringToMinutes(b.time);
-      const bEnd = bStart + (b.duration || 30);
-      return slotStart < bEnd && slotEnd > bStart;
+      return b.time === timeString;
     });
 
     if (hasConflict) {
