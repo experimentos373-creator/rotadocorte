@@ -110,9 +110,9 @@ function MainLayout() {
         />
       )}
 
-      {/* Floating Widgets (Hidden in Admin Dashboard) */}
-      {!isAdmin && <WhatsAppButton />}
-      {!isAdmin && <FloatingCTA onOpenBooking={handleOpenBooking} />}
+      {/* Floating Widgets (Hidden in Admin Dashboard and during active modals) */}
+      {!isAdmin && !isBookingOpen && !activeLegalModal && <WhatsAppButton />}
+      {!isAdmin && !isBookingOpen && !activeLegalModal && <FloatingCTA onOpenBooking={handleOpenBooking} />}
 
       {/* Modals & Consent */}
       <BookingModal

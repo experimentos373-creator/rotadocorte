@@ -21,20 +21,20 @@ export const shopInfo = {
 
 export const servicesData = [
   {
-    id: "barba-terapia",
-    name: "Barba Terapia",
-    price: 5.0,
-    priceFormatted: "5,00 €",
-    duration: "10 min",
-    badge: null,
-    shortDesc: "Ritual completo com toalha aquecida, vaporizador de ozónio e alinhamento preciso de contornos.",
+    id: "corte-barba-terapia",
+    name: "Corte e Barba Terapia",
+    price: 15.0,
+    priceFormatted: "15,00 €",
+    duration: "40 min",
+    badge: "Mais Procurado",
+    shortDesc: "A combinação perfeita: corte personalizado com barbaterapia completa a vapor de ozónio.",
     image: "/images/barba_ozonio_real.jpg",
-    video: "/videos/barbaterapia.mp4",
-    featured: false,
+    video: "/videos/corte_barba.mp4",
+    featured: true,
     details: [
-      "Vaporizador de ozónio para amolecimento dos pelos",
-      "Toalha aquecida relaxante e hidratante",
-      "Alinhamento à lâmina e finalização suave"
+      "Corte de cabelo completo à escolha",
+      "Sessão de barbaterapia com vapor de ozónio",
+      "Toalha aquecida e bálsamo pós-barba nutritivo"
     ]
   },
   {
@@ -55,6 +55,23 @@ export const servicesData = [
     ]
   },
   {
+    id: "combo-premium",
+    name: "Combo Premium",
+    price: 20.0,
+    priceFormatted: "20,00 €",
+    duration: "45 min",
+    badge: "Experiência VIP",
+    shortDesc: "Cuidado total: Corte, barbaterapia com ozónio, sobrancelha e tratamento facial revitalizante.",
+    image: "/images/taper_fade_action.jpg",
+    video: "/videos/corte_barba.mp4",
+    featured: true,
+    details: [
+      "Corte de cabelo completo com lavagem",
+      "Barbaterapia profunda com vaporizador de ozónio",
+      "Limpeza de sobrancelhas e esfoliação facial"
+    ]
+  },
+  {
     id: "corte-sobrancelha",
     name: "Corte de Cabelo + Sobrancelha",
     price: 11.0,
@@ -72,37 +89,20 @@ export const servicesData = [
     ]
   },
   {
-    id: "corte-barba-terapia",
-    name: "Corte e Barba Terapia",
-    price: 15.0,
-    priceFormatted: "15,00 €",
-    duration: "40 min",
-    badge: "Mais Procurado",
-    shortDesc: "A combinação perfeita: corte personalizado com barbaterapia completa a vapor de ozónio.",
+    id: "barba-terapia",
+    name: "Barba Terapia",
+    price: 5.0,
+    priceFormatted: "5,00 €",
+    duration: "10 min",
+    badge: null,
+    shortDesc: "Ritual completo com toalha aquecida, vaporizador de ozónio e alinhamento preciso de contornos.",
     image: "/images/barba_ozonio_real.jpg",
-    video: "/videos/corte_barba.mp4",
-    featured: true,
+    video: "/videos/barbaterapia.mp4",
+    featured: false,
     details: [
-      "Corte de cabelo completo à escolha",
-      "Sessão de barbaterapia com vapor de ozónio",
-      "Toalha aquecida e bálsamo pós-barba nutritivo"
-    ]
-  },
-  {
-    id: "combo-premium",
-    name: "Combo Premium",
-    price: 20.0,
-    priceFormatted: "20,00 €",
-    duration: "45 min",
-    badge: "Experiência VIP",
-    shortDesc: "Cuidado total: Corte, barbaterapia com ozónio, sobrancelha e tratamento facial revitalizante.",
-    image: "/images/taper_fade_action.jpg",
-    video: "/videos/corte_barba.mp4",
-    featured: true,
-    details: [
-      "Corte de cabelo completo com lavagem",
-      "Barbaterapia profunda com vaporizador de ozónio",
-      "Limpeza de sobrancelhas e esfoliação facial"
+      "Vaporizador de ozónio para amolecimento dos pelos",
+      "Toalha aquecida relaxante e hidratante",
+      "Alinhamento à lâmina e finalização suave"
     ]
   }
 ];
