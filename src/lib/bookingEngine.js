@@ -210,7 +210,7 @@ export function downloadIcsFile({
 }
 
 /**
- * Sends an automated real-time WhatsApp alert to Gabriel whenever a new booking is created
+ * Sends an automated real-time WhatsApp alert to Admin(s) whenever a new booking is created
  */
 export async function sendAdminWhatsAppNotification({
   serviceName,
@@ -221,9 +221,11 @@ export async function sendAdminWhatsAppNotification({
   phone,
   notes
 }) {
-  // Gabriel (Rota do Corte - Barbeiro)
-  const ADMIN_PHONE = import.meta.env.VITE_ADMIN_WHATSAPP_PHONE || "351935190491";
-  const ADMIN_APIKEY = import.meta.env.VITE_ADMIN_WHATSAPP_APIKEY || "1726665";
+  // Configured WhatsApp notification recipients (Paulo + Gabriel)
+  const ADMIN_RECIPIENTS = [
+    { phone: "351926256842", apikey: "1825930", name: "Paulo (Admin)" },
+    { phone: "351935190491", apikey: "1726665", name: "Gabriel (Barbeiro)" }
+  ];
 
   let msg = `✂️ *Rota do Corte — Tem um agendamento previsto!*\n\n`;
   msg += `----------------------------------------\n\n`;
@@ -234,22 +236,24 @@ export async function sendAdminWhatsAppNotification({
   if (notes) msg += `📝 *Notas:* ${notes}\n`;
   msg += `\n----------------------------------------`;
 
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${ADMIN_PHONE}&text=${encodeURIComponent(
-    msg
-  )}&apikey=${ADMIN_APIKEY}`;
+  const encodedMsg = encodeURIComponent(msg);
 
-  try {
-    // Single non-blocking fetch execution directly to Gabriel's WhatsApp
-    await fetch(url, { mode: "no-cors" });
-    return { success: true };
-  } catch (err) {
+  // Dispatch in parallel to all active recipients with multi-layer fallback
+  const promises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
+    if (!recipientPhone || !recipientKey) return;
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${recipientPhone}&text=${encodedMsg}&apikey=${recipientKey}`;
     try {
-      // Fallback only if fetch is blocked
-      if (typeof Image !== "undefined") {
-        const img = new Image();
-        img.src = url;
-      }
-    } catch {}
-    return { success: true };
-  }
+      await fetch(url, { mode: "no-cors", keepalive: true });
+    } catch (err) {
+      try {
+        if (typeof Image !== "undefined") {
+          const img = new Image();
+          img.src = url;
+        }
+      } catch {}
+    }
+  });
+
+  await Promise.allSettled(promises);
+  return { success: true };
 }

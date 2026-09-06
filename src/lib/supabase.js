@@ -325,13 +325,17 @@ export async function deleteAppointment(appointmentId, pin) {
  * Features resilient timeout & localStorage fallback.
  */
 export async function getAllAppointments(pin, shopSlug = "rotadocorte") {
-  if (!pin) return [];
+  const activePin =
+    pin ||
+    (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rotadocorte_admin_pin") : null) ||
+    import.meta.env.VITE_ADMIN_PIN ||
+    "2026";
 
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await withTimeout(
         supabase.rpc("admin_get_appointments", {
-          p_admin_pin: pin,
+          p_admin_pin: activePin,
           p_shop_slug: shopSlug
         }),
         8000
