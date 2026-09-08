@@ -202,6 +202,8 @@ export default function AdminAgenda() {
   const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
   const [directSaleCustomer, setDirectSaleCustomer] = useState("");
   const [directSalePhone, setDirectSalePhone] = useState("");
+  const [directSaleDate, setDirectSaleDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [directSaleTime, setDirectSaleTime] = useState("12:00");
   const [directSaleService, setDirectSaleService] = useState("Corte de Cabelo");
   const [directSalePrice, setDirectSalePrice] = useState("10.00");
   const [directSaleNotes, setDirectSaleNotes] = useState("Venda balcão / Cliente direto");
@@ -419,6 +421,8 @@ export default function AdminAgenda() {
       customerPhone: directSalePhone.trim(),
       serviceName: directSaleService,
       price: parseLedgerPrice(directSalePrice),
+      date: directSaleDate,
+      time: directSaleTime,
       notes: directSaleNotes.trim()
     });
     setIsSavingDirectSale(false);
@@ -426,6 +430,8 @@ export default function AdminAgenda() {
     setDirectSaleCustomer("");
     setDirectSalePhone("");
     setDirectSalePrice("10.00");
+    setDirectSaleDate(new Date().toISOString().split("T")[0]);
+    setDirectSaleTime("12:00");
     setDirectSaleNotes("Venda balcão / Cliente direto");
     refreshLedger();
   };
@@ -3186,6 +3192,38 @@ export default function AdminAgenda() {
                     isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
                   }`}
                 />
+              </div>
+
+              {/* Data e Hora Retroativa (Permite recuperar atendimentos de dias anteriores) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Data do Atendimento *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={directSaleDate}
+                    onChange={(e) => setDirectSaleDate(e.target.value)}
+                    className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Hora (Opcional)
+                  </label>
+                  <input
+                    type="time"
+                    value={directSaleTime}
+                    onChange={(e) => setDirectSaleTime(e.target.value)}
+                    className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                    }`}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
