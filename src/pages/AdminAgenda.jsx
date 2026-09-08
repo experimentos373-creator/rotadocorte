@@ -1783,9 +1783,6 @@ export default function AdminAgenda() {
                 }`}>
                   <div className="flex items-center justify-between flex-wrap gap-1">
                     <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Total Marcações</span>
-                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20" title="Número de clientes únicos (distintos) no período">
-                      {statsData.uniqueClientsCount} {statsData.uniqueClientsCount === 1 ? "cliente" : "clientes"}
-                    </span>
                   </div>
                   <div>
                     <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
