@@ -135,8 +135,14 @@ export function sealCompletedAppointment(appt) {
 
   const current = getFinancialLedger();
   const apptId = String(appt.id || "");
+  const apptDate = appt.date || (appt.start_time ? appt.start_time.substring(0, 10) : "");
   const existingIdx = current.findIndex(
-    (item) => item.appointment_id === apptId || (item.id === apptId && apptId.length > 5)
+    (item) =>
+      (apptId && (item.appointment_id === apptId || item.id === apptId)) ||
+      (appt.customer_name &&
+        item.customer_name &&
+        item.customer_name.toLowerCase().trim() === appt.customer_name.toLowerCase().trim() &&
+        item.date === apptDate)
   );
 
   const entry = {
@@ -282,17 +288,33 @@ export function mergeAppointmentsWithLedger(appointments = []) {
   // 2. Sobrepor ou adicionar marcações ativas de appointments
   if (Array.isArray(appointments)) {
     appointments.forEach((appt) => {
-      const key = appt.id;
-      // Se a marcação ativa está no ledger e já foi dada como completed, manter ou atualizar
-      mergedMap.set(key, {
-        ...appt,
-        is_ledger_record: false
-      });
+      // Procurar se já existe no map (por ID ou por Nome + Data)
+      let targetKey = appt.id;
+      for (const [existingKey, existingItem] of mergedMap.entries()) {
+        const isSameId = existingKey === appt.id || existingItem.appointment_id === appt.id;
+        const apptDate = appt.date || (appt.start_time ? appt.start_time.substring(0, 10) : "");
+        const isSamePersonAndDate =
+          appt.customer_name &&
+          existingItem.customer_name &&
+          appt.customer_name.toLowerCase().trim() === existingItem.customer_name.toLowerCase().trim() &&
+          apptDate === existingItem.date;
+
+        if (isSameId || isSamePersonAndDate) {
+          targetKey = existingKey;
+          break;
+        }
+      }
 
       // Se a marcação ativa tem status completed, selar no ledger em background
       if (appt.status === "completed") {
         sealCompletedAppointment(appt);
       }
+
+      mergedMap.set(targetKey, {
+        ...appt,
+        id: targetKey,
+        is_ledger_record: false
+      });
     });
   }
 
