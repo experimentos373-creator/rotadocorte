@@ -854,6 +854,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
             </div>
 
+            {/* Privacy notice */}
+            <p className={`text-[11px] leading-relaxed pt-1 text-center sm:text-left ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
+              Os seus dados serão tratados pela Rota do Corte exclusivamente para a gestão e confirmação do agendamento solicitado (Art. 6.º, n.º 1, al. b do RGPD).
+            </p>
+
             {/* Step 4 Footer */}
             <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
               <button

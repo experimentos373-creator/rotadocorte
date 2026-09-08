@@ -60,7 +60,9 @@ import {
   Bell,
   Menu,
   X,
-  UserCheck
+  UserCheck,
+  Archive,
+  Receipt
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
@@ -77,6 +79,16 @@ import {
   supabase
 } from "../lib/supabase";
 import { servicesData, shopInfo } from "../data/services";
+import {
+  mergeAppointmentsWithLedger,
+  sealCompletedAppointment,
+  preserveAppointmentBeforeDelete,
+  recordDirectSale,
+  toggleArchiveClient,
+  getArchivedClients,
+  exportFinancialReportCSV,
+  parseLedgerPrice
+} from "../lib/financialLedger";
 
 export default function AdminAgenda() {
   // 🔒 Security: Authentication & PIN Lock
@@ -180,6 +192,26 @@ export default function AdminAgenda() {
     return isNaN(num) ? 0 : num;
   };
 
+  // 🔒 Financial Ledger & CRM state (Livro de Faturação Imutável)
+  const [ledgerCounter, setLedgerCounter] = useState(0);
+  const refreshLedger = () => setLedgerCounter((prev) => prev + 1);
+  const [archivedClientKeys, setArchivedClientKeys] = useState(() => getArchivedClients());
+  const [crmFilter, setCrmFilter] = useState("all"); // 'all' | 'active' | 'archived'
+
+  // Modal: Venda Direta / Faturação Balcão
+  const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
+  const [directSaleCustomer, setDirectSaleCustomer] = useState("");
+  const [directSalePhone, setDirectSalePhone] = useState("");
+  const [directSaleService, setDirectSaleService] = useState("Corte de Cabelo");
+  const [directSalePrice, setDirectSalePrice] = useState("10.00");
+  const [directSaleNotes, setDirectSaleNotes] = useState("Venda balcão / Cliente direto");
+  const [isSavingDirectSale, setIsSavingDirectSale] = useState(false);
+
+  // Unified Appointments (Garante que dados faturados ou arquivados NUNCA desapareçam ao eliminar horários)
+  const unifiedAppointments = useMemo(() => {
+    return mergeAppointmentsWithLedger(allAppointments);
+  }, [allAppointments, ledgerCounter]);
+
   // Login Handler
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -225,6 +257,12 @@ export default function AdminAgenda() {
     try {
       const data = await getAllAppointments(currentAdminPin);
       if (Array.isArray(data)) {
+        // Auto-selar no livro de faturação qualquer atendimento já concluído
+        data.forEach((appt) => {
+          if (appt.status === "completed") {
+            sealCompletedAppointment(appt);
+          }
+        });
         setAllAppointments(data);
         const forDay = data.filter((a) => a.date === selectedDate);
         forDay.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
@@ -271,7 +309,7 @@ export default function AdminAgenda() {
 
   // Lock background scroll when any modal is open
   useEffect(() => {
-    const isAnyModalOpen = isNewModalOpen || editingAppt || isBlockModalOpen;
+    const isAnyModalOpen = isNewModalOpen || editingAppt || isBlockModalOpen || isDirectSaleModalOpen;
     if (isAnyModalOpen) {
       document.body.classList.add("modal-open");
       document.documentElement.classList.add("modal-open");
@@ -292,7 +330,7 @@ export default function AdminAgenda() {
       document.documentElement.style.overflow = "";
       document.body.style.touchAction = "";
     };
-  }, [isNewModalOpen, editingAppt, isBlockModalOpen]);
+  }, [isNewModalOpen, editingAppt, isBlockModalOpen, isDirectSaleModalOpen]);
 
   const changeDay = (delta) => {
     const d = new Date(selectedDate);
@@ -300,8 +338,13 @@ export default function AdminAgenda() {
     setSelectedDate(d.toISOString().split("T")[0]);
   };
 
-  // Status Updater
+  // Status Updater (Com auto-selagem perpétua ao concluir)
   const handleUpdateStatus = async (id, newStatus) => {
+    const targetAppt = allAppointments.find((a) => a.id === id);
+    if (newStatus === "completed" && targetAppt) {
+      sealCompletedAppointment({ ...targetAppt, status: "completed" });
+      refreshLedger();
+    }
     await updateAppointment(id, { status: newStatus }, currentAdminPin);
     await loadAppointments();
   };
@@ -336,16 +379,60 @@ export default function AdminAgenda() {
     }
   };
 
-  // Delete / Unblock
+  // Delete / Unblock (🔒 Com Salvaguarda Financeira Imutável)
   const handleDeleteAppointment = async (id, isBlock = false) => {
+    const targetAppt = allAppointments.find((a) => a.id === id);
+    const targetPrice = targetAppt ? parsePrice(targetAppt.service_price) : 0;
+    const isCompleted = targetAppt?.status === "completed";
+
     const msg = isBlock
-      ? "Deseja desbloquear e libertar este horário?"
-      : "Deseja eliminar esta marcação permanentemente?";
+      ? "Deseja desbloquear e libertar este horário na agenda?"
+      : isCompleted || targetPrice > 0
+        ? `Deseja libertar este horário da agenda diária?\n\n🔒 GARANTIA DE FATURAÇÃO:\nO valor deste atendimento (${targetPrice.toFixed(2)} €) e o histórico do cliente ficam 100% blindados e preservados no balanço e relatórios financeiros.`
+        : "Deseja remover esta marcação da agenda?";
+
     if (window.confirm(msg)) {
+      if (!isBlock && targetAppt) {
+        // Salvaguardar no Livro de Faturação antes de eliminar da tabela do Supabase
+        preserveAppointmentBeforeDelete(targetAppt, isCompleted || targetPrice > 0);
+        refreshLedger();
+      }
       await deleteAppointment(id, currentAdminPin);
       setEditingAppt(null);
       await loadAppointments();
     }
+  };
+
+  // Toggle Arquivar Cliente (CRM)
+  const handleToggleArchiveClient = (clientKey) => {
+    const updated = toggleArchiveClient(clientKey);
+    setArchivedClientKeys([...updated]);
+  };
+
+  // Registar Venda Direta / Faturação Balcão
+  const handleSaveDirectSale = (e) => {
+    e.preventDefault();
+    if (!directSaleCustomer.trim()) return;
+    setIsSavingDirectSale(true);
+    recordDirectSale({
+      customerName: directSaleCustomer.trim(),
+      customerPhone: directSalePhone.trim(),
+      serviceName: directSaleService,
+      price: parseLedgerPrice(directSalePrice),
+      notes: directSaleNotes.trim()
+    });
+    setIsSavingDirectSale(false);
+    setIsDirectSaleModalOpen(false);
+    setDirectSaleCustomer("");
+    setDirectSalePhone("");
+    setDirectSalePrice("10.00");
+    setDirectSaleNotes("Venda balcão / Cliente direto");
+    refreshLedger();
+  };
+
+  // Exportar Relatório Financeiro CSV
+  const handleExportCSV = () => {
+    exportFinancialReportCSV(unifiedAppointments);
   };
 
   // Open Edit Modal
@@ -471,8 +558,8 @@ export default function AdminAgenda() {
     const monday = new Date(d.setDate(diff));
     monday.setHours(0, 0, 0, 0);
 
-    // Filter appointments by period
-    const filtered = allAppointments.filter((a) => {
+    // Filter appointments by period (using unifiedAppointments protected by Financial Ledger)
+    const filtered = unifiedAppointments.filter((a) => {
       if (!a.date) return false;
       const apptDate = new Date(a.date);
 
@@ -522,7 +609,7 @@ export default function AdminAgenda() {
 
     // Client Retention / Repeat Rate (%)
     const clientVisitCounts = {};
-    allAppointments.forEach((a) => {
+    unifiedAppointments.forEach((a) => {
       if (a.status === "blocked") return;
       const key = (a.customer_phone || a.customer_name || "").trim();
       if (!key || key === "---") return;
@@ -718,15 +805,15 @@ export default function AdminAgenda() {
       padB,
       perimeter
     };
-  }, [allAppointments, statsPeriod]);
+  }, [unifiedAppointments, statsPeriod]);
 
   // =========================================================================
-  // MINI-CRM AGGREGATION
+  // MINI-CRM AGGREGATION (PROTECTED & UNIFIED WITH IMMUTABLE FINANCIAL LEDGER)
   // =========================================================================
-  const crmClients = useMemo(() => {
+  const { crmClients, crmCounts } = useMemo(() => {
     const map = {};
 
-    allAppointments.forEach((a) => {
+    unifiedAppointments.forEach((a) => {
       if (a.status === "blocked") return;
       const key = (a.customer_phone || a.customer_name || "sem-contacto").trim();
       if (!key || key === "---") return;
@@ -776,26 +863,44 @@ export default function AdminAgenda() {
         }
       });
 
+      const isArchived = archivedClientKeys.includes(c.key);
+
       return {
         ...c,
         avgTicket: c.completedBookings > 0 ? c.totalSpent / c.completedBookings : 0,
         favService,
-        isVip: c.totalBookings >= 3
+        isVip: c.totalBookings >= 3,
+        isArchived
       };
     });
 
     list.sort((a, b) => b.totalBookings - a.totalBookings || b.totalSpent - a.totalSpent);
 
-    const query = crmSearchQuery.toLowerCase().trim();
-    if (!query) return list;
+    const counts = {
+      all: list.length,
+      active: list.filter((c) => !c.isArchived).length,
+      archived: list.filter((c) => c.isArchived).length
+    };
 
-    return list.filter(
+    // Filter by Archive state
+    const statusFiltered = list.filter((c) => {
+      if (crmFilter === "active") return !c.isArchived;
+      if (crmFilter === "archived") return c.isArchived;
+      return true; // 'all'
+    });
+
+    const query = crmSearchQuery.toLowerCase().trim();
+    if (!query) return { crmClients: statusFiltered, crmCounts: counts };
+
+    const searchFiltered = statusFiltered.filter(
       (c) =>
         c.name.toLowerCase().includes(query) ||
         c.phone.includes(query) ||
         c.favService.toLowerCase().includes(query)
     );
-  }, [allAppointments, crmSearchQuery]);
+
+    return { crmClients: searchFiltered, crmCounts: counts };
+  }, [unifiedAppointments, crmSearchQuery, archivedClientKeys, crmFilter]);
 
   const formattedPortugueseDate = new Date(selectedDate).toLocaleDateString("pt-PT", {
     weekday: "long",
@@ -1581,30 +1686,65 @@ export default function AdminAgenda() {
                   </p>
                 </div>
 
-                {/* Period Pills */}
-                <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
-                  isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
-                }`}>
-                  {[
-                    { id: "today", label: "Hoje" },
-                    { id: "week", label: "Esta Semana" },
-                    { id: "month", label: "Este Mês" },
-                    { id: "30days", label: "Últimos 30 Dias" },
-                    { id: "all", label: "Total Histórico" }
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setStatsPeriod(p.id)}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                        statsPeriod === p.id
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                {/* Period Pills & Actions */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
+                    isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
+                  }`}>
+                    {[
+                      { id: "today", label: "Hoje" },
+                      { id: "week", label: "Esta Semana" },
+                      { id: "month", label: "Este Mês" },
+                      { id: "30days", label: "Últimos 30 Dias" },
+                      { id: "all", label: "Total Histórico" }
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setStatsPeriod(p.id)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          statsPeriod === p.id
+                            ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                            : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 🔒 Shield Guarantee Banner & Quick Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-500" />
+                  <div>
+                    <h4 className="text-xs font-bold leading-tight">Livro de Faturação Blindado & Perpétuo</h4>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      Os valores faturados e clientes históricos nunca são apagados ou perdidos ao eliminar/libertar horários da agenda diária.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectSaleModalOpen(true)}
+                    className="px-3.5 py-1.5 rounded-2xl bg-[#C89B58] hover:bg-[#b58b4c] text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Venda Balcão</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className={`px-3.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      isLight ? "bg-white border-neutral-200 text-neutral-800 hover:bg-neutral-50" : "bg-white/5 border-white/10 text-neutral-200 hover:bg-white/10"
+                    }`}
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#C89B58]" />
+                    <span>Exportar CSV</span>
+                  </button>
                 </div>
               </div>
 
@@ -2186,7 +2326,7 @@ export default function AdminAgenda() {
           {/* ========================================================================= */}
           {activeTab === "crm" && (
             <div className="space-y-6 animate-fadeIn">
-              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3.5 ${
                 isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
               }`}>
                 <div>
@@ -2195,21 +2335,62 @@ export default function AdminAgenda() {
                     <span>Base de Clientes & Fidelização</span>
                   </h2>
                   <p className="text-xs text-neutral-400">
-                    Histórico de atendimentos, ticket médio e fidelidade.
+                    Histórico imutável de clientes, faturação acumulada e fidelização.
                   </p>
                 </div>
 
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    type="text"
-                    placeholder="Pesquisar por nome ou telemóvel..."
-                    value={crmSearchQuery}
-                    onChange={(e) => setCrmSearchQuery(e.target.value)}
-                    className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-100 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
-                  />
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  {/* Status Filter Pills: Todos / Ativos / Arquivados */}
+                  <div className={`flex items-center gap-1 p-1 rounded-2xl border shrink-0 ${
+                    isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/40 border-white/10"
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter("all")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        crmFilter === "all"
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      Todos ({crmCounts?.all || 0})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter("active")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        crmFilter === "active"
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      Ativos ({crmCounts?.active || 0})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter("archived")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        crmFilter === "archived"
+                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      Arquivados ({crmCounts?.archived || 0})
+                    </button>
+                  </div>
+
+                  <div className="relative w-full sm:w-60">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar cliente..."
+                      value={crmSearchQuery}
+                      onChange={(e) => setCrmSearchQuery(e.target.value)}
+                      className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                        isLight ? "bg-neutral-100 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2220,7 +2401,11 @@ export default function AdminAgenda() {
                   <Users className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
                   <h3 className="text-sm font-bold">Nenhum cliente encontrado</h3>
                   <p className="text-xs text-neutral-400">
-                    {crmSearchQuery ? "Nenhum resultado corresponde à pesquisa." : "Ainda não existem clientes registados."}
+                    {crmSearchQuery
+                      ? "Nenhum resultado corresponde à pesquisa."
+                      : crmFilter === "archived"
+                        ? "Não existem clientes no arquivo."
+                        : "Ainda não existem clientes registados."}
                   </p>
                 </div>
               ) : (
@@ -2236,7 +2421,11 @@ export default function AdminAgenda() {
                       <div
                         key={client.key}
                         className={`p-5 rounded-3xl border transition-all space-y-3.5 shadow-xs flex flex-col justify-between ${
-                          isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]" : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
+                          client.isArchived
+                            ? "opacity-75 bg-neutral-900/30 border-dashed border-neutral-700"
+                            : isLight
+                              ? "bg-white border-neutral-200 hover:border-[#C89B58]"
+                              : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
                         }`}
                       >
                         <div className="space-y-3">
@@ -2255,12 +2444,19 @@ export default function AdminAgenda() {
                               </div>
                             </div>
 
-                            {client.isVip && (
-                              <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/20 text-[#C89B58] flex items-center gap-1">
-                                <Star className="w-2.5 h-2.5 fill-[#C89B58]" />
-                                <span>VIP</span>
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {client.isArchived && (
+                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-neutral-700/50 text-neutral-300">
+                                  Arquivado
+                                </span>
+                              )}
+                              {client.isVip && (
+                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/20 text-[#C89B58] flex items-center gap-1">
+                                  <Star className="w-2.5 h-2.5 fill-[#C89B58]" />
+                                  <span>VIP</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-2 pt-1 text-center">
@@ -2292,17 +2488,34 @@ export default function AdminAgenda() {
                           </div>
                         </div>
 
-                        {whatsAppChatUrl && (
-                          <a
-                            href={whatsAppChatUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full py-2 px-3 rounded-2xl bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        <div className="flex items-center gap-2 pt-2">
+                          {whatsAppChatUrl && (
+                            <a
+                              href={whatsAppChatUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2 px-3 rounded-2xl bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
+                              <span>WhatsApp</span>
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleArchiveClient(client.key)}
+                            title={client.isArchived ? "Restaurar para Ativos" : "Arquivar cliente (ocultar sem apagar faturação)"}
+                            className={`py-2 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                              client.isArchived
+                                ? "bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25"
+                                : isLight
+                                  ? "bg-neutral-100 border-neutral-200 text-neutral-600 hover:text-neutral-900"
+                                  : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                            }`}
                           >
-                            <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                            <span>Mensagem WhatsApp</span>
-                          </a>
-                        )}
+                            <Archive className="w-3.5 h-3.5" />
+                            <span>{client.isArchived ? "Restaurar" : "Arquivar"}</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -2904,6 +3117,157 @@ export default function AdminAgenda() {
                   className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md disabled:opacity-50"
                 >
                   {isSavingBlock ? "A Bloquear..." : "Confirmar Bloqueio"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: REGISTAR VENDA BALCÃO / FATURAÇÃO DIRETA                         */}
+      {/* ========================================================================= */}
+      {isDirectSaleModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsDirectSaleModalOpen(false)}
+        >
+          <div
+            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-[#C89B58]" />
+                <h3 className="font-serif text-lg font-bold">Registar Venda Balcão</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDirectSaleModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-400">
+              Faturação direta para clientes de passagem (walk-in) sem marcação prévia. O valor fica 100% gravado no Livro de Faturação.
+            </p>
+
+            <form onSubmit={handleSaveDirectSale} className="space-y-3.5">
+              <div>
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                  Nome do Cliente *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Pedro Santos / Cliente Balcão"
+                  value={directSaleCustomer}
+                  onChange={(e) => setDirectSaleCustomer(e.target.value)}
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                  Telemóvel (Opcional)
+                </label>
+                <input
+                  type="tel"
+                  placeholder="9XXXXXXXX"
+                  value={directSalePhone}
+                  onChange={(e) => setDirectSalePhone(e.target.value)}
+                  className={`w-full px-3.5 py-2.5 text-xs font-mono rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Serviço Realizado *
+                  </label>
+                  <select
+                    value={directSaleService}
+                    onChange={(e) => {
+                      setDirectSaleService(e.target.value);
+                      const matched = servicesData.find((s) => s.name === e.target.value);
+                      if (matched && matched.price) {
+                        setDirectSalePrice(parseLedgerPrice(matched.price).toFixed(2));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
+                    }`}
+                  >
+                    {servicesData.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.price})
+                      </option>
+                    ))}
+                    <option value="Outro Serviço">Outro Serviço</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                    Valor Cobrado (€) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      required
+                      value={directSalePrice}
+                      onChange={(e) => setDirectSalePrice(e.target.value)}
+                      className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                        isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                      }`}
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-bold">
+                      €
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
+                  Notas / Observações
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Pagamento Numerário / MBWay"
+                  value={directSaleNotes}
+                  onChange={(e) => setDirectSaleNotes(e.target.value)}
+                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
+                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
+                  }`}
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDirectSaleModalOpen(false)}
+                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDirectSale}
+                  className="px-5 py-2.5 rounded-2xl bg-[#C89B58] hover:bg-[#b58b4c] text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingDirectSale ? "A Registar..." : "Registar Faturação"}</span>
                 </button>
               </div>
             </form>

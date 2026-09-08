@@ -163,6 +163,16 @@ export default function Footer({ onOpenBooking, onOpenPrivacy, onOpenTerms }) {
             </span>
             <span className="inline-flex items-center gap-2.5">
               <span className="text-[#9E9EA7]/50 select-none">•</span>
+              <button 
+                type="button" 
+                onClick={() => window.dispatchEvent(new Event("reset_cookie_consent"))} 
+                className="hover:text-white transition-colors cursor-pointer underline"
+              >
+                Gerir Cookies
+              </button>
+            </span>
+            <span className="inline-flex items-center gap-2.5">
+              <span className="text-[#9E9EA7]/50 select-none">•</span>
               <button type="button" onClick={onOpenTerms} className="hover:text-white transition-colors cursor-pointer underline">
                 Termos e Condições
               </button>

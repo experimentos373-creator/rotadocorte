@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { X, Shield, FileText } from "lucide-react";
+import { X, Shield, FileText, CheckCircle2, Lock, Cookie, Scale } from "lucide-react";
 import { shopInfo } from "../data/services";
 import { useTheme } from "../context/ThemeContext";
 
@@ -39,7 +39,7 @@ export default function LegalModals({ activeModal, onClose }) {
       onClick={onClose}
     >
       <div
-        className={`relative max-w-2xl w-full rounded-3xl p-6 sm:p-8 shadow-2xl my-8 max-h-[85vh] overflow-y-auto animate-fadeIn border transition-all ${
+        className={`relative max-w-2xl w-full rounded-3xl p-6 sm:p-8 shadow-2xl my-8 max-h-[88vh] overflow-y-auto animate-fadeIn border transition-all ${
           isDark
             ? "bg-[#111318] border-white/10 text-[#c4c4cc] shadow-black/80"
             : "bg-[#FAF8F5] border-[#DED7C8] text-[#3A3834] shadow-2xl shadow-black/20"
@@ -66,46 +66,112 @@ export default function LegalModals({ activeModal, onClose }) {
               <h2 className={`text-xl sm:text-2xl font-bold font-serif ${
                 isDark ? "text-white" : "text-[#1C1A17]"
               }`}>
-                Política de Privacidade
+                Política de Privacidade & Cookies (RGPD)
               </h2>
             </div>
             <p className={`text-[11px] ${isDark ? "text-[#9e9ea7]" : "text-[#5C554B]"}`}>
-              Última atualização: 2026
+              Conforme Regulamento (UE) 2016/679 (RGPD) & Lei n.º 41/2004 • Última atualização: Setembro de 2026
             </p>
 
-            <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
-              1. Responsável pelo Tratamento
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <span>1. Identificação do Responsável pelo Tratamento</span>
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              A <strong>Rota Do Corte</strong>, localizada na Rua da Direita nº 75, 3090-495 Paião, Figueira da Foz, é a responsável pelo tratamento de dados pessoais recolhidos para efeitos de marcação de serviços e contacto.
+              A <strong>Rota Do Corte</strong> (titularidade de Gabriel / Barbearia), localizada na Rua da Direita nº 75, 3090-495 Paião, Figueira da Foz, contacto telefónico <strong>{shopInfo.phone}</strong>, é a entidade responsável pelo tratamento dos dados pessoais recolhidos através deste website (rotadocorte.com).
             </p>
 
-            <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
-              2. Finalidade da Recolha
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <span>2. Encarregado de Proteção de Dados (DPO)</span>
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              Os dados facultados (como nome, contacto telefónico ou mensagens de WhatsApp) destinam-se exclusivamente à gestão de agendamentos na barbearia, confirmação de horários e esclarecimento de dúvidas.
+              Não é obrigatória a designação de um Encarregado de Proteção de Dados nos termos do Artigo 37.º do RGPD, por se tratar de atividade comercial individual de barbearia sem tratamento em grande escala de dados sensíveis ou monitorização sistemática.
             </p>
 
-            <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
-              3. Plataformas e Segurança
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <span>3. Dados Recolhidos, Finalidades e Bases Jurídicas</span>
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              Os agendamentos online automáticos são processados de forma segura cumprindo os padrões de segurança e privacidade em vigor pelo RGPD.
+              Tratamos apenas os dados estritamente indispensáveis para o serviço de barbearia:
             </p>
+            <ul className="list-disc list-inside space-y-1.5 pl-1 text-[11.5px]">
+              <li>
+                <strong>Gestão de Agendamentos (Nome, Telemóvel, Serviço, Data/Hora, Notas):</strong> Fundamento no <strong>Artigo 6.º, n.º 1, alínea b do RGPD</strong> (Diligências pré-contratuais e execução de contrato de prestação de serviços a pedido do cliente).
+              </li>
+              <li>
+                <strong>Faturação e Obrigações Fiscais:</strong> Fundamento no <strong>Artigo 6.º, n.º 1, alínea c do RGPD</strong> (Cumprimento de obrigação jurídica fiscal).
+              </li>
+              <li>
+                <strong>Segurança e Prevenção de Abuso:</strong> Fundamento no <strong>Artigo 6.º, n.º 1, alínea f do RGPD</strong> (Interesse legítimo na integridade do sistema).
+              </li>
+            </ul>
 
-            <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
-              4. Direitos do Titular, CNPD e RAL
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <Lock className="w-4 h-4 text-[#C89B58]" />
+              <span>4. Subcontratantes e Segurança da Informação</span>
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              Pode a qualquer momento solicitar o acesso, retificação ou eliminação dos seus dados contactando-nos através do telefone <strong>{shopInfo.phone}</strong>. O titular dos dados tem o direito de apresentar reclamação à <strong>CNPD (Comissão Nacional de Proteção de Dados - www.cnpd.pt)</strong>. Em caso de litígio de consumo, pode recorrer à Entidade RAL competente: <strong>CNIACC (www.cniacc.pt)</strong>.
+              Os dados de agendamento são processados de forma encriptada através dos seguintes fornecedores técnicos com salvaguardas adequadas (DPF / SCCs):
+            </p>
+            <ul className="list-disc list-inside space-y-1 pl-1 text-[11.5px]">
+              <li><strong>Supabase Inc.</strong> — Base de dados alojada na União Europeia (Frankfurt / EEE) para gestão em tempo real das marcações.</li>
+              <li><strong>Vercel Inc.</strong> — Alojamento web e CDN de alta performance com tráfego HTTPS/TLS forçado.</li>
+              <li><strong>Meta Platforms Ireland Ltd. (WhatsApp)</strong> — Canal direto de confirmação voluntária pelo próprio utilizador.</li>
+            </ul>
+
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <Cookie className="w-4 h-4 text-[#C89B58]" />
+              <span>5. Política de Armazenamento Local & Cookies</span>
+            </h3>
+            <div className="overflow-x-auto my-2">
+              <table className="w-full text-left text-[10.5px] border border-white/10">
+                <thead className={isDark ? "bg-black/50 text-[#e5c268]" : "bg-[#EDE5D8] text-[#1C1A17]"}>
+                  <tr>
+                    <th className="p-1.5 border-b border-white/10 font-bold">Chave / Tecnologia</th>
+                    <th className="p-1.5 border-b border-white/10 font-bold">Tipo</th>
+                    <th className="p-1.5 border-b border-white/10 font-bold">Finalidade</th>
+                    <th className="p-1.5 border-b border-white/10 font-bold">Duração</th>
+                    <th className="p-1.5 border-b border-white/10 font-bold">Categoria</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  <tr>
+                    <td className="p-1.5 font-mono text-[#e5c268]">rotadocorte_cookie_consent_v2</td>
+                    <td className="p-1.5">LocalStorage</td>
+                    <td className="p-1.5">Regista o consentimento e escolhas do utilizador</td>
+                    <td className="p-1.5">12 meses</td>
+                    <td className="p-1.5 font-bold text-emerald-400">Essencial</td>
+                  </tr>
+                  <tr>
+                    <td className="p-1.5 font-mono text-[#e5c268]">rotadocorte_appointments_v1</td>
+                    <td className="p-1.5">LocalStorage</td>
+                    <td className="p-1.5">Armazenamento de contingência / cache de agendamento</td>
+                    <td className="p-1.5">Persistente</td>
+                    <td className="p-1.5 font-bold text-emerald-400">Essencial</td>
+                  </tr>
+                  <tr>
+                    <td className="p-1.5 font-mono text-[#e5c268]">theme</td>
+                    <td className="p-1.5">LocalStorage</td>
+                    <td className="p-1.5">Memorização do modo visual (Claro / Escuro)</td>
+                    <td className="p-1.5">Persistente</td>
+                    <td className="p-1.5 font-bold text-blue-400">Funcional</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className={`font-bold text-sm pt-2 flex items-center gap-1.5 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
+              <Scale className="w-4 h-4 text-[#C89B58]" />
+              <span>6. Direitos do Titular & CNPD</span>
+            </h3>
+            <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
+              Tem o direito de solicitar o acesso, retificação, eliminação ou limitação do tratamento dos seus dados pelo contacto telefónico <strong>{shopInfo.phone}</strong>. Não existem decisões automatizadas ou profiling (Artigo 22.º do RGPD). Assiste-lhe igualmente o direito de apresentar reclamação à <strong>CNPD (Comissão Nacional de Proteção de Dados — www.cnpd.pt)</strong>.
             </p>
 
             <div className={`pt-3 border-t mt-3 flex items-center justify-between ${
               isDark ? "border-white/10" : "border-[#E8D4BE]"
             }`}>
               <span className={`text-xs ${isDark ? "text-[#9e9ea7]" : "text-[#5C554B]"}`}>
-                Preferências de Armazenamento Local:
+                Preferências de Armazenamento:
               </span>
               <button
                 type="button"
@@ -119,7 +185,7 @@ export default function LegalModals({ activeModal, onClose }) {
                     : "border-[#8C601E] text-[#8C601E] bg-[#FAF0E4] hover:bg-[#F3E2CF]"
                 }`}
               >
-                <span>Redefinir Cookies 🔄</span>
+                <span>Gerir / Redefinir Cookies 🔄</span>
               </button>
             </div>
           </div>
@@ -134,7 +200,7 @@ export default function LegalModals({ activeModal, onClose }) {
               </h2>
             </div>
             <p className={`text-[11px] ${isDark ? "text-[#9e9ea7]" : "text-[#5C554B]"}`}>
-              Última atualização: 2026
+              Última atualização: Setembro de 2026
             </p>
 
             <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>
@@ -155,7 +221,7 @@ export default function LegalModals({ activeModal, onClose }) {
               3. Preços e Pagamento
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              Todos os preços indicados no website incluem IVA à taxa legal em vigor em Portugal e correspondem à tabela oficial afixada no estabelecimento.
+              Todos os preços indicados no website incluem IVA à taxa legal em vigor em Portugal e correspondem à tabela oficial afixada no estabelecimento. Em caso de litígio, pode recorrer à entidade RAL competente (CNIACC — www.cniacc.pt).
             </p>
           </div>
         )}
@@ -175,4 +241,3 @@ export default function LegalModals({ activeModal, onClose }) {
     </div>
   );
 }
-
