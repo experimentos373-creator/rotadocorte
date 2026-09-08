@@ -60,6 +60,22 @@ const INITIAL_HISTORICAL_SEEDS = [
     notes: "Cliente atendido no Sábado (Concluído)",
     source: "historical_seed",
     created_at: "2026-09-05T15:00:00.000Z"
+  },
+  {
+    id: "seed_cortebarba_20260907",
+    appointment_id: "seed_cortebarba_20260907",
+    date: "2026-09-07",
+    time: "20:30",
+    customer_name: "Cliente Atendido (Corte e Barba Terapia)",
+    customer_phone: "910000000",
+    service_id: "69e6cea9-c739-4d45-b3c1-c6c304a9958d",
+    service_name: "Corte e Barba Terapia",
+    service_price: "15.00 €",
+    price: 15.0,
+    status: "completed",
+    notes: "Marcação confirmada no print de Segunda-feira, 7 de Setembro às 20:30",
+    source: "historical_seed",
+    created_at: "2026-09-07T20:30:00.000Z"
   }
 ];
 

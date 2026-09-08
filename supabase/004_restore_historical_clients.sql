@@ -41,4 +41,17 @@ INSERT INTO appointments (
     '2026-09-05 15:40:00+00',
     'completed',
     '2026-09-05 13:00:00+00'
+),
+(
+    gen_random_uuid(),
+    '960c7ee6-df3f-46aa-889c-a8c174f813bd',
+    '69e6cea9-c739-4d45-b3c1-c6c304a9958d', -- Corte e Barba Terapia (15.00 €)
+    'Cliente Atendido (Corte e Barba Terapia)',
+    '910000000',
+    NULL,
+    'Marcação confirmada no print de Segunda-feira, 7 de Setembro às 20:30',
+    '2026-09-07 20:30:00+00',
+    '2026-09-07 21:10:00+00',
+    'completed',
+    '2026-09-07 18:00:00+00'
 );
