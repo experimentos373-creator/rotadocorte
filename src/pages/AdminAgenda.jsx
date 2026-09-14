@@ -1441,21 +1441,23 @@ export default function AdminAgenda() {
                     <div
                       className={`absolute right-0 top-full mt-2 z-50 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 ${
                         isLight
-                          ? "bg-white/95 border-neutral-200 text-neutral-900 shadow-neutral-300"
-                          : "bg-[#0E1015]/95 border-white/10 text-white shadow-black/80"
+                          ? "bg-white border-neutral-200 text-neutral-900 shadow-neutral-300"
+                          : "bg-[#111319] border-white/10 text-white shadow-black/90"
                       }`}
                     >
-                      <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-white/10 mb-3">
+                      <div className={`flex items-center justify-between pb-3 border-b mb-3 ${
+                        isLight ? "border-neutral-200" : "border-white/10"
+                      }`}>
                         <div className="flex items-center gap-2">
                           <Bell className="w-4 h-4 text-[#C89B58]" />
-                          <h4 className="text-xs font-bold font-serif uppercase tracking-wider">
+                          <h4 className="text-xs font-bold font-serif uppercase tracking-wider text-[#C89B58]">
                             Alertas do Barbeiro
                           </h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => setIsNotifPopoverOpen(false)}
-                          className="p-1 rounded-lg text-neutral-400 hover:text-white"
+                          className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1463,28 +1465,37 @@ export default function AdminAgenda() {
 
                       <div className="space-y-3">
                         {/* Som do Sino */}
-                        <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-neutral-100 dark:bg-white/5 border border-neutral-200 dark:border-white/5">
+                        <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${
+                          isLight
+                            ? "bg-neutral-50 border-neutral-200 text-neutral-900"
+                            : "bg-white/5 border-white/10 text-white"
+                        }`}>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold flex items-center gap-1.5">
+                            <p className={`text-xs font-bold flex items-center gap-1.5 ${
+                              isLight ? "text-neutral-900" : "text-white"
+                            }`}>
                               <span>Sino de Agendamento</span>
                               {isSoundOn && (
-                                <span className="text-[10px] text-emerald-500 font-mono font-bold">
+                                <span className="text-[10px] text-emerald-500 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
                                   LIGADO
                                 </span>
                               )}
                             </p>
-                            <p className="text-[10.5px] text-neutral-400 leading-tight">
+                            <p className="text-[11px] text-neutral-400 leading-tight mt-0.5">
                               Toca acorde de luxo a cada nova marcação.
                             </p>
                           </div>
                           <button
                             type="button"
                             onClick={toggleSound}
-                            className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 ${
+                            className={`p-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shrink-0 ${
                               isSoundOn
-                                ? "bg-emerald-500 text-black shadow-xs"
-                                : "bg-neutral-200 dark:bg-white/10 text-neutral-400"
+                                ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-sm"
+                                : isLight
+                                ? "bg-neutral-200 hover:bg-neutral-300 text-neutral-700"
+                                : "bg-white/10 hover:bg-white/20 text-neutral-300"
                             }`}
+                            title={isSoundOn ? "Desativar Som" : "Ativar Som"}
                           >
                             {isSoundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                           </button>
@@ -1494,24 +1505,28 @@ export default function AdminAgenda() {
                         <button
                           type="button"
                           onClick={handleTestChime}
-                          className="w-full py-2 px-3 rounded-xl bg-[#C89B58]/15 hover:bg-[#C89B58]/25 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                          className="w-full py-2.5 px-3 rounded-xl bg-[#C89B58]/15 hover:bg-[#C89B58]/25 border border-[#C89B58]/35 text-[#C89B58] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                         >
                           <Volume2 className="w-3.5 h-3.5" />
                           <span>🔔 Testar Som do Sino</span>
                         </button>
 
                         {/* Notificações do Navegador / Telemóvel */}
-                        <div className="pt-2 border-t border-neutral-200 dark:border-white/10">
+                        <div className={`pt-2.5 border-t ${isLight ? "border-neutral-200" : "border-white/10"}`}>
                           {pushPermission === "granted" ? (
                             <div className="flex items-center gap-2 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
                               <CheckCircle2 className="w-4 h-4 shrink-0" />
-                              <span>Notificações de ecrã ativas no telemóvel/PC.</span>
+                              <span>Alertas de ecrã ativos no telemóvel/PC.</span>
                             </div>
                           ) : (
                             <button
                               type="button"
                               onClick={handleEnablePush}
-                              className="w-full py-2.5 px-3 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-black hover:opacity-90 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                                isLight
+                                  ? "bg-neutral-900 hover:bg-black text-white"
+                                  : "bg-[#C89B58] hover:bg-[#D4A966] text-black"
+                              }`}
                             >
                               <Bell className="w-3.5 h-3.5" />
                               <span>Ativar Alertas no Telemóvel</span>
