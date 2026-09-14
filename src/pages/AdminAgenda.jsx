@@ -58,6 +58,9 @@ import {
   FileSpreadsheet,
   Download,
   Bell,
+  BellOff,
+  Volume2,
+  VolumeX,
   Menu,
   X,
   UserCheck,
@@ -78,6 +81,17 @@ import {
   isSupabaseConfigured,
   supabase
 } from "../lib/supabase";
+import {
+  playLuxuryChime,
+  showSystemNotification,
+  isSoundEnabled,
+  setSoundEnabled,
+  isNotificationsEnabled,
+  setNotificationsEnabled,
+  requestNotificationPermission,
+  getNotificationPermission,
+  unlockAudioContext
+} from "../lib/adminNotifications";
 import { servicesData, shopInfo } from "../data/services";
 import {
   mergeAppointmentsWithLedger,
@@ -214,6 +228,84 @@ export default function AdminAgenda() {
     return mergeAppointmentsWithLedger(allAppointments);
   }, [allAppointments, ledgerCounter]);
 
+  // 🔔 Live Audio & Push Notification States
+  const [isSoundOn, setIsSoundOn] = useState(() => isSoundEnabled());
+  const [isNotifOn, setIsNotifOn] = useState(() => isNotificationsEnabled());
+  const [pushPermission, setPushPermission] = useState(() => getNotificationPermission());
+  const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
+  const [incomingAlert, setIncomingAlert] = useState(null);
+  const alertTimerRef = useRef(null);
+  const knownApptIdsRef = useRef(new Set());
+  const isInitialLoadDoneRef = useRef(false);
+
+  const toggleSound = () => {
+    const next = !isSoundOn;
+    setIsSoundOn(next);
+    setSoundEnabled(next);
+    if (next) {
+      unlockAudioContext();
+      playLuxuryChime(0.8);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    const perm = await requestNotificationPermission();
+    setPushPermission(perm);
+    setIsNotifOn(isNotificationsEnabled());
+  };
+
+  const handleTestChime = () => {
+    unlockAudioContext();
+    playLuxuryChime(1.0);
+    showSystemNotification({
+      title: "✂️ Teste de Notificação Sonora",
+      body: "O som e os alertas em tempo real estão a funcionar a 100% no painel da Rota do Corte!",
+      tag: "test-alert"
+    });
+  };
+
+  const triggerIncomingBookingAlert = (booking) => {
+    if (!booking) return;
+
+    // 1. Toca o sino de luxo sintetizado
+    playLuxuryChime();
+
+    // 2. Dispara notificação nativa do sistema / telemóvel
+    const clientName = booking.customer_name || booking.name || "Cliente";
+    const serviceName = booking.service_name || "Serviço";
+    const dateStr = booking.date || "Hoje";
+    const timeStr = booking.time || "";
+
+    showSystemNotification({
+      title: "✂️ NOVO AGENDAMENTO RECEBIDO!",
+      body: `${clientName} marcou ${serviceName} para ${dateStr}${timeStr ? " às " + timeStr : ""}.`,
+      tag: `booking-${booking.id || Date.now()}`,
+      onClick: () => {
+        if (booking.date) {
+          setSelectedDate(booking.date);
+          setAgendaScope("day");
+        }
+      }
+    });
+
+    // 3. Exibe o banner visual de alta prioridade no topo do painel
+    setIncomingAlert({
+      id: booking.id || Date.now(),
+      name: clientName,
+      phone: booking.customer_phone || booking.phone || "",
+      service: serviceName,
+      price: booking.service_price || "15,00 €",
+      date: dateStr,
+      time: timeStr,
+      notes: booking.customer_notes || booking.notes || ""
+    });
+
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = setTimeout(() => {
+      setIncomingAlert(null);
+    }, 18000);
+  };
+
   // Login Handler
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -228,6 +320,7 @@ export default function AdminAgenda() {
     setIsVerifyingPin(false);
 
     if (res.success) {
+      unlockAudioContext();
       sessionStorage.setItem("rotadocorte_admin_auth", "true");
       sessionStorage.setItem("rotadocorte_admin_pin", adminPinInput.trim());
       setCurrentAdminPin(adminPinInput.trim());
@@ -265,6 +358,20 @@ export default function AdminAgenda() {
             sealCompletedAppointment(appt);
           }
         });
+
+        // Detecção de novas marcações via polling de segurança
+        if (isInitialLoadDoneRef.current && data.length > 0) {
+          const freshBookings = data.filter(
+            (a) => !knownApptIdsRef.current.has(a.id) && a.status !== "cancelled"
+          );
+          if (freshBookings.length > 0) {
+            triggerIncomingBookingAlert(freshBookings[0]);
+          }
+        }
+
+        knownApptIdsRef.current = new Set(data.map((a) => a.id));
+        isInitialLoadDoneRef.current = true;
+
         setAllAppointments(data);
         const forDay = data.filter((a) => a.date === selectedDate);
         forDay.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
@@ -283,16 +390,40 @@ export default function AdminAgenda() {
       loadAppointments();
 
       // Realtime live sync whenever any new booking is made
-      const unsubscribe = subscribeToAppointments(() => {
+      const unsubscribe = subscribeToAppointments((payload) => {
+        if (payload?.eventType === "INSERT" && payload?.new) {
+          const newAppt = payload.new;
+          let dateStr = selectedDate;
+          let timeStr = "";
+          if (newAppt.start_time) {
+            const dt = new Date(newAppt.start_time);
+            dateStr = dt.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+            timeStr = dt.toLocaleTimeString("pt-PT", {
+              timeZone: "Europe/Lisbon",
+              hour: "2-digit",
+              minute: "2-digit"
+            });
+          }
+          triggerIncomingBookingAlert({
+            id: newAppt.id,
+            customer_name: newAppt.customer_name,
+            customer_phone: newAppt.customer_phone,
+            service_name: newAppt.service_name || "Serviço",
+            service_price: newAppt.service_price || "15,00 €",
+            date: dateStr,
+            time: timeStr,
+            notes: newAppt.customer_notes
+          });
+        }
         loadAppointments(true);
       });
 
-      // Background auto-refresh polling interval (every 25s, only when tab is visible)
+      // Background auto-refresh polling interval (every 20s, only when tab is visible)
       const pollInterval = setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState === "visible") {
           loadAppointments(true);
         }
-      }, 25000);
+      }, 20000);
 
       const handleVisibilityChange = () => {
         if (document.visibilityState === "visible") {
@@ -555,25 +686,28 @@ export default function AdminAgenda() {
   // =========================================================================
   const statsData = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
+    const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
 
-    // Start of Current Week (Monday)
+    // Start of Current Week (Monday 00:00:00 to Sunday 23:59:59)
     const d = new Date(now);
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
     monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(sunday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
 
     // Filter appointments by period (using unifiedAppointments protected by Financial Ledger)
     const filtered = unifiedAppointments.filter((a) => {
       if (!a.date) return false;
-      const apptDate = new Date(a.date);
+      const apptDate = new Date(`${a.date}T12:00:00`);
 
       if (statsPeriod === "today") {
         return a.date === todayStr;
       }
       if (statsPeriod === "week") {
-        return apptDate >= monday && apptDate <= now;
+        return apptDate >= monday && apptDate <= sunday;
       }
       if (statsPeriod === "month") {
         return (
@@ -584,6 +718,7 @@ export default function AdminAgenda() {
       if (statsPeriod === "30days") {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(now.getDate() - 30);
+        thirtyDaysAgo.setHours(0, 0, 0, 0);
         return apptDate >= thirtyDaysAgo;
       }
       return true; // 'all'
@@ -1138,6 +1273,90 @@ export default function AdminAgenda() {
       {/* ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-24 lg:pb-8">
 
+        {/* 🔔 LIVE INCOMING BOOKING ALERT (BANNER DE ALERTA SONORO & VISUAL) */}
+        {incomingAlert && (
+          <div className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-50 w-[94vw] max-w-lg animate-in slide-in-from-top-4 duration-500">
+            <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#0D0E12]/95 border-2 border-[#C89B58] p-4 sm:p-5 shadow-2xl backdrop-blur-2xl text-white">
+              {/* Ambient Gold Glow */}
+              <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#C89B58]/20 rounded-full blur-2xl pointer-events-none" />
+              
+              {/* Top Bar: Live Badge + Close */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C89B58] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#C89B58]"></span>
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-[#C89B58] font-mono">
+                    🔔 NOVO AGENDAMENTO RECEBIDO!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIncomingAlert(null)}
+                  className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  title="Fechar Alerta"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Content Details */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-3 space-y-1.5 text-xs sm:text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white text-sm sm:text-base flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-[#C89B58]" />
+                    {incomingAlert.name}
+                  </span>
+                  <span className="font-mono text-[#C89B58] font-bold">
+                    {incomingAlert.price}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-neutral-300 text-xs">
+                  <span>💈 {incomingAlert.service}</span>
+                  <span className="font-mono font-semibold text-white">
+                    📅 {incomingAlert.date} às {incomingAlert.time}
+                  </span>
+                </div>
+                {incomingAlert.notes && (
+                  <p className="text-[11px] text-neutral-400 italic pt-1 border-t border-white/5">
+                    "{incomingAlert.notes}"
+                  </p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                {incomingAlert.phone && (
+                  <a
+                    href={`https://wa.me/${incomingAlert.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Olá ${incomingAlert.name}! Confirmamos o seu agendamento na Rota do Corte para ${incomingAlert.date} às ${incomingAlert.time} (${incomingAlert.service}).`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#25D366] hover:bg-[#20ba59] text-black font-bold text-xs rounded-xl transition-colors shadow-sm cursor-pointer"
+                  >
+                    <WhatsAppIcon className="w-4 h-4" />
+                    <span>WhatsApp</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (incomingAlert.date) {
+                      setSelectedDate(incomingAlert.date);
+                      setAgendaScope("day");
+                    }
+                    setIncomingAlert(null);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#C89B58] hover:bg-[#b08443] text-black font-bold text-xs rounded-xl transition-colors shadow-sm cursor-pointer"
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  <span>Ver na Agenda</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Top Header App Bar */}
         <header className={`sticky top-0 z-30 px-3 sm:px-8 py-3.5 sm:py-4 border-b backdrop-blur-md transition-colors ${
           isLight
@@ -1185,6 +1404,126 @@ export default function AdminAgenda() {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+              {/* Notification & Sound Popover Button */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsNotifPopoverOpen(!isNotifPopoverOpen)}
+                  className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
+                    isSoundOn
+                      ? "bg-[#C89B58]/10 border-[#C89B58]/40 text-[#C89B58] hover:bg-[#C89B58]/20"
+                      : isLight
+                      ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:bg-neutral-200"
+                      : "bg-[#111319] border-white/10 text-neutral-500 hover:bg-white/10"
+                  }`}
+                  title="Definições de Som e Notificações"
+                >
+                  {isSoundOn ? (
+                    <Volume2 className="w-4 h-4" />
+                  ) : (
+                    <VolumeX className="w-4 h-4" />
+                  )}
+                  {/* Status Indicator Dot */}
+                  <span
+                    className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
+                      isSoundOn ? "bg-emerald-500 shadow-[0_0_6px_#10b981]" : "bg-neutral-500"
+                    }`}
+                  />
+                </button>
+
+                {/* Popover Menu */}
+                {isNotifPopoverOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsNotifPopoverOpen(false)}
+                    />
+                    <div
+                      className={`absolute right-0 top-full mt-2 z-50 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 ${
+                        isLight
+                          ? "bg-white/95 border-neutral-200 text-neutral-900 shadow-neutral-300"
+                          : "bg-[#0E1015]/95 border-white/10 text-white shadow-black/80"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-white/10 mb-3">
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-4 h-4 text-[#C89B58]" />
+                          <h4 className="text-xs font-bold font-serif uppercase tracking-wider">
+                            Alertas do Barbeiro
+                          </h4>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsNotifPopoverOpen(false)}
+                          className="p-1 rounded-lg text-neutral-400 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Som do Sino */}
+                        <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-neutral-100 dark:bg-white/5 border border-neutral-200 dark:border-white/5">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold flex items-center gap-1.5">
+                              <span>Sino de Agendamento</span>
+                              {isSoundOn && (
+                                <span className="text-[10px] text-emerald-500 font-mono font-bold">
+                                  LIGADO
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[10.5px] text-neutral-400 leading-tight">
+                              Toca acorde de luxo a cada nova marcação.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={toggleSound}
+                            className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 ${
+                              isSoundOn
+                                ? "bg-emerald-500 text-black shadow-xs"
+                                : "bg-neutral-200 dark:bg-white/10 text-neutral-400"
+                            }`}
+                          >
+                            {isSoundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                          </button>
+                        </div>
+
+                        {/* Botão Testar Sino */}
+                        <button
+                          type="button"
+                          onClick={handleTestChime}
+                          className="w-full py-2 px-3 rounded-xl bg-[#C89B58]/15 hover:bg-[#C89B58]/25 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>🔔 Testar Som do Sino</span>
+                        </button>
+
+                        {/* Notificações do Navegador / Telemóvel */}
+                        <div className="pt-2 border-t border-neutral-200 dark:border-white/10">
+                          {pushPermission === "granted" ? (
+                            <div className="flex items-center gap-2 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
+                              <CheckCircle2 className="w-4 h-4 shrink-0" />
+                              <span>Notificações de ecrã ativas no telemóvel/PC.</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleEnablePush}
+                              className="w-full py-2.5 px-3 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-black hover:opacity-90 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                            >
+                              <Bell className="w-3.5 h-3.5" />
+                              <span>Ativar Alertas no Telemóvel</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
               {/* Theme Toggle */}
               <button
                 type="button"

@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>P&D Creative Studio — Editor Interativo de Posters</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #07080C;
+      color: #F3F4F6;
+      user-select: none;
+    }
+    .canvas-grid {
+      background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 0);
+      background-size: 20px 20px;
+    }
+    .layer-selected {
+      outline: 2px solid #10B981;
+      outline-offset: 4px;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0D0F17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1F2433;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #2E364D;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#07080C] text-gray-100 overflow-x-hidden">
+
+  <!-- TOP APP BAR -->
+  <header class="h-16 border-b border-white/10 bg-[#0B0D14]/90 backdrop-blur-md px-4 sm:px-8 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-[#C89B58] flex items-center justify-center font-black text-black text-sm shadow-lg shadow-emerald-500/20">
+        P&D
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-extrabold text-white text-base tracking-tight">Creative Studio</h1>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">v2.0 Interactive</span>
+        </div>
+        <p class="text-[11px] text-gray-400 hidden sm:block">Editor visual com histórico e camadas arrastáveis</p>
+      </div>
+    </div>
+
+    <!-- Top Action Buttons -->
+    <div class="flex items-center gap-2 sm:gap-3">
+      <button
+        onclick="resetElementsToDefault()"
+        class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-gray-300 transition-all flex items-center gap-1.5 cursor-pointer"
+        title="Repor elementos padrão"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <span class="hidden md:inline">Repor</span>
+      </button>
+
+      <button
+        onclick="copyInstagramCaption()"
+        class="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-gray-200 transition-all flex items-center gap-1.5 cursor-pointer"
+      >
+        <span>📋</span>
+        <span class="hidden sm:inline">Copiar Legenda</span>
+      </button>
+
+      <button
+        onclick="exportHighResPoster()"
+        class="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        <span>Descarregar HD (PNG)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN STUDIO WORKSPACE -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- LEFT SIDEBAR: HISTÓRICO & ADICIONAR ELEMENTOS -->
+    <aside class="w-full lg:w-80 border-r border-white/10 bg-[#0C0E17] flex flex-col shrink-0 h-auto lg:h-[calc(100vh-4rem)] overflow-y-auto">
+      
+      <!-- Tabs -->
+      <div class="p-3 border-b border-white/10 grid grid-cols-2 gap-1.5 bg-[#090A11]">
+        <button id="tabHistoryBtn" onclick="switchLeftTab('history')" class="py-2 px-3 rounded-lg text-xs font-bold transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          🖼️ Histórico Posters
+        </button>
+        <button id="tabAddBtn" onclick="switchLeftTab('add')" class="py-2 px-3 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white bg-transparent">
+          ✨ Adicionar Camadas
+        </button>
+      </div>
+
+      <!-- TAB CONTENT 1: HISTÓRICO DE IMAGENS -->
+      <div id="tabHistoryContent" class="p-4 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400">Posters Gerados</h2>
+          <span class="text-[10px] text-emerald-400 font-medium">4 Variações</span>
+        </div>
+
+        <!-- Gallery Grid -->
+        <div class="grid grid-cols-2 gap-2.5" id="historyThumbnailsContainer">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Custom Upload Option -->
+        <div class="pt-3 border-t border-white/10">
+          <label class="w-full py-3 px-3 rounded-xl border border-dashed border-white/20 hover:border-emerald-500/50 bg-white/5 hover:bg-emerald-500/5 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer text-center">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span class="text-xs font-semibold text-gray-300">Carregar Imagem do PC</span>
+            <span class="text-[10px] text-gray-500">JPG, PNG ou WebP</span>
+            <input type="file" id="customImageInput" accept="image/*" class="hidden" onchange="handleCustomImageUpload(event)">
+          </label>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT 2: ADICIONAR ELEMENTOS -->
+      <div id="tabAddContent" class="p-4 space-y-5 hidden">
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Tipografia</h3>
+          <div class="grid grid-cols-1 gap-2">
+            <button onclick="addNewTextLayer('headline')" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-xs font-bold text-white transition-all flex items-center justify-between cursor-pointer">
+              <span>+ Título Principal (Grande)</span>
+              <span class="text-emerald-400 text-sm font-black">Aa</span>
+            </button>
+            <button onclick="addNewTextLayer('subtitle')" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-xs font-medium text-gray-300 transition-all flex items-center justify-between cursor-pointer">
+              <span>+ Subtítulo / Frase</span>
+              <span class="text-gray-400 text-xs">Aa</span>
+            </button>
+            <button onclick="addNewTextLayer('footer')" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-xs font-semibold text-[#C89B58] transition-all flex items-center justify-between cursor-pointer">
+              <span>+ Rodapé / Contacto da Agência</span>
+              <span class="text-xs">Badge</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Cartões Prontos</h3>
+          <div class="grid grid-cols-1 gap-2">
+            <button onclick="addWhatsAppNotificationCard()" class="p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-left text-xs font-semibold text-emerald-300 transition-all flex items-center gap-3 cursor-pointer">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 text-base">
+                📲
+              </div>
+              <div>
+                <p class="font-bold text-white">Cartão de Agendamento</p>
+                <p class="text-[10px] text-gray-400">Cliente, Hora e Serviço no WhatsApp</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Stickers & Badges</h3>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="addSticker('whatsapp')" class="p-3 rounded-xl bg-white/5 hover:bg-emerald-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">💬</span>
+              <span class="text-[10px] text-gray-300 font-medium">WhatsApp</span>
+            </button>
+            <button onclick="addSticker('badge1')" class="p-3 rounded-xl bg-white/5 hover:bg-emerald-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">🔔</span>
+              <span class="text-[10px] text-gray-300 font-medium">Alerta +1</span>
+            </button>
+            <button onclick="addSticker('check')" class="p-3 rounded-xl bg-white/5 hover:bg-emerald-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">✅</span>
+              <span class="text-[10px] text-gray-300 font-medium">Verificado</span>
+            </button>
+            <button onclick="addSticker('scissors')" class="p-3 rounded-xl bg-white/5 hover:bg-amber-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">✂️</span>
+              <span class="text-[10px] text-gray-300 font-medium">Tesoura</span>
+            </button>
+            <button onclick="addSticker('calendar')" class="p-3 rounded-xl bg-white/5 hover:bg-blue-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">📅</span>
+              <span class="text-[10px] text-gray-300 font-medium">Calendário</span>
+            </button>
+            <button onclick="addSticker('sparkles')" class="p-3 rounded-xl bg-white/5 hover:bg-purple-500/15 border border-white/10 flex flex-col items-center gap-1 cursor-pointer transition-all">
+              <span class="text-xl">✨</span>
+              <span class="text-[10px] text-gray-300 font-medium">Destaque</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- CENTER WORKSPACE: INTERACTIVE CANVAS -->
+    <main class="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 canvas-grid overflow-y-auto relative min-h-[550px]">
+      
+      <!-- Canvas Wrapper -->
+      <div class="relative max-w-[540px] w-full aspect-square rounded-2xl shadow-2xl border border-white/15 overflow-hidden group bg-black select-none" id="canvasContainer">
+        
+        <!-- Background Image Layer -->
+        <img
+          id="canvasBackgroundImage"
+          src="./poster-clean-template.jpg"
+          alt="Poster Background"
+          class="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        />
+
+        <!-- Interactive Layers Container (Virtual 1080x1080 coordinate plane mapped with CSS) -->
+        <div id="layersContainer" class="absolute inset-0 w-full h-full overflow-hidden">
+          <!-- Dynamic Draggable Layers injected here -->
+        </div>
+
+      </div>
+
+      <!-- Canvas Helper Caption -->
+      <div class="mt-4 flex items-center gap-2 text-xs text-gray-400 bg-[#0D0F17]/80 px-4 py-2 rounded-xl border border-white/5">
+        <span class="text-emerald-400">💡 Dica:</span>
+        <span>Clique e <strong>arraste qualquer texto ou elemento</strong> com o rato para reposicionar. Clique para editar no painel lateral.</span>
+      </div>
+
+    </main>
+
+    <!-- RIGHT SIDEBAR: INSPETOR DA CAMADA SELECIONADA -->
+    <aside class="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/10 bg-[#0C0E17] p-5 shrink-0 h-auto lg:h-[calc(100vh-4rem)] overflow-y-auto" id="inspectorSidebar">
+      
+      <div id="noSelectionNotice" class="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
+        <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl mb-3">
+          👆
+        </div>
+        <h3 class="text-sm font-bold text-gray-300">Nenhum elemento selecionado</h3>
+        <p class="text-xs text-gray-500 mt-1 leading-relaxed">
+          Clique em qualquer texto, cartão ou sticker no poster para alterar as suas propriedades, tamanho e cores.
+        </p>
+      </div>
+
+      <!-- ACTIVE ELEMENT CONTROLS (Hidden by default, shown on select) -->
+      <div id="activeElementControls" class="space-y-5 hidden">
+        
+        <!-- Header of Inspector -->
+        <div class="flex items-center justify-between pb-3 border-b border-white/10">
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block" id="inspectorTypeLabel">Texto</span>
+            <h3 class="text-sm font-bold text-white" id="inspectorTitle">Editar Elemento</h3>
+          </div>
+          <button onclick="deleteSelectedLayer()" class="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors cursor-pointer" title="Eliminar elemento">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+
+        <!-- Text Content Input (For Text Layers) -->
+        <div id="ctrlTextContentSection">
+          <label class="block text-xs font-semibold text-gray-300 mb-1.5">Texto</label>
+          <textarea
+            id="inspectorTextInput"
+            rows="3"
+            oninput="updateSelectedLayerText(this.value)"
+            class="w-full bg-[#141724] border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+          ></textarea>
+        </div>
+
+        <!-- Typography Controls -->
+        <div id="ctrlTypographySection" class="space-y-3">
+          <!-- Font Size Slider -->
+          <div>
+            <div class="flex justify-between text-xs text-gray-400 mb-1">
+              <span>Tamanho da Fonte</span>
+              <span id="inspectorFontSizeValue" class="text-white font-bold">32px</span>
+            </div>
+            <input
+              type="range"
+              id="inspectorFontSize"
+              min="12"
+              max="96"
+              step="1"
+              oninput="updateSelectedLayerFontSize(this.value)"
+              class="w-full accent-emerald-500 cursor-pointer"
+            />
+          </div>
+
+          <!-- Text Color Presets & Picker -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">Cor do Texto</label>
+            <div class="flex items-center gap-2">
+              <button onclick="updateSelectedLayerColor('#FFFFFF')" class="w-7 h-7 rounded-lg bg-white border border-gray-400 hover:scale-110 transition-transform cursor-pointer" title="Branco"></button>
+              <button onclick="updateSelectedLayerColor('#10B981')" class="w-7 h-7 rounded-lg bg-[#10B981] hover:scale-110 transition-transform cursor-pointer" title="Verde Emerald"></button>
+              <button onclick="updateSelectedLayerColor('#25D366')" class="w-7 h-7 rounded-lg bg-[#25D366] hover:scale-110 transition-transform cursor-pointer" title="Verde WhatsApp"></button>
+              <button onclick="updateSelectedLayerColor('#C89B58')" class="w-7 h-7 rounded-lg bg-[#C89B58] hover:scale-110 transition-transform cursor-pointer" title="Dourado P&D"></button>
+              <button onclick="updateSelectedLayerColor('#0A0C13')" class="w-7 h-7 rounded-lg bg-[#0A0C13] border border-white/30 hover:scale-110 transition-transform cursor-pointer" title="Preto"></button>
+              <input
+                type="color"
+                id="inspectorColorPicker"
+                onchange="updateSelectedLayerColor(this.value)"
+                class="w-7 h-7 rounded-lg bg-transparent border-0 cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <!-- Alignment & Weight -->
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Alinhamento</label>
+              <div class="flex rounded-lg bg-white/5 border border-white/10 p-0.5">
+                <button onclick="updateSelectedLayerAlign('left')" class="flex-1 py-1 rounded text-xs hover:bg-white/10 cursor-pointer">⇤</button>
+                <button onclick="updateSelectedLayerAlign('center')" class="flex-1 py-1 rounded text-xs hover:bg-white/10 cursor-pointer">≡</button>
+                <button onclick="updateSelectedLayerAlign('right')" class="flex-1 py-1 rounded text-xs hover:bg-white/10 cursor-pointer">⇥</button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Espessura</label>
+              <select onchange="updateSelectedLayerWeight(this.value)" id="inspectorWeightSelect" class="w-full bg-[#141724] border border-white/10 rounded-lg py-1 px-2 text-xs text-white focus:outline-none">
+                <option value="400">Normal</option>
+                <option value="600">Semi-Bold</option>
+                <option value="700">Bold</option>
+                <option value="900">Black</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Glassmorphic Background Toggle -->
+          <div class="pt-2 border-t border-white/10">
+            <label class="flex items-center justify-between cursor-pointer">
+              <span class="text-xs font-semibold text-gray-300">Fundo Escuro com Vidro</span>
+              <input type="checkbox" id="inspectorBgToggle" onchange="toggleSelectedLayerBg(this.checked)" class="accent-emerald-500 w-4 h-4 cursor-pointer" />
+            </label>
+            <p class="text-[10px] text-gray-500 mt-1">Adiciona uma caixa translúcida escura atrás do texto para máxima legibilidade.</p>
+          </div>
+
+        </div>
+
+        <!-- Layer Ordering (Bring to Front / Send Back) -->
+        <div class="pt-3 border-t border-white/10 flex items-center gap-2">
+          <button onclick="moveLayerZ(1)" class="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-gray-300 cursor-pointer transition-colors">
+            ▲ Trazer para a Frente
+          </button>
+          <button onclick="moveLayerZ(-1)" class="flex-1 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-gray-300 cursor-pointer transition-colors">
+            ▼ Enviar para Trás
+          </button>
+        </div>
+
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- BOTTOM SECTION: LEGENDA & EXPORTAÇÃO NÍTIDA -->
+  <footer class="border-t border-white/10 bg-[#090A10] p-6 sm:p-10 flex flex-col items-center">
+    <div class="max-w-4xl w-full">
+      
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+        <div>
+          <div class="inline-flex items-center gap-2 text-xs text-emerald-400 font-bold uppercase tracking-wider mb-1">
+            <span>✨</span> Pronto para Publicar
+          </div>
+          <h2 class="text-xl sm:text-2xl font-black text-white">Legenda Comercial para Redes Sociais</h2>
+          <p class="text-xs sm:text-sm text-gray-400">Copy estruturado de alta conversão para o feed do Instagram, Facebook ou WhatsApp Status.</p>
+        </div>
+        <button
+          onclick="copyInstagramCaption()"
+          class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-bold text-white transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+        >
+          <span>📋</span> Copiar para a Área de Transferência
+        </button>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-[#10131E] border border-white/10 text-xs sm:text-sm text-gray-300 leading-relaxed font-sans whitespace-pre-line select-all" id="captionText">Quantos clientes já perdeu por não conseguir responder a mensagens enquanto está a trabalhar? 📲❌
+
+Enquanto está a atender ou a descansar, os seus clientes querem marcar horário na hora.
+
+Com o nosso Sistema de Agendamentos Inteligente da P&D Agency:
+⚡ Marcação em 30 segundos — o cliente escolhe o serviço, dia e hora disponível diretamente no seu link.
+🔔 Notificação imediata no WhatsApp — recebe o nome, telemóvel, serviço e horário instantaneamente no seu telemóvel.
+📅 Sem sobreposição de horários — a sua agenda atualiza-se em tempo real.
+🕒 Disponível 24 horas por dia — o seu negócio recebe clientes no automático.
+
+🚀 Quer implementar este sistema no seu negócio?
+Envie-nos uma mensagem privada por DM ou visite pdagencydigital.com!</div>
+
+    </div>
+  </footer>
+
+  <!-- HIDDEN CANVAS FOR EXPORTING 1080x1080 PNG -->
+  <canvas id="exportCanvas" width="1080" height="1080" class="hidden"></canvas>
+
+  <!-- JAVASCRIPT: STUDIO ENGINE -->
+  <script>
+    // 1. History Gallery Data
+    const POSTER_HISTORY = [
+      {
+        id: 'clean-template',
+        title: 'Template Limpo (Ideal para Editar)',
+        desc: 'Mão com smartphone, ecrã livre e balões 3D',
+        src: './poster-clean-template.jpg'
+      },
+      {
+        id: 'pdagency-hand',
+        title: 'P&D Agency Oficial',
+        desc: 'Poster oficial com rodapé da agência',
+        src: './poster-1-pdagency-hand.jpg'
+      },
+      {
+        id: 'darktech-marble',
+        title: 'Dark-Tech Pedestal',
+        desc: 'Smartphone flutuante sobre mármore',
+        src: './poster-2-darktech-marble.jpg'
+      },
+      {
+        id: 'mockup-bells',
+        title: 'Mockup Notificações 3D',
+        desc: 'Notificações flutuantes luminosas',
+        src: './poster-3-mockup-bells.jpg'
+      }
+    ];
+
+    // Current active background
+    let currentBackgroundSrc = './poster-clean-template.jpg';
+
+    // 2. Layer Data Model (Canvas 1080x1080 coordinate space)
+    let layers = [];
+    let selectedLayerId = null;
+    let nextLayerId = 1;
+
+    // Dragging state
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let layerInitialX = 0;
+    let layerInitialY = 0;
+
+    // Initialize Default Layers
+    function initializeDefaultLayers() {
+      layers = [
+        {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'headline',
+          text: 'NUNCA MAIS\nPERCA CLIENTES',
+          x: 540,
+          y: 150,
+          fontSize: 72,
+          fontWeight: '900',
+          color: '#FFFFFF',
+          textAlign: 'center',
+          hasBg: false,
+          zIndex: 10
+        },
+        {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'subtitle',
+          text: 'Agendamentos automáticos no WhatsApp 24/7',
+          x: 540,
+          y: 255,
+          fontSize: 34,
+          fontWeight: '600',
+          color: '#34D399',
+          textAlign: 'center',
+          hasBg: false,
+          zIndex: 11
+        },
+        {
+          id: nextLayerId++,
+          type: 'card',
+          subType: 'whatsapp-card',
+          clientName: 'Maria Silva',
+          serviceName: 'Corte de Cabelo',
+          time: '15:30',
+          x: 540,
+          y: 530,
+          scale: 1,
+          zIndex: 12
+        },
+        {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'footer',
+          text: 'P&D AGENCY • pdagencydigital.com',
+          x: 540,
+          y: 980,
+          fontSize: 28,
+          fontWeight: '700',
+          color: '#FFFFFF',
+          textAlign: 'center',
+          hasBg: true,
+          zIndex: 13
+        }
+      ];
+      renderLayers();
+    }
+
+    // Render Gallery Thumbnails in Left Sidebar
+    function renderGalleryThumbnails() {
+      const container = document.getElementById('historyThumbnailsContainer');
+      container.innerHTML = POSTER_HISTORY.map(item => `
+        <div
+          onclick="selectBackground('${item.src}')"
+          class="group relative aspect-square rounded-xl overflow-hidden border cursor-pointer transition-all ${currentBackgroundSrc === item.src ? 'border-emerald-500 ring-2 ring-emerald-500/50' : 'border-white/10 hover:border-white/30'}"
+        >
+          <img src="${item.src}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2">
+            <p class="text-[11px] font-bold text-white truncate leading-tight">${item.title}</p>
+            <p class="text-[9px] text-gray-300 truncate">${item.desc}</p>
+          </div>
+          ${currentBackgroundSrc === item.src ? `
+            <div class="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black">
+              ✓
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+    }
+
+    // Switch Background
+    function selectBackground(src) {
+      currentBackgroundSrc = src;
+      document.getElementById('canvasBackgroundImage').src = src;
+      renderGalleryThumbnails();
+    }
+
+    // Custom Image Upload
+    function handleCustomImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        selectBackground(evt.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Switch Left Tabs
+    function switchLeftTab(tab) {
+      const historyBtn = document.getElementById('tabHistoryBtn');
+      const addBtn = document.getElementById('tabAddBtn');
+      const historyContent = document.getElementById('tabHistoryContent');
+      const addContent = document.getElementById('tabAddContent');
+
+      if (tab === 'history') {
+        historyBtn.className = "py-2 px-3 rounded-lg text-xs font-bold transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        addBtn.className = "py-2 px-3 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white bg-transparent";
+        historyContent.classList.remove('hidden');
+        addContent.classList.add('hidden');
+      } else {
+        addBtn.className = "py-2 px-3 rounded-lg text-xs font-bold transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        historyBtn.className = "py-2 px-3 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white bg-transparent";
+        addContent.classList.remove('hidden');
+        historyContent.classList.add('hidden');
+      }
+    }
+
+    // Render Layers on Canvas
+    function renderLayers() {
+      const container = document.getElementById('layersContainer');
+      container.innerHTML = '';
+
+      layers.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+      layers.forEach(layer => {
+        const el = document.createElement('div');
+        el.id = `layer-${layer.id}`;
+        el.className = `absolute cursor-move select-none transition-shadow ${selectedLayerId === layer.id ? 'layer-selected' : ''}`;
+        
+        // Percent position relative to 1080x1080
+        el.style.left = `${(layer.x / 1080) * 100}%`;
+        el.style.top = `${(layer.y / 1080) * 100}%`;
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.zIndex = layer.zIndex || 10;
+
+        if (layer.type === 'text') {
+          el.innerHTML = `
+            <div style="
+              font-size: clamp(10px, ${(layer.fontSize / 1080) * 100}vw, ${(layer.fontSize / 1080) * 540}px);
+              font-weight: ${layer.fontWeight};
+              color: ${layer.color};
+              text-align: ${layer.textAlign};
+              line-height: 1.15;
+              white-space: pre-line;
+              text-shadow: 0 4px 15px rgba(0,0,0,0.8);
+              ${layer.hasBg ? 'background: rgba(12, 14, 23, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.15); padding: 6px 18px; border-radius: 9999px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);' : ''}
+            ">
+              ${escapeHtml(layer.text)}
+            </div>
+          `;
+        } else if (layer.type === 'card') {
+          el.innerHTML = `
+            <div style="transform: scale(${(layer.scale || 1) * 0.5}); transform-origin: center center;" class="sm:scale-[0.55] transition-transform">
+              <div class="w-[360px] rounded-2xl bg-white/95 backdrop-blur-xl border border-white/40 p-4 shadow-2xl text-gray-900 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/30">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="text-xs font-black text-emerald-800 uppercase tracking-wide">Novo Agendamento</span>
+                    <span class="text-[10px] text-gray-500 font-semibold">Agora</span>
+                  </div>
+                  <h4 class="font-extrabold text-sm text-gray-900 leading-tight mt-0.5 truncate">${escapeHtml(layer.clientName || 'Cliente')}</h4>
+                  <p class="text-xs text-gray-600 font-medium mt-0.5 truncate">${escapeHtml(layer.time || '15:30')} • ${escapeHtml(layer.serviceName || 'Serviço')}</p>
+                </div>
+              </div>
+            </div>
+          `;
+        } else if (layer.type === 'sticker') {
+          el.innerHTML = `
+            <div style="font-size: ${(layer.fontSize || 48) * 0.5}px;" class="drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)]">
+              ${layer.icon}
+            </div>
+          `;
+        }
+
+        // Pointer event listeners for Drag & Select
+        el.addEventListener('mousedown', (e) => startLayerDrag(e, layer.id));
+        el.addEventListener('touchstart', (e) => startLayerDragTouch(e, layer.id), { passive: false });
+
+        container.appendChild(el);
+      });
+
+      updateInspectorView();
+    }
+
+    // Dragging Logic
+    function startLayerDrag(e, id) {
+      e.stopPropagation();
+      selectLayer(id);
+
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+
+      const layer = layers.find(l => l.id === id);
+      layerInitialX = layer.x;
+      layerInitialY = layer.y;
+
+      window.addEventListener('mousemove', onLayerDragMove);
+      window.addEventListener('mouseup', endLayerDrag);
+    }
+
+    function onLayerDragMove(e) {
+      if (!isDragging || !selectedLayerId) return;
+      const canvasEl = document.getElementById('canvasContainer');
+      const rect = canvasEl.getBoundingClientRect();
+
+      const deltaX = (e.clientX - dragStartX) * (1080 / rect.width);
+      const deltaY = (e.clientY - dragStartY) * (1080 / rect.height);
+
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (layer) {
+        layer.x = Math.max(50, Math.min(1030, Math.round(layerInitialX + deltaX)));
+        layer.y = Math.max(50, Math.min(1030, Math.round(layerInitialY + deltaY)));
+        renderLayers();
+      }
+    }
+
+    function endLayerDrag() {
+      isDragging = false;
+      window.removeEventListener('mousemove', onLayerDragMove);
+      window.removeEventListener('mouseup', endLayerDrag);
+    }
+
+    // Touch Support
+    function startLayerDragTouch(e, id) {
+      e.stopPropagation();
+      selectLayer(id);
+      if (e.touches.length === 0) return;
+
+      isDragging = true;
+      dragStartX = e.touches[0].clientX;
+      dragStartY = e.touches[0].clientY;
+
+      const layer = layers.find(l => l.id === id);
+      layerInitialX = layer.x;
+      layerInitialY = layer.y;
+
+      window.addEventListener('touchmove', onLayerDragTouchMove, { passive: false });
+      window.addEventListener('touchend', endLayerDragTouch);
+    }
+
+    function onLayerDragTouchMove(e) {
+      if (!isDragging || !selectedLayerId || e.touches.length === 0) return;
+      e.preventDefault();
+      const canvasEl = document.getElementById('canvasContainer');
+      const rect = canvasEl.getBoundingClientRect();
+
+      const deltaX = (e.touches[0].clientX - dragStartX) * (1080 / rect.width);
+      const deltaY = (e.touches[0].clientY - dragStartY) * (1080 / rect.height);
+
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (layer) {
+        layer.x = Math.max(50, Math.min(1030, Math.round(layerInitialX + deltaX)));
+        layer.y = Math.max(50, Math.min(1030, Math.round(layerInitialY + deltaY)));
+        renderLayers();
+      }
+    }
+
+    function endLayerDragTouch() {
+      isDragging = false;
+      window.removeEventListener('touchmove', onLayerDragTouchMove);
+      window.removeEventListener('touchend', endLayerDragTouch);
+    }
+
+    // Select Layer
+    function selectLayer(id) {
+      selectedLayerId = id;
+      renderLayers();
+    }
+
+    // Click outside canvas to deselect
+    document.getElementById('canvasContainer').addEventListener('click', (e) => {
+      if (e.target.id === 'canvasContainer' || e.target.id === 'layersContainer') {
+        selectedLayerId = null;
+        renderLayers();
+      }
+    });
+
+    // Inspector Updates
+    function updateInspectorView() {
+      const notice = document.getElementById('noSelectionNotice');
+      const controls = document.getElementById('activeElementControls');
+
+      if (!selectedLayerId) {
+        notice.classList.remove('hidden');
+        controls.classList.add('hidden');
+        return;
+      }
+
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+
+      notice.classList.add('hidden');
+      controls.classList.remove('hidden');
+
+      const titleEl = document.getElementById('inspectorTitle');
+      const typeLabel = document.getElementById('inspectorTypeLabel');
+      const textSection = document.getElementById('ctrlTextContentSection');
+      const typoSection = document.getElementById('ctrlTypographySection');
+
+      if (layer.type === 'text') {
+        typeLabel.innerText = 'Camada de Texto';
+        titleEl.innerText = layer.subType === 'headline' ? 'Título Principal' : layer.subType === 'subtitle' ? 'Subtítulo' : 'Texto Personalizado';
+        textSection.classList.remove('hidden');
+        typoSection.classList.remove('hidden');
+
+        document.getElementById('inspectorTextInput').value = layer.text;
+        document.getElementById('inspectorFontSize').value = layer.fontSize;
+        document.getElementById('inspectorFontSizeValue').innerText = `${layer.fontSize}px`;
+        document.getElementById('inspectorWeightSelect').value = layer.fontWeight || '700';
+        document.getElementById('inspectorBgToggle').checked = !!layer.hasBg;
+      } else if (layer.type === 'card') {
+        typeLabel.innerText = 'Cartão Interativo';
+        titleEl.innerText = 'Notificação WhatsApp';
+        textSection.classList.remove('hidden');
+        typoSection.classList.add('hidden');
+
+        document.getElementById('inspectorTextInput').value = `Cliente: ${layer.clientName}\nHora: ${layer.time}\nServiço: ${layer.serviceName}`;
+      } else {
+        typeLabel.innerText = 'Sticker / Ícone';
+        titleEl.innerText = 'Ícone Decorativo';
+        textSection.classList.add('hidden');
+        typoSection.classList.remove('hidden');
+      }
+    }
+
+    // Edit Layer Attributes
+    function updateSelectedLayerText(val) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+
+      if (layer.type === 'text') {
+        layer.text = val;
+      } else if (layer.type === 'card') {
+        const lines = val.split('\n');
+        lines.forEach(line => {
+          if (line.toLowerCase().startsWith('cliente:')) layer.clientName = line.split(':')[1]?.trim() || layer.clientName;
+          if (line.toLowerCase().startsWith('hora:')) layer.time = line.split(':')[1]?.trim() || layer.time;
+          if (line.toLowerCase().startsWith('serviço:') || line.toLowerCase().startsWith('servico:')) layer.serviceName = line.split(':')[1]?.trim() || layer.serviceName;
+        });
+      }
+      renderLayers();
+    }
+
+    function updateSelectedLayerFontSize(size) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.fontSize = parseInt(size, 10);
+      document.getElementById('inspectorFontSizeValue').innerText = `${size}px`;
+      renderLayers();
+    }
+
+    function updateSelectedLayerColor(color) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.color = color;
+      renderLayers();
+    }
+
+    function updateSelectedLayerAlign(align) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.textAlign = align;
+      renderLayers();
+    }
+
+    function updateSelectedLayerWeight(weight) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.fontWeight = weight;
+      renderLayers();
+    }
+
+    function toggleSelectedLayerBg(hasBg) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.hasBg = hasBg;
+      renderLayers();
+    }
+
+    function moveLayerZ(direction) {
+      const layer = layers.find(l => l.id === selectedLayerId);
+      if (!layer) return;
+      layer.zIndex = Math.max(1, (layer.zIndex || 10) + direction);
+      renderLayers();
+    }
+
+    function deleteSelectedLayer() {
+      if (!selectedLayerId) return;
+      layers = layers.filter(l => l.id !== selectedLayerId);
+      selectedLayerId = null;
+      renderLayers();
+    }
+
+    // Add New Layers
+    function addNewTextLayer(type) {
+      let newLayer;
+      if (type === 'headline') {
+        newLayer = {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'headline',
+          text: 'NOVO TÍTULO DE IMPACTO',
+          x: 540,
+          y: 180,
+          fontSize: 64,
+          fontWeight: '900',
+          color: '#FFFFFF',
+          textAlign: 'center',
+          hasBg: false,
+          zIndex: layers.length + 10
+        };
+      } else if (type === 'subtitle') {
+        newLayer = {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'subtitle',
+          text: 'Escreva aqui o seu subtítulo comercial...',
+          x: 540,
+          y: 300,
+          fontSize: 32,
+          fontWeight: '600',
+          color: '#34D399',
+          textAlign: 'center',
+          hasBg: false,
+          zIndex: layers.length + 10
+        };
+      } else {
+        newLayer = {
+          id: nextLayerId++,
+          type: 'text',
+          subType: 'footer',
+          text: 'P&D AGENCY • pdagencydigital.com',
+          x: 540,
+          y: 980,
+          fontSize: 28,
+          fontWeight: '700',
+          color: '#FFFFFF',
+          textAlign: 'center',
+          hasBg: true,
+          zIndex: layers.length + 10
+        };
+      }
+      layers.push(newLayer);
+      selectLayer(newLayer.id);
+    }
+
+    function addWhatsAppNotificationCard() {
+      const newLayer = {
+        id: nextLayerId++,
+        type: 'card',
+        subType: 'whatsapp-card',
+        clientName: 'João Santos',
+        serviceName: 'Corte & Barba Terapia',
+        time: '18:00',
+        x: 540,
+        y: 530,
+        scale: 1,
+        zIndex: layers.length + 10
+      };
+      layers.push(newLayer);
+      selectLayer(newLayer.id);
+    }
+
+    function addSticker(type) {
+      const iconMap = {
+        whatsapp: '💬',
+        badge1: '🔔',
+        check: '✅',
+        scissors: '✂️',
+        calendar: '📅',
+        sparkles: '✨'
+      };
+      const newLayer = {
+        id: nextLayerId++,
+        type: 'sticker',
+        icon: iconMap[type] || '⭐',
+        x: 540,
+        y: 400,
+        fontSize: 64,
+        zIndex: layers.length + 10
+      };
+      layers.push(newLayer);
+      selectLayer(newLayer.id);
+    }
+
+    function resetElementsToDefault() {
+      if (confirm('Tem a certeza que deseja repor os textos e posições originais?')) {
+        initializeDefaultLayers();
+      }
+    }
+
+    // 3. High-Resolution 1080x1080 Export Engine
+    function exportHighResPoster() {
+      const canvas = document.getElementById('exportCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 1080, 1080);
+
+      const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
+      bgImg.src = currentBackgroundSrc;
+
+      bgImg.onload = function() {
+        // Draw background
+        ctx.drawImage(bgImg, 0, 0, 1080, 1080);
+
+        // Sort layers by z-index
+        const sortedLayers = [...layers].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+        sortedLayers.forEach(layer => {
+          ctx.save();
+
+          if (layer.type === 'text') {
+            ctx.font = `${layer.fontWeight || '700'} ${layer.fontSize}px 'Plus Jakarta Sans', sans-serif`;
+            ctx.textAlign = layer.textAlign || 'center';
+            ctx.textBaseline = 'middle';
+
+            const lines = layer.text.split('\n');
+            const lineHeight = layer.fontSize * 1.15;
+            const totalHeight = lines.length * lineHeight;
+            const startY = layer.y - (totalHeight / 2) + (lineHeight / 2);
+
+            // Draw glass background pill if enabled
+            if (layer.hasBg) {
+              let maxWidth = 0;
+              lines.forEach(l => {
+                const w = ctx.measureText(l).width;
+                if (w > maxWidth) maxWidth = w;
+              });
+              const padX = 36;
+              const padY = 16;
+              const boxW = maxWidth + padX * 2;
+              const boxH = totalHeight + padY * 2;
+              const boxX = layer.x - (boxW / 2);
+              const boxY = layer.y - (boxH / 2);
+
+              ctx.fillStyle = 'rgba(12, 14, 23, 0.85)';
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.roundRect(boxX, boxY, boxW, boxH, 999);
+              ctx.fill();
+              ctx.stroke();
+            }
+
+            // Text shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+            ctx.shadowBlur = 18;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 6;
+            ctx.fillStyle = layer.color || '#FFFFFF';
+
+            lines.forEach((line, index) => {
+              ctx.fillText(line, layer.x, startY + index * lineHeight);
+            });
+
+          } else if (layer.type === 'card') {
+            // Draw WhatsApp Notification Card at 1080px scale
+            const cardW = 440;
+            const cardH = 120;
+            const cardX = layer.x - (cardW / 2);
+            const cardY = layer.y - (cardH / 2);
+
+            // Card Shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+            ctx.shadowBlur = 30;
+            ctx.shadowOffsetY = 12;
+
+            // Card Body
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.roundRect(cardX, cardY, cardW, cardH, 20);
+            ctx.fill();
+
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+
+            // Green Icon Badge
+            ctx.fillStyle = '#10B981';
+            ctx.beginPath();
+            ctx.arc(cardX + 45, cardY + 60, 24, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Checkmark in badge
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(cardX + 38, cardY + 60);
+            ctx.lineTo(cardX + 43, cardY + 66);
+            ctx.lineTo(cardX + 54, cardY + 54);
+            ctx.stroke();
+
+            // Card Texts
+            ctx.fillStyle = '#065F46';
+            ctx.font = '800 13px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('NOVO AGENDAMENTO', cardX + 85, cardY + 38);
+
+            ctx.fillStyle = '#111827';
+            ctx.font = '900 20px sans-serif';
+            ctx.fillText(layer.clientName || 'Cliente', cardX + 85, cardY + 66);
+
+            ctx.fillStyle = '#4B5563';
+            ctx.font = '600 15px sans-serif';
+            ctx.fillText(`${layer.time || '15:30'} • ${layer.serviceName || 'Serviço'}`, cardX + 85, cardY + 92);
+
+          } else if (layer.type === 'sticker') {
+            ctx.font = `${layer.fontSize || 56}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 15;
+            ctx.fillText(layer.icon || '⭐', layer.x, layer.y);
+          }
+
+          ctx.restore();
+        });
+
+        // Trigger Instant Download
+        const link = document.createElement('a');
+        link.download = 'poster-pdagency-personalizado.png';
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+    }
+
+    // 4. Copy Instagram Caption
+    function copyInstagramCaption() {
+      const text = document.getElementById('captionText').innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('✅ Legenda comercial copiada com sucesso para a área de transferência!');
+      }).catch(() => {
+        alert('Por favor copie o texto selecionando a caixa da legenda.');
+      });
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[m]));
+    }
+
+    // Initialize Studio on Load
+    renderGalleryThumbnails();
+    initializeDefaultLayers();
+  </script>
+</body>
+</html>
