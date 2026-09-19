@@ -112,11 +112,19 @@ export default function LocationHours() {
                 </span>
                 <div className="space-y-1.5 text-sm font-medium">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold">Segunda a Sábado</span>
+                    <span className="font-bold">Segunda-feira</span>
+                    <span className="font-bold text-[#C89B58]">13:00 – 22:00</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">Terça a Sexta</span>
                     <span className="font-bold text-[#C89B58]">10:00 – 22:00</span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">Sábado</span>
+                    <span className="font-bold text-[#C89B58]">10:00 – 18:00</span>
+                  </div>
                   <div className="flex justify-between items-center text-xs text-[#9E9EA7]">
-                    <span>Pausa p/ Almoço</span>
+                    <span>Pausa p/ Almoço (Ter. a Sáb.)</span>
                     <span className="text-[#C89B58]">13:00 – 14:00</span>
                   </div>
                   <div className="flex justify-between items-center text-xs opacity-60">

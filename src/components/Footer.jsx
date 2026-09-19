@@ -119,10 +119,11 @@ export default function Footer({ onOpenBooking, onOpenPrivacy, onOpenTerms }) {
               </a>
               <span className="text-[10px] text-[#C5BDB0] font-normal block leading-tight">(Chamada para a rede móvel nacional)</span>
             </p>
-            <p className="text-[#C89B58] font-medium">
-              Segunda a Sábado: 10:00 – 22:00
-              <span className="text-[10px] text-[#C5BDB0] font-normal block leading-tight">(Almoço: 13:00 – 14:00)</span>
-            </p>
+            <div className="text-xs space-y-0.5">
+              <p className="text-[#C89B58] font-medium">Seg.: 13:00 – 22:00 | Ter. a Sex.: 10:00 – 22:00</p>
+              <p className="text-[#C89B58] font-medium">Sábado: 10:00 – 18:00 • Domingo: Encerrado</p>
+              <span className="text-[10px] text-[#C5BDB0] font-normal block leading-tight">(Pausa p/ Almoço Ter. a Sáb.: 13:00 – 14:00)</span>
+            </div>
 
             <div className="pt-1 flex flex-col gap-2">
               <button

@@ -34,7 +34,7 @@ export const translations = {
       feature1Desc: "Fades cirúrgicos e desenhos exclusivos personalizados para o seu perfil.",
       feature2Title: "Barbaterapia com Ozónio",
       feature2Desc: "Vapor de ozono que abre os poros e elimina qualquer irritação ou foliculite.",
-      scheduleNote: "Seg. a Sáb.: 10:00 – 22:00 (Almoço: 13:00 – 14:00)"
+      scheduleNote: "Seg.: 13:00 – 22:00 | Ter. a Sex.: 10:00 – 22:00 | Sáb.: 10:00 – 18:00"
     },
     ozone: {
       titlePrefix: "Barbaterapia com",
@@ -160,7 +160,7 @@ export const translations = {
       feature1Desc: "Surgical transitions, modern crops, and custom hairline detailing.",
       feature2Title: "Ozone Beard Therapy",
       feature2Desc: "Purifying warm steam that opens pores and prevents razor burn.",
-      scheduleNote: "Mon. to Sat.: 10:00 – 22:00 (Lunch: 13:00 – 14:00)"
+      scheduleNote: "Mon.: 13:00 – 22:00 | Tue. to Fri.: 10:00 – 22:00 | Sat.: 10:00 – 18:00"
     },
     ozone: {
       titlePrefix: "Beard Therapy with",
@@ -224,7 +224,7 @@ export const translations = {
       step1Title: "Choose Service",
       step1Subtitle: "Select your desired treatment at Gabriel Silva's barbershop in Paião.",
       step2Title: "Select Date",
-      step2Subtitle: "Advance bookings up to 1 month. Open Monday to Saturday (10:00 - 22:00).",
+      step2Subtitle: "Advance bookings up to 1 month: Mon. (13h-22h), Tue.-Fri. (10h-22h), Sat. (10h-18h).",
       step3Title: "Choose Time",
       step4Title: "Your Details",
       step4Subtitle: "Fill in your contact info to confirm your appointment at the barbershop.",
@@ -286,7 +286,7 @@ export const translations = {
       feature1Desc: "Fades impecables y líneas personalizadas para tu estilo.",
       feature2Title: "Barbaterapia con Ozono",
       feature2Desc: "Vapor de ozono que abre los poros y previene cualquier irritación.",
-      scheduleNote: "Lun. a Sáb.: 10:00 – 22:00 (Almuerzo: 13:00 – 14:00)"
+      scheduleNote: "Lun.: 13:00 – 22:00 | Mar. a Vie.: 10:00 – 22:00 | Sáb.: 10:00 – 18:00"
     },
     ozone: {
       titlePrefix: "Barbaterapia con",
@@ -350,7 +350,7 @@ export const translations = {
       step1Title: "Elige el Servicio",
       step1Subtitle: "Selecciona el tratamiento deseado en la barbería de Gabriel Silva en Paião.",
       step2Title: "Selecciona el Día",
-      step2Subtitle: "Reserva con 1 mes de antelación. Abierto de Lunes a Sábado (10:00 - 22:00).",
+      step2Subtitle: "Reserva con 1 mes de antelación: Lun. (13h-22h), Mar.-Vie. (10h-22h), Sáb. (10h-18h).",
       step3Title: "Elige el Horario",
       step4Title: "Tus Datos",
       step4Subtitle: "Introduce tus datos de contacto para confirmar tu cita.",
@@ -412,7 +412,7 @@ export const translations = {
       feature1Desc: "Dégradés nets et contours au rasoir sur mesure.",
       feature2Title: "Barbothérapie à l'Ozone",
       feature2Desc: "Vapeur purifiante qui ouvre les pores et apaise la peau.",
-      scheduleNote: "Lun. au Sam. : 10:00 – 22:00 (Déjeuner : 13:00 – 14:00)"
+      scheduleNote: "Lun. : 13:00 – 22:00 | Mar. au Ven. : 10:00 – 22:00 | Sam. : 10:00 – 18:00"
     },
     ozone: {
       titlePrefix: "Barbothérapie avec",
@@ -476,7 +476,7 @@ export const translations = {
       step1Title: "Choisissez le Service",
       step1Subtitle: "Sélectionnez votre soin chez Gabriel Silva à Paião.",
       step2Title: "Sélectionnez le Jour",
-      step2Subtitle: "Réservation jusqu'à 1 mois à l'avance. Ouvert du Lundi au Samedi (10:00 - 22:00).",
+      step2Subtitle: "Réservation jusqu'à 1 mois à l'avance : Lun. (13h-22h), Mar.-Ven. (10h-22h), Sam. (10h-18h).",
       step3Title: "Choisissez l'Heure",
       step4Title: "Vos Coordonnées",
       step4Subtitle: "Renseignez vos coordonnées pour confirmer votre créneau.",

@@ -18,7 +18,10 @@ import {
   Sun,
   Moon,
   Crown,
-  Layers
+  Layers,
+  Plus,
+  Minus,
+  Users
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { WhatsAppIcon } from "./WhatsAppButton";
@@ -42,10 +45,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   // Streamlined 4-step wizard + 5th confirmation: 1=Service, 2=Date, 3=Time (30m slots), 4=Customer Details, 5=Confirmation
   const [step, setStep] = useState(1);
 
-  // Form State - Best-seller pre-selected by default to eliminate CTA friction
-  const [selectedServiceId, setSelectedServiceId] = useState(
-    preselectedService?.id || "corte-barba-terapia"
-  );
+  // Form State - Multi-service quantity map: { [serviceId]: quantity }
+  // Defaults to preselected service or best-seller with quantity 1
+  const [selectedServices, setSelectedServices] = useState({
+    [preselectedService?.id || "corte-barba-terapia"]: 1
+  });
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [clientName, setClientName] = useState("");
@@ -59,6 +63,67 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Computed list of selected services
+  const selectedItemsList = Object.entries(selectedServices)
+    .filter(([_, qty]) => qty > 0)
+    .map(([sId, qty]) => {
+      const s = servicesData.find((item) => item.id === sId);
+      return {
+        id: sId,
+        name: s?.name || sId,
+        price: s?.price || 0,
+        priceFormatted: s?.priceFormatted || `${s?.price} €`,
+        duration: s?.duration || "30 min",
+        quantity: qty,
+        subtotal: (s?.price || 0) * qty,
+        itemData: s
+      };
+    });
+
+  const totalQuantity = selectedItemsList.reduce((acc, item) => acc + item.quantity, 0);
+  const totalPriceNumber = selectedItemsList.reduce((acc, item) => acc + item.subtotal, 0);
+  const totalPriceFormatted = `${totalPriceNumber.toFixed(2).replace(".", ",")} €`;
+
+  const primaryServiceId = selectedItemsList[0]?.id || "corte-barba-terapia";
+  const primaryService = servicesData.find((s) => s.id === primaryServiceId) || servicesData[0];
+  const selectedServiceId = primaryServiceId; // for backward compatibility
+
+  const servicesSummaryText = selectedItemsList.length > 0
+    ? selectedItemsList.map((item) => `${item.quantity}x ${item.name}`).join(" + ")
+    : primaryService.name;
+
+  const handleSelectOrToggle = (serviceId) => {
+    setSelectedServices((prev) => {
+      const current = prev[serviceId] || 0;
+      if (current === 0) {
+        return { ...prev, [serviceId]: 1 };
+      }
+      return prev;
+    });
+  };
+
+  const handleIncrement = (serviceId, e) => {
+    e?.stopPropagation();
+    setSelectedServices((prev) => {
+      const current = prev[serviceId] || 0;
+      if (current >= 5) return prev;
+      return { ...prev, [serviceId]: current + 1 };
+    });
+  };
+
+  const handleDecrement = (serviceId, e) => {
+    e?.stopPropagation();
+    setSelectedServices((prev) => {
+      const current = prev[serviceId] || 0;
+      if (current <= 1) {
+        const next = { ...prev };
+        delete next[serviceId];
+        return next;
+      }
+      return { ...prev, [serviceId]: current - 1 };
+    });
+  };
 
   // 🔒 Bulletproof Lock body & html scroll when modal is active
   useEffect(() => {
@@ -86,7 +151,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
   useEffect(() => {
     if (preselectedService?.id) {
-      setSelectedServiceId(preselectedService.id);
+      setSelectedServices({ [preselectedService.id]: 1 });
     }
   }, [preselectedService]);
 
@@ -101,13 +166,15 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       setStep(1);
       setBookingResult(null);
       setErrorMessage("");
-      setSelectedServiceId(preselectedService?.id || "corte-barba-terapia");
+      setSelectedServices({
+        [preselectedService?.id || "corte-barba-terapia"]: 1
+      });
     }
   }, [isOpen, preselectedService]);
 
-  // Fetch slots whenever selectedDate or selectedServiceId changes
+  // Fetch slots whenever selectedDate or primaryServiceId changes
   useEffect(() => {
-    if (!selectedDate || !selectedServiceId) return;
+    if (!selectedDate || !primaryServiceId) return;
 
     let isMounted = true;
     setIsLoadingSlots(true);
@@ -116,7 +183,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     getAvailableSlots({
       shopSlug: "rotadocorte",
       date: selectedDate,
-      serviceId: selectedServiceId
+      serviceId: primaryServiceId
     }).then((res) => {
       if (isMounted) {
         setIsLoadingSlots(false);
@@ -131,12 +198,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     return () => {
       isMounted = false;
     };
-  }, [selectedDate, selectedServiceId]);
+  }, [selectedDate, primaryServiceId]);
 
   if (!isOpen) return null;
 
-  const currentService =
-    servicesData.find((s) => s.id === selectedServiceId) || servicesData[0];
+  const currentService = primaryService;
 
   // Helper to generate next 31 selectable days (Full Month) with elegant natural casing
   const getNextDays = () => {
@@ -180,7 +246,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     try {
       const res = await createBooking({
         shopSlug: "rotadocorte",
-        serviceId: selectedServiceId,
+        serviceId: primaryServiceId,
+        selectedServices: selectedItemsList,
+        totalPrice: totalPriceFormatted,
+        totalQuantity: totalQuantity,
         date: selectedDate,
         time: selectedTime,
         customerName: clientName.trim(),
@@ -197,8 +266,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
         // Dispara notificação automática em tempo real para o WhatsApp do Administrador
         sendAdminWhatsAppNotification({
-          serviceName: currentService?.name || selectedServiceId,
-          servicePrice: currentService?.priceFormatted || "15,00 €",
+          serviceName: servicesSummaryText || primaryService?.name,
+          servicePrice: totalPriceFormatted,
           dateFormatted: formattedDatePortuguese,
           time: selectedTime,
           clientName: clientName.trim(),
@@ -315,31 +384,42 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {step === 1 && (
           <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
             {/* Title & Subtitle with Fraunces Personality */}
-            <div className="shrink-0 pb-2">
+            <div className="shrink-0 pb-1.5">
               <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
                 isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
               }`}>
-                Escolha o serviço
+                Escolha os serviços
               </h2>
               <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal ${
                 isDark ? "text-[#A39B92]" : "text-[#71717A]"
               }`}>
-                Selecione o tratamento pretendido na barbearia de Gabriel Silva.
+                Selecione os serviços pretendidos na barbearia de Gabriel Silva.
               </p>
             </div>
 
+            {/* Helper tip for Parents & Kids / Multi-cut booking */}
+            <div className={`px-3 py-2 rounded-xl border flex items-center gap-2 text-[11px] sm:text-xs mb-2 shrink-0 ${
+              isDark
+                ? "bg-[#C6924B]/10 border-[#C6924B]/30 text-[#E5C268]"
+                : "bg-[#FAF0E4] border-[#E8D4BE] text-[#8C601E]"
+            }`}>
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C6924B] shrink-0" />
+              <span>
+                <strong>Marcação para Pais & Filhos ou Amigos?</strong> Use o botão <strong>[+]</strong> para marcar 2 ou mais cortes no mesmo agendamento!
+              </span>
+            </div>
+
             {/* Zero-Scroll Compact Grid: Clear hierarchy with generous spacing */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
-              {servicesData.map((s, idx) => {
-                const isSelected = selectedServiceId === s.id;
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
+              {servicesData.map((s) => {
+                const qty = selectedServices[s.id] || 0;
+                const isSelected = qty > 0;
                 const isTopSeller = s.id === "corte-barba-terapia";
                 return (
                   <div
                     key={s.id}
-                    onClick={() => setSelectedServiceId(s.id)}
+                    onClick={() => handleSelectOrToggle(s.id)}
                     className={`relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
-                      idx === 4 ? "sm:col-span-2 lg:col-span-1" : ""
-                    } ${
                       isSelected
                         ? isDark
                           ? "bg-[#241D17]/95 border-[#C6924B] ring-1 ring-[#C6924B] shadow-md shadow-[#C6924B]/15 backdrop-blur-xs"
@@ -392,17 +472,55 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       )}
                     </div>
 
-                    {/* Bottom Row: Duration + Price */}
+                    {/* Bottom Row: Duration + Price + Stepper */}
                     <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-white/5 dark:border-white/5">
                       <div className="flex items-center gap-1 text-[11px] text-[#A39B92] font-medium">
                         <Clock className="w-3 h-3 text-[#C6924B]" />
                         <span>{s.duration}</span>
                       </div>
-                      <span className={`font-mono font-bold text-xs sm:text-[13px] ${
-                        isDark ? "text-[#D8A763]" : "text-[#18181B]"
-                      }`}>
-                        {s.priceFormatted}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-mono font-bold text-xs sm:text-[13px] ${
+                          isDark ? "text-[#D8A763]" : "text-[#18181B]"
+                        }`}>
+                          {s.priceFormatted}
+                        </span>
+
+                        {isSelected ? (
+                          <div className="flex items-center gap-1.5 bg-[#C6924B]/20 border border-[#C6924B]/50 rounded-lg p-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleDecrement(s.id, e)}
+                              className="w-5 h-5 rounded-md bg-black/30 hover:bg-black/50 text-[#C6924B] flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+                              title="Diminuir quantidade"
+                            >
+                              <Minus className="w-2.5 h-2.5" />
+                            </button>
+                            <span className="font-mono font-bold text-xs text-[#FAF6F0] min-w-[14px] text-center">
+                              {qty}x
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleIncrement(s.id, e)}
+                              className="w-5 h-5 rounded-md bg-[#C6924B] hover:bg-[#D4A966] text-black flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+                              title="Adicionar mais um corte/serviço"
+                            >
+                              <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectOrToggle(s.id);
+                            }}
+                            className="px-2 py-0.5 rounded-lg text-[10.5px] font-bold border border-white/10 hover:border-[#C6924B] text-neutral-300 hover:text-[#C6924B] transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Adicionar</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -411,23 +529,33 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
             {/* Step 1 Footer */}
             <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
-              <div className="hidden sm:flex items-center gap-2 text-xs text-[#71717A] dark:text-[#A39B92] shrink-0">
+              <div className="flex items-center gap-2 text-xs text-[#71717A] dark:text-[#A39B92] shrink-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
-                <span className="text-xs whitespace-nowrap">{t.bookingModal.safeBadge || "Atendimento exclusivo • Gabriel Silva"}</span>
+                <span className="text-xs">
+                  {totalQuantity > 0 ? (
+                    <strong className="text-[#C6924B] font-mono">
+                      {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"} ({totalPriceFormatted})
+                    </strong>
+                  ) : (
+                    "Selecione pelo menos um serviço"
+                  )}
+                </span>
               </div>
               <button
                 type="button"
-                disabled={!selectedServiceId}
+                disabled={totalQuantity === 0}
                 onClick={() => {
-                  if (selectedServiceId) setStep(2);
+                  if (totalQuantity > 0) setStep(2);
                 }}
                 className={`w-full sm:w-auto ml-auto px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs font-extrabold tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg shrink-0 whitespace-nowrap ${
-                  selectedServiceId
+                  totalQuantity > 0
                     ? "bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] shadow-[#C6924B]/20 hover:scale-[1.02] cursor-pointer"
                     : "bg-white/10 text-white/40 border border-white/10 cursor-not-allowed"
                 }`}
               >
-                <span className="whitespace-nowrap">{selectedServiceId ? "Continuar para data" : "Selecione um serviço"}</span>
+                <span className="whitespace-nowrap">
+                  {totalQuantity > 0 ? `Continuar para data (${totalPriceFormatted})` : "Selecione um serviço"}
+                </span>
                 <ChevronRight className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
               </button>
             </div>
@@ -448,7 +576,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal ${
                 isDark ? "text-[#A39B92]" : "text-[#71717A]"
               }`}>
-                Marcação com até 1 mês de antecedência (Segunda a Sábado, 10:00 – 22:00).
+                Horários: Seg. (13h – 22h) • Ter. a Sex. (10h – 22h) • Sáb. (10h – 18h). Encerrado ao Domingo.
               </p>
             </div>
 
@@ -531,7 +659,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 onClick={() => setStep(3)}
                 className="bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] font-extrabold px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs tracking-wide flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
               >
-                <span className="whitespace-nowrap">Ver horários ({currentService.duration})</span>
+                <span className="whitespace-nowrap">Ver horários ({totalPriceFormatted})</span>
                 <ChevronRight className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
               </button>
             </div>
@@ -552,7 +680,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal capitalize ${
                 isDark ? "text-[#A39B92]" : "text-[#71717A]"
               }`}>
-                {formattedDatePortuguese} • Duração: <span className="text-[#C6924B] font-bold">{currentService.duration}</span>
+                {formattedDatePortuguese} • Total: <span className="text-[#C6924B] font-bold">{totalPriceFormatted}</span>
+                {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 1 && " (Segunda: 13:00 – 22:00)"}
+                {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 6 && " (Sábado: 10:00 – 18:00)"}
               </p>
             </div>
 
@@ -643,7 +773,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       isDark ? "text-[#D8A763]" : "text-[#8C601E]"
                     }`}>
                       <Moon className="w-3.5 h-3.5 text-[#C6924B]" />
-                      <span>Tarde & Noite (14:00 – 22:00)</span>
+                      <span>
+                        {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 6
+                          ? "Tarde (14:00 – 18:00)"
+                          : "Tarde & Noite (14:00 – 22:00)"}
+                      </span>
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
                       {availableSlots
@@ -758,7 +892,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 <div className="flex items-center gap-2">
                   <Scissors className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C6924B]" />
                   <p className="font-bold text-xs sm:text-sm md:text-base">
-                    {currentService.name}
+                    {servicesSummaryText || currentService.name}
                   </p>
                 </div>
                 <p className={`text-[11px] sm:text-xs capitalize font-medium ${isDark ? "text-[#D8A763]" : "text-[#8C601E]"}`}>
@@ -767,10 +901,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
               <div className="text-right">
                 <span className="font-bold text-sm sm:text-lg font-mono text-[#C6924B]">
-                  {currentService.priceFormatted}
+                  {totalPriceFormatted}
                 </span>
                 <p className={`text-[11px] sm:text-xs ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
-                  {currentService.duration}
+                  {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"}
                 </p>
               </div>
             </div>
@@ -842,7 +976,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Pretendo corte à tesoura e barba com toalha aquecida"
+                  placeholder={
+                    totalQuantity > 1
+                      ? "Ex: 1 corte para o pai (André) e 1 corte para o filho (Martim)"
+                      : "Ex: Pretendo corte à tesoura e barba com toalha aquecida"
+                  }
                   value={clientNotes}
                   onChange={(e) => setClientNotes(e.target.value)}
                   className={`w-full px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
@@ -915,9 +1053,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               isDark ? "bg-[#1E1915] border-[#2D251F] text-[#FAF6F0]" : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B] shadow-xs"
             }`}>
               <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Serviço:</span>
-                <span className="font-bold">
-                  {currentService.name}
+                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Serviço(s):</span>
+                <span className="font-bold text-right">
+                  {servicesSummaryText || currentService.name}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-white/5">
@@ -933,9 +1071,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Valor:</span>
+                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Valor Total:</span>
                 <span className="font-bold text-[#C6924B]">
-                  {currentService.priceFormatted}
+                  {totalPriceFormatted}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -951,8 +1089,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               {/* WhatsApp 1-Click Confirmation */}
               <a
                 href={`https://wa.me/351935190491?text=${buildWhatsAppMessage({
-                  serviceName: currentService.name,
-                  servicePrice: currentService.priceFormatted,
+                  serviceName: servicesSummaryText || currentService.name,
+                  servicePrice: totalPriceFormatted,
                   dateFormatted: formattedDatePortuguese,
                   time: selectedTime,
                   clientName,

@@ -2,7 +2,7 @@
  * Booking Engine & Calendar Utilities (Single Barber & 30-Minute Interval System)
  */
 
-import { servicesData, shopInfo } from "../data/services";
+import { servicesData, shopInfo } from "../data/services.js";
 
 /**
  * Generates viable time slots starting strictly at 30-minute intervals (10:00, 10:30, etc.)
@@ -23,11 +23,27 @@ export function generateAvailableSlots({
     return [];
   }
 
-  // Working shift: 10:00 - 22:00
-  const shiftStartMinutes = 10 * 60; // 10:00
-  const shiftEndMinutes = 22 * 60;   // 22:00
+  // Working shifts by day of the week:
+  // - Segunda-feira (1): 13:00 - 22:00 (sem pausa de almoço matinal)
+  // - Terça a Sexta (2..5): 10:00 - 22:00 (almoço: 13:00 - 14:00)
+  // - Sábado (6): 10:00 - 18:00 (almoço: 13:00 - 14:00)
+  let shiftStartMinutes = 10 * 60;
+  let shiftEndMinutes = 22 * 60;
+  let hasLunchBreak = true;
 
-  // Lunch break: 13:00 - 14:00 (13:00 and 13:30 are closed for lunch)
+  if (dayOfWeek === 1) {
+    // Segunda-feira: 13:00 às 22:00
+    shiftStartMinutes = 13 * 60;
+    shiftEndMinutes = 22 * 60;
+    hasLunchBreak = false;
+  } else if (dayOfWeek === 6) {
+    // Sábado: 10:00 às 18:00
+    shiftStartMinutes = 10 * 60;
+    shiftEndMinutes = 18 * 60;
+    hasLunchBreak = true;
+  }
+
+  // Lunch break: 13:00 - 14:00 (13:00 and 13:30 are closed for lunch when active)
   const lunchStartMinutes = 13 * 60;
   const lunchEndMinutes = 14 * 60;
 
@@ -44,14 +60,14 @@ export function generateAvailableSlots({
   for (
     let slotStart = shiftStartMinutes;
     slotStart < shiftEndMinutes;
-    slotStart += slotIntervalMinutes // Strictly 30-minute increments: 10:00, 10:30, 11:00 ... 21:30
+    slotStart += slotIntervalMinutes // Strictly 30-minute increments
   ) {
     const timeString = minutesToTimeString(slotStart);
     const h = Math.floor(slotStart / 60);
     const period = h < 13 ? "morning" : h < 19 ? "afternoon" : "evening";
 
-    // Skip lunch hours (13:00 and 13:30)
-    if (slotStart >= lunchStartMinutes && slotStart < lunchEndMinutes) {
+    // Skip lunch hours (13:00 and 13:30) if applicable
+    if (hasLunchBreak && slotStart >= lunchStartMinutes && slotStart < lunchEndMinutes) {
       continue;
     }
 
@@ -221,24 +237,64 @@ export async function sendAdminWhatsAppNotification({
   phone,
   notes
 }) {
+  const env =
+    typeof import.meta !== "undefined" && import.meta?.env
+      ? import.meta.env
+      : {};
+
+  const greenApiUrl =
+    env.VITE_GREEN_API_URL || "https://7107.api.greenapi.com";
+  const greenApiId =
+    env.VITE_GREEN_API_ID_INSTANCE || "710722740665";
+  const greenApiToken =
+    env.VITE_GREEN_API_TOKEN_INSTANCE ||
+    "6aafbc5f8161432fb8342fc5ab5c20533dde6e794dfc406987";
+  const greenApiGroupId =
+    env.VITE_GREEN_API_GROUP_ID || "120363412598827459@g.us";
+
   // Configured WhatsApp notification recipients (Paulo + Gabriel)
   const ADMIN_RECIPIENTS = [
     { phone: "351926256842", apikey: "1825930", name: "Paulo (Admin)" },
     { phone: "351935190491", apikey: "1726665", name: "Gabriel (Barbeiro)" }
   ];
 
-  let msg = `✂️ *Rota do Corte — Tem um agendamento previsto!*\n\n`;
-  msg += `----------------------------------------\n\n`;
+  let msg = `✂️ *ROTA DO CORTE — NOVO AGENDAMENTO!*\n\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
   msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
   msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
   msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
-  if (notes) msg += `📝 *Notas:* ${notes}\n`;
-  msg += `\n----------------------------------------`;
+  if (notes) msg += `📝 *Observações:* ${notes}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📍 _Barbearia Gabriel Silva • Paião_`;
 
+  // 1. Primary Dispatch: Green-API (Sends to dedicated WhatsApp Group or Admin numbers)
+  if (greenApiUrl && greenApiId && greenApiToken) {
+    try {
+      const greenEndpoint = `${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`;
+      const targetChatIds = greenApiGroupId
+        ? [greenApiGroupId]
+        : ADMIN_RECIPIENTS.map((r) => `${r.phone}@c.us`);
+
+      const greenPromises = targetChatIds.map(async (chatId) => {
+        return fetch(greenEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatId,
+            message: msg
+          })
+        });
+      });
+      await Promise.allSettled(greenPromises);
+      return { success: true };
+    } catch (err) {
+      console.warn("Falha no envio Green-API, a tentar fallback:", err);
+    }
+  }
+
+  // 2. Secondary Fallback: CallMeBot
   const encodedMsg = encodeURIComponent(msg);
-
-  // Dispatch in parallel to all active recipients with multi-layer fallback
   const promises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
     if (!recipientPhone || !recipientKey) return;
     const url = `https://api.callmebot.com/whatsapp.php?phone=${recipientPhone}&text=${encodedMsg}&apikey=${recipientKey}`;

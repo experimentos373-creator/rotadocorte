@@ -14,7 +14,9 @@ export const shopInfo = {
   heroImage: "/images/hero.jpg",
   logoImage: "/images/logo.png",
   hours: [
-    { days: "Segunda a Sábado", hours: "10:00 – 22:00", lunch: "Almoço: 13:00 – 14:00", open: true },
+    { days: "Segunda-feira", hours: "13:00 – 22:00", lunch: null, open: true },
+    { days: "Terça a Sexta", hours: "10:00 – 22:00", lunch: "Almoço: 13:00 – 14:00", open: true },
+    { days: "Sábado", hours: "10:00 – 18:00", lunch: "Almoço: 13:00 – 14:00", open: true },
     { days: "Domingo", hours: "Encerrado", open: false }
   ]
 };
@@ -35,6 +37,23 @@ export const servicesData = [
       "Corte de cabelo completo à escolha",
       "Sessão de barbaterapia com vapor de ozónio",
       "Toalha aquecida e bálsamo pós-barba nutritivo"
+    ]
+  },
+  {
+    id: "corte-tratamento-facial",
+    name: "Corte de Cabelo + Tratamento Facial",
+    price: 12.0,
+    priceFormatted: "12,00 €",
+    duration: "35 min",
+    badge: "Novo",
+    shortDesc: "Corte de cabelo personalizado seguido de tratamento facial completo com toalha quente, massagem, limpeza e máscara facial.",
+    image: "/images/facial-spa.jpg",
+    video: null,
+    featured: true,
+    details: [
+      "Corte de cabelo personalizado ao seu estilo",
+      "Toalha quente relaxante e massagem facial",
+      "Limpeza de pele profunda, remoção de cravos e máscara facial revitalizante"
     ]
   },
   {

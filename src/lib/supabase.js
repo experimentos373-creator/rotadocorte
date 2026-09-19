@@ -1,13 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
-import { generateAvailableSlots } from "./bookingEngine";
-import { servicesData, shopInfo } from "../data/services";
+import { generateAvailableSlots } from "./bookingEngine.js";
+import { servicesData, shopInfo } from "../data/services.js";
+
+const env = (typeof import.meta !== "undefined" && import.meta?.env) ? import.meta.env : {};
 
 const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ||
+  env.VITE_SUPABASE_URL ||
   "https://vvucnqnyynydjccfqnor.supabase.co";
 
 const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  env.VITE_SUPABASE_ANON_KEY ||
   "sb_publishable_7HteCWain-w3xhd8o2hwSA_p33weMaJ";
 
 export const isSupabaseConfigured = Boolean(
@@ -123,9 +125,33 @@ export async function getAvailableSlots({
       );
 
       if (!error && Array.isArray(data)) {
+        const targetDate = new Date(`${date}T12:00:00`);
+        const dayOfWeek = targetDate.getDay(); // 0 = Sun, 1 = Mon, 6 = Sat
+
+        if (dayOfWeek === 0) {
+          return { success: true, slots: [] };
+        }
+
+        const filtered = data.filter((d) => {
+          const [h, m] = (d.formatted_time || "").split(":").map(Number);
+          const timeMinutes = h * 60 + (m || 0);
+
+          // Segunda-feira: das 13:00 às 22:00 (bloquear antes das 13:00)
+          if (dayOfWeek === 1 && timeMinutes < 13 * 60) {
+            return false;
+          }
+
+          // Sábado: das 10:00 às 18:00 (bloquear às 18:00 ou depois)
+          if (dayOfWeek === 6 && timeMinutes >= 18 * 60) {
+            return false;
+          }
+
+          return true;
+        });
+
         return {
           success: true,
-          slots: data.map((d) => ({
+          slots: filtered.map((d) => ({
             time: d.formatted_time,
             fullTimestamp: d.slot_time,
             available: d.is_available !== false,
@@ -159,12 +185,14 @@ export async function getAvailableSlots({
 
 /**
  * 🔒 ANTI-TAMPER RPC: Book an appointment
- * Prices and durations are calculated strictly inside PostgreSQL.
- * Atomic exclusion prevents double-booking.
+ * Supports single or multiple services (e.g. 2x Corte de Cabelo para Pai & Filho).
  */
 export async function createBooking({
   shopSlug = "rotadocorte",
   serviceId,
+  selectedServices = [],
+  totalPrice = null,
+  totalQuantity = 1,
   date,
   time,
   customerName,
@@ -172,8 +200,37 @@ export async function createBooking({
   customerEmail = "",
   customerNotes = ""
 }) {
-  const service = servicesData.find((s) => s.id === serviceId) || servicesData[3];
+  // Validate operating hours schedule:
+  const targetDate = new Date(`${date}T12:00:00`);
+  const dayOfWeek = targetDate.getDay();
+  const [h, m] = (time || "").split(":").map(Number);
+  const timeMinutes = h * 60 + (m || 0);
+
+  if (dayOfWeek === 0) {
+    return { success: false, message: "A barbearia encontra-se encerrada aos Domingos." };
+  }
+  if (dayOfWeek === 1 && timeMinutes < 13 * 60) {
+    return { success: false, message: "À Segunda-feira o atendimento inicia-se às 13:00." };
+  }
+  if (dayOfWeek === 6 && timeMinutes >= 18 * 60) {
+    return { success: false, message: "Ao Sábado o atendimento encerra às 18:00." };
+  }
+
+  const service = servicesData.find((s) => s.id === serviceId) || servicesData[0];
   const duration = parseInt(service?.duration, 10) || 30;
+
+  // Build enhanced notes if multiple services or quantity > 1
+  let finalNotes = customerNotes.trim();
+  let servicesSummaryStr = "";
+
+  if (Array.isArray(selectedServices) && selectedServices.length > 0) {
+    servicesSummaryStr = selectedServices
+      .map((s) => `${s.quantity || 1}x ${s.name}`)
+      .join(" + ");
+    
+    const summaryPrefix = `✂️ SERVIÇOS (${totalQuantity}x): ${servicesSummaryStr}${totalPrice ? ` [Total: ${totalPrice}]` : ""}`;
+    finalNotes = finalNotes ? `${summaryPrefix} • Nota: ${finalNotes}` : summaryPrefix;
+  }
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -186,7 +243,7 @@ export async function createBooking({
           p_customer_name: customerName,
           p_customer_phone: customerPhone,
           p_customer_email: customerEmail || null,
-          p_notes: customerNotes || null
+          p_notes: finalNotes || null
         }),
         8000
       );
@@ -199,9 +256,17 @@ export async function createBooking({
         return { success: false, error: data.error, message: data.message };
       }
 
+      const returnedAppt = data.appointment || {};
+      if (totalPrice) {
+        returnedAppt.service_price = totalPrice;
+      }
+      if (servicesSummaryStr) {
+        returnedAppt.service_name = servicesSummaryStr;
+      }
+
       return {
         success: true,
-        appointment: data.appointment
+        appointment: returnedAppt
       };
     } catch (_) {
       // Continue to local storage fallback
@@ -227,14 +292,14 @@ export async function createBooking({
     shop_name: shopInfo.name,
     shop_phone: shopInfo.phone,
     service_id: serviceId,
-    service_name: service.name,
-    service_price: service.priceFormatted || `${service.price} €`,
-    service_duration: duration,
+    service_name: servicesSummaryStr || service.name,
+    service_price: totalPrice || service.priceFormatted || `${service.price} €`,
+    service_duration: duration * (totalQuantity || 1),
     barber_name: "Gabriel Silva",
     customer_name: customerName,
     customer_phone: customerPhone,
     customer_email: customerEmail,
-    customer_notes: customerNotes,
+    customer_notes: finalNotes,
     date,
     time,
     start_time: `${date}T${time}:00`,
