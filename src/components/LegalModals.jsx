@@ -214,7 +214,7 @@ export default function LegalModals({ activeModal, onClose }) {
               2. Horário de Funcionamento Alargado
             </h3>
             <p className={isDark ? "text-[#c4c4cc]" : "text-[#4A4740]"}>
-              A barbearia opera de Segunda a Sábado das 10:00 às 22:00 (com pausa para almoço das 13:00 às 14:00), sujeito a disponibilidade na agenda oficial.
+              A barbearia opera às Segundas-feiras das 13:00 às 22:00, de Terça a Sexta das 10:00 às 22:00 (com pausa para almoço das 13:00 às 14:00) e aos Sábados das 10:00 às 18:00, sujeito a disponibilidade na agenda oficial.
             </p>
 
             <h3 className={`font-bold text-sm pt-2 ${isDark ? "text-white" : "text-[#1C1A17]"}`}>

@@ -102,7 +102,7 @@ export const faqs = [
   },
   {
     question: "Até que horas está a barbearia aberta no Paião?",
-    answer: "Estamos abertos de Segunda a Sábado das 10:00 às 22:00 (com pausa para almoço das 13:00 às 14:00), oferecendo uma conveniência única para quem precisa de cuidar do visual."
+    answer: "Estamos abertos à Segunda-feira das 13:00 às 22:00, de Terça a Sexta das 10:00 às 22:00 (com pausa para almoço das 13:00 às 14:00) e aos Sábados das 10:00 às 18:00, oferecendo total conveniência para cuidar do visual no Paião."
   },
   {
     question: "Fazem desenhos personalizados e cortes artísticos (Razor Art)?",

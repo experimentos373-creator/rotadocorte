@@ -96,7 +96,7 @@ export default function AboutArtist({ onOpenBooking }) {
                 isDark ? "bg-white/5 border-white/5 text-[#9E9EA7]" : "bg-[#FAF8F5] border-[#DED7C8] text-[#5C554B]"
               }`}>
                 <Clock className="w-3.5 h-3.5 text-[#C89B58]" />
-                <span>{t.about?.scheduleNote || "Seg. a Sáb.: 10:00 – 22:00 (Almoço: 13:00 – 14:00)"}</span>
+                <span>{t.about?.scheduleNote || "Seg.: 13:00 – 22:00 | Ter. a Sex.: 10:00 – 22:00 | Sáb.: 10:00 – 18:00"}</span>
               </div>
             </div>
           </div>
