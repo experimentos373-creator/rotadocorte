@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   X,
   Calendar as CalendarIcon,
@@ -81,6 +81,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       };
     });
 
+  const MAX_PERSONS = 4;
+
   const totalQuantity = selectedItemsList.reduce((acc, item) => acc + item.quantity, 0);
   const totalPriceNumber = selectedItemsList.reduce((acc, item) => acc + item.subtotal, 0);
   const totalPriceFormatted = `${totalPriceNumber.toFixed(2).replace(".", ",")} €`;
@@ -93,10 +95,30 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     ? selectedItemsList.map((item) => `${item.quantity}x ${item.name}`).join(" + ")
     : primaryService.name;
 
+  // Helper to calculate end time based on total 30-min slots
+  const calculateEndTime = (startTimeStr, quantity) => {
+    if (!startTimeStr) return "";
+    const [h, m] = startTimeStr.split(":").map(Number);
+    const totalMinutes = (h || 0) * 60 + (m || 0) + (quantity || 1) * 30;
+    const endH = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+    const endM = String(totalMinutes % 60).padStart(2, "0");
+    return `${endH}:${endM}`;
+  };
+
+  const selectedEndTime = calculateEndTime(selectedTime, totalQuantity);
+
+  const formattedTimeRange = selectedTime
+    ? totalQuantity > 1
+      ? `${selectedTime} – ${selectedEndTime} (${totalQuantity * 30} min • ${totalQuantity} pessoas)`
+      : `${selectedTime} (30 min)`
+    : "";
+
   const handleSelectOrToggle = (serviceId) => {
     setSelectedServices((prev) => {
+      const currentTotal = Object.values(prev).reduce((acc, q) => acc + q, 0);
       const current = prev[serviceId] || 0;
       if (current === 0) {
+        if (currentTotal >= MAX_PERSONS) return prev;
         return { ...prev, [serviceId]: 1 };
       }
       return prev;
@@ -106,8 +128,9 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const handleIncrement = (serviceId, e) => {
     e?.stopPropagation();
     setSelectedServices((prev) => {
+      const currentTotal = Object.values(prev).reduce((acc, q) => acc + q, 0);
+      if (currentTotal >= MAX_PERSONS) return prev;
       const current = prev[serviceId] || 0;
-      if (current >= 5) return prev;
       return { ...prev, [serviceId]: current + 1 };
     });
   };
@@ -124,6 +147,46 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       return { ...prev, [serviceId]: current - 1 };
     });
   };
+
+  // 🔒 CONSECUTIVE SLOT AVAILABILITY:
+  // If totalQuantity > 1, a slot is only available if all required consecutive 30-min slots are free!
+  const evaluatedSlots = useMemo(() => {
+    if (!availableSlots || availableSlots.length === 0) return [];
+    if (totalQuantity <= 1) return availableSlots;
+
+    return availableSlots.map((slot, idx) => {
+      if (!slot.available) return slot;
+
+      const [sh, sm] = slot.time.split(":").map(Number);
+      const startMin = (sh || 0) * 60 + (sm || 0);
+      let isViable = true;
+
+      for (let k = 1; k < totalQuantity; k++) {
+        const nextSlot = availableSlots[idx + k];
+        const expectedMin = startMin + k * 30;
+        if (!nextSlot || !nextSlot.available) {
+          isViable = false;
+          break;
+        }
+        const [nh, nm] = nextSlot.time.split(":").map(Number);
+        if ((nh || 0) * 60 + (nm || 0) !== expectedMin) {
+          isViable = false;
+          break;
+        }
+      }
+
+      if (!isViable) {
+        return {
+          ...slot,
+          available: false,
+          reason: "insufficient_duration",
+          reasonLabel: `Requer ${totalQuantity * 30} min livres`
+        };
+      }
+
+      return slot;
+    });
+  }, [availableSlots, totalQuantity]);
 
   // 🔒 Bulletproof Lock body & html scroll when modal is active
   useEffect(() => {
@@ -269,7 +332,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
           serviceName: servicesSummaryText || primaryService?.name,
           servicePrice: totalPriceFormatted,
           dateFormatted: formattedDatePortuguese,
-          time: selectedTime,
+          time: formattedTimeRange || selectedTime,
           clientName: clientName.trim(),
           phone: clientPhone.trim(),
           notes: clientNotes.trim()
@@ -398,15 +461,15 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Helper tip for Parents & Kids / Multi-cut booking */}
-            <div className={`px-3 py-2 rounded-xl border flex items-center gap-2 text-[11px] sm:text-xs mb-2 shrink-0 ${
+            <div className={`px-3 py-2 rounded-xl border flex items-center gap-2.5 text-[11px] sm:text-xs mb-2 shrink-0 ${
               isDark
                 ? "bg-[#C6924B]/10 border-[#C6924B]/30 text-[#E5C268]"
                 : "bg-[#FAF0E4] border-[#E8D4BE] text-[#8C601E]"
             }`}>
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C6924B] shrink-0" />
-              <span>
-                <strong>Marcação para Pais & Filhos ou Amigos?</strong> Use o botão <strong>[+]</strong> para marcar 2 ou mais cortes no mesmo agendamento!
-              </span>
+              <Users className="w-4 h-4 text-[#C6924B] shrink-0" />
+              <div className="leading-tight">
+                <strong>Marcação para Pais &amp; Filhos ou Amigos?</strong> Use o botão <strong>[+]</strong> para agendar até <strong>4 pessoas</strong> (cada corte reserva 30 min consecutivos no calendário)!
+              </div>
             </div>
 
             {/* Zero-Scroll Compact Grid: Clear hierarchy with generous spacing */}
@@ -500,9 +563,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                             </span>
                             <button
                               type="button"
+                              disabled={totalQuantity >= MAX_PERSONS}
                               onClick={(e) => handleIncrement(s.id, e)}
-                              className="w-5 h-5 rounded-md bg-[#C6924B] hover:bg-[#D4A966] text-black flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
-                              title="Adicionar mais um corte/serviço"
+                              className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold transition-colors ${
+                                totalQuantity >= MAX_PERSONS
+                                  ? "bg-neutral-800 text-neutral-500 cursor-not-allowed opacity-40"
+                                  : "bg-[#C6924B] hover:bg-[#D4A966] text-black cursor-pointer"
+                              }`}
+                              title={totalQuantity >= MAX_PERSONS ? "Limite máximo de 4 pessoas atingido" : "Adicionar mais um corte/serviço"}
                             >
                               <Plus className="w-2.5 h-2.5 stroke-[3]" />
                             </button>
@@ -510,11 +578,17 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                         ) : (
                           <button
                             type="button"
+                            disabled={totalQuantity >= MAX_PERSONS}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSelectOrToggle(s.id);
                             }}
-                            className="px-2 py-0.5 rounded-lg text-[10.5px] font-bold border border-white/10 hover:border-[#C6924B] text-neutral-300 hover:text-[#C6924B] transition-colors flex items-center gap-1 cursor-pointer"
+                            className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold border transition-colors flex items-center gap-1 ${
+                              totalQuantity >= MAX_PERSONS
+                                ? "border-white/5 text-neutral-600 cursor-not-allowed opacity-40"
+                                : "border-white/10 hover:border-[#C6924B] text-neutral-300 hover:text-[#C6924B] cursor-pointer"
+                            }`}
+                            title={totalQuantity >= MAX_PERSONS ? "Limite máximo de 4 pessoas atingido" : "Adicionar serviço"}
                           >
                             <Plus className="w-2.5 h-2.5" />
                             <span>Adicionar</span>
@@ -528,18 +602,25 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 1 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
-              <div className="flex items-center gap-2 text-xs text-[#71717A] dark:text-[#A39B92] shrink-0">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
-                <span className="text-xs">
-                  {totalQuantity > 0 ? (
-                    <strong className="text-[#C6924B] font-mono">
-                      {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"} ({totalPriceFormatted})
-                    </strong>
-                  ) : (
-                    "Selecione pelo menos um serviço"
-                  )}
-                </span>
+            <div className="pt-2.5 sm:pt-3 mt-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+              <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-[#71717A] dark:text-[#A39B92] w-full sm:w-auto">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
+                  <span className="text-xs">
+                    {totalQuantity > 0 ? (
+                      <strong className="text-[#C6924B] font-mono">
+                        {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"} ({totalPriceFormatted})
+                      </strong>
+                    ) : (
+                      "Selecione pelo menos um serviço"
+                    )}
+                  </span>
+                </div>
+                {totalQuantity > 1 && (
+                  <span className="sm:hidden text-[10.5px] font-semibold text-[#D8A763]">
+                    {totalQuantity * 30} min ({totalQuantity} pessoas)
+                  </span>
+                )}
               </div>
               <button
                 type="button"
@@ -547,16 +628,16 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 onClick={() => {
                   if (totalQuantity > 0) setStep(2);
                 }}
-                className={`w-full sm:w-auto ml-auto px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs font-extrabold tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg shrink-0 whitespace-nowrap ${
+                className={`w-full sm:w-auto px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-extrabold tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg shrink-0 ${
                   totalQuantity > 0
-                    ? "bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] shadow-[#C6924B]/20 hover:scale-[1.02] cursor-pointer"
+                    ? "bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] shadow-[#C6924B]/20 hover:scale-[1.01] cursor-pointer"
                     : "bg-white/10 text-white/40 border border-white/10 cursor-not-allowed"
                 }`}
               >
-                <span className="whitespace-nowrap">
+                <span>
                   {totalQuantity > 0 ? `Continuar para data (${totalPriceFormatted})` : "Selecione um serviço"}
                 </span>
-                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -627,29 +708,29 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Selected Date Sub-bar */}
-            <div className={`p-2.5 sm:p-3 rounded-xl border flex items-center justify-between text-xs sm:text-sm shrink-0 my-1.5 ${
+            <div className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs shrink-0 my-1.5 ${
               isDark
                 ? "bg-[#1E1915] border-[#2D251F] text-[#FAF6F0]"
                 : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B]"
             }`}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <CalendarIcon className="w-3.5 h-3.5 shrink-0 text-[#C6924B]" />
-                <span>
+                <span className="truncate">
                   Data: <strong className="capitalize text-[#C6924B]">{formattedDatePortuguese}</strong>
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-[#71717A] dark:text-[#A39B92]">
+              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#71717A] dark:text-[#A39B92] shrink-0">
                 <User className="w-3.5 h-3.5 text-[#C6924B]" />
                 <span>Gabriel Silva</span>
               </div>
             </div>
 
             {/* Step 2 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
               >
                 <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
@@ -657,10 +738,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] font-extrabold px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs tracking-wide flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
+                className="bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
               >
-                <span className="whitespace-nowrap">Ver horários ({totalPriceFormatted})</span>
-                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                <span>Ver horários ({totalPriceFormatted})</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -681,6 +762,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 isDark ? "text-[#A39B92]" : "text-[#71717A]"
               }`}>
                 {formattedDatePortuguese} • Total: <span className="text-[#C6924B] font-bold">{totalPriceFormatted}</span>
+                {totalQuantity > 1 && (
+                  <span className="block sm:inline font-semibold text-[#D8A763] mt-0.5 sm:mt-0 sm:ml-2">
+                    • Duração: {totalQuantity * 30} min ({totalQuantity} vagas consecutivas)
+                  </span>
+                )}
                 {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 1 && " (Segunda: 13:00 – 22:00)"}
                 {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 6 && " (Sábado: 10:00 – 18:00)"}
               </p>
@@ -693,7 +779,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   A consultar agenda em tempo real no Supabase...
                 </p>
               </div>
-            ) : availableSlots.length === 0 ? (
+            ) : evaluatedSlots.length === 0 ? (
               <div className={`py-8 text-center space-y-3 p-6 rounded-2xl border my-auto ${
                 isDark ? "bg-[#1E1915] border-[#2D251F]" : "bg-white border-[#E8E4DC] shadow-sm"
               }`}>
@@ -715,7 +801,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             ) : (
               <div className="space-y-3 my-auto flex-1 min-h-0 overflow-y-auto pr-0.5 py-1">
                 {/* Morning Slots */}
-                {availableSlots.some((s) => s.period === "morning") && (
+                {evaluatedSlots.some((s) => s.period === "morning") && (
                   <div className="space-y-1.5">
                     <span className={`text-xs font-semibold flex items-center gap-1.5 ${
                       isDark ? "text-[#D8A763]" : "text-[#8C601E]"
@@ -724,7 +810,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       <span>Manhã (10:00 – 13:00)</span>
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                      {availableSlots
+                      {evaluatedSlots
                         .filter((s) => s.period === "morning")
                         .map((slot) => {
                           const isOccupied = !slot.available;
@@ -755,8 +841,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                                 {slot.time}
                               </span>
                               {isOccupied && (
-                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5">
-                                  Ocupado
+                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5 text-center leading-tight">
+                                  {slot.reasonLabel || "Ocupado"}
                                 </span>
                               )}
                             </button>
@@ -767,7 +853,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 )}
 
                 {/* Afternoon & Night Slots */}
-                {availableSlots.some((s) => s.period === "afternoon" || s.period === "evening") && (
+                {evaluatedSlots.some((s) => s.period === "afternoon" || s.period === "evening") && (
                   <div className="space-y-1.5 pt-1">
                     <span className={`text-xs font-semibold flex items-center gap-1.5 ${
                       isDark ? "text-[#D8A763]" : "text-[#8C601E]"
@@ -780,7 +866,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       </span>
                     </span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                      {availableSlots
+                      {evaluatedSlots
                         .filter((s) => s.period === "afternoon" || s.period === "evening")
                         .map((slot) => {
                           const isOccupied = !slot.available;
@@ -811,8 +897,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                                 {slot.time}
                               </span>
                               {isOccupied && (
-                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5">
-                                  Ocupado
+                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5 text-center leading-tight">
+                                  {slot.reasonLabel || "Ocupado"}
                                 </span>
                               )}
                             </button>
@@ -834,7 +920,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-[#C6924B]" />
                   <span>
-                    Horário escolhido: <strong>{selectedTime}</strong> ({currentService.duration})
+                    Horário escolhido: <strong>{formattedTimeRange || selectedTime}</strong>
                   </span>
                 </div>
                 <span className="text-[11px] font-semibold text-[#C6924B]">Selecionado</span>
@@ -842,11 +928,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             )}
 
             {/* Step 3 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
               >
                 <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
@@ -855,10 +941,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 type="button"
                 disabled={!selectedTime}
                 onClick={() => setStep(4)}
-                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-40 text-[#171310] font-extrabold px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs tracking-wide flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
+                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-40 text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
               >
-                <span className="whitespace-nowrap">Avançar para dados</span>
-                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                <span>Avançar para dados</span>
+                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
               </button>
             </div>
           </div>
@@ -896,7 +982,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   </p>
                 </div>
                 <p className={`text-[11px] sm:text-xs capitalize font-medium ${isDark ? "text-[#D8A763]" : "text-[#8C601E]"}`}>
-                  {formattedDatePortuguese} às <strong>{selectedTime}</strong>
+                  {formattedDatePortuguese} às <strong>{formattedTimeRange || selectedTime}</strong>
                 </p>
               </div>
               <div className="text-right">
@@ -921,7 +1007,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             )}
 
             {/* Input Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 my-auto py-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 my-auto py-1 flex-1 min-h-0 overflow-y-auto pr-0.5">
               {/* Name */}
               <div className="space-y-1.5">
                 <label className={`text-xs font-semibold flex items-center gap-1.5 ${
@@ -998,11 +1084,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </p>
 
             {/* Step 4 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1.5 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap"
+                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
               >
                 <ChevronLeft className="w-4 h-4 shrink-0" />
                 <span>Voltar</span>
@@ -1010,17 +1096,17 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-50 text-[#171310] font-extrabold px-6 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs tracking-wide flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.02] shrink-0 whitespace-nowrap"
+                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-50 text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
               >
                 {isSubmitting ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-[#171310] border-t-transparent rounded-full animate-spin shrink-0" />
-                    <span className="whitespace-nowrap">A confirmar...</span>
+                    <span>A confirmar...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                    <span className="whitespace-nowrap">Confirmar agendamento</span>
+                    <CheckCircle2 className="w-4 h-4 stroke-[2.5] shrink-0" />
+                    <span>Confirmar agendamento</span>
                   </>
                 )}
               </button>
@@ -1032,7 +1118,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         {/* PASSO 5: SUCESSO & CONFIRMAÇÃO IMEDIATA (SPACIOUS & DELIGHTFUL)           */}
         {/* ========================================================================= */}
         {step === 5 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 sm:py-3 animate-fadeIn max-w-2xl mx-auto w-full">
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 sm:py-3 animate-fadeIn max-w-2xl mx-auto w-full overflow-y-auto pr-0.5">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#C6924B]/20 border-2 border-[#C6924B] flex items-center justify-center text-[#D8A763] mx-auto shadow-lg shadow-[#C6924B]/20 shrink-0 mb-1.5">
               <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-[#C6924B]" />
             </div>
@@ -1067,7 +1153,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               <div className="flex justify-between items-center pb-2 border-b border-white/5">
                 <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Data & Hora:</span>
                 <span className="font-bold capitalize">
-                  {formattedDatePortuguese} às {selectedTime}
+                  {formattedDatePortuguese} às {formattedTimeRange || selectedTime}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-white/5">
@@ -1092,7 +1178,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   serviceName: servicesSummaryText || currentService.name,
                   servicePrice: totalPriceFormatted,
                   dateFormatted: formattedDatePortuguese,
-                  time: selectedTime,
+                  time: formattedTimeRange || selectedTime,
                   clientName,
                   phone: clientPhone,
                   notes: clientNotes
@@ -1112,7 +1198,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     serviceName: currentService.name,
                     date: selectedDate,
                     time: selectedTime,
-                    durationMinutes: parseInt(currentService.duration, 10) || 30
+                    durationMinutes: (totalQuantity || 1) * 30
                   })}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -1133,7 +1219,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       serviceName: currentService.name,
                       date: selectedDate,
                       time: selectedTime,
-                      durationMinutes: parseInt(currentService.duration, 10) || 30,
+                      durationMinutes: (totalQuantity || 1) * 30,
                       clientName
                     })
                   }

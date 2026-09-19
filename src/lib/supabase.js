@@ -232,6 +232,32 @@ export async function createBooking({
     finalNotes = finalNotes ? `${summaryPrefix} • Nota: ${finalNotes}` : summaryPrefix;
   }
 
+  // Calculate all consecutive 30-min slots required for this booking
+  const [hStart, mStart] = (time || "").split(":").map(Number);
+  const startTotalMinutes = (hStart || 0) * 60 + (mStart || 0);
+  const consecutiveTimes = [];
+  for (let i = 0; i < (totalQuantity || 1); i++) {
+    const mTotal = startTotalMinutes + i * 30;
+    const h = String(Math.floor(mTotal / 60)).padStart(2, "0");
+    const m = String(mTotal % 60).padStart(2, "0");
+    consecutiveTimes.push(`${h}:${m}`);
+  }
+
+  // Verify that all consecutive slots are within business hours
+  for (const slotTime of consecutiveTimes) {
+    const [sh, sm] = slotTime.split(":").map(Number);
+    const sMin = sh * 60 + sm;
+    if (dayOfWeek === 1 && sMin >= 22 * 60) {
+      return { success: false, message: `O agendamento para ${totalQuantity} pessoas ultrapassa o horário de encerramento das 22:00.` };
+    }
+    if (dayOfWeek === 6 && sMin >= 18 * 60) {
+      return { success: false, message: `O agendamento para ${totalQuantity} pessoas ultrapassa o horário de fecho de Sábado às 18:00.` };
+    }
+    if (dayOfWeek !== 1 && sMin >= 13 * 60 && sMin < 14 * 60) {
+      return { success: false, message: `O agendamento para ${totalQuantity} pessoas coincide com a pausa de almoço (13:00 – 14:00).` };
+    }
+  }
+
   if (isSupabaseConfigured && supabase) {
     try {
       const startTimeIso = new Date(`${date}T${time}:00`).toISOString();
@@ -256,6 +282,28 @@ export async function createBooking({
         return { success: false, error: data.error, message: data.message };
       }
 
+      // 🔒 MULTI-SLOT PROTECTION: Block subsequent slots in Supabase so no other client can book them
+      if (totalQuantity > 1) {
+        for (let i = 1; i < consecutiveTimes.length; i++) {
+          const nextSlotTime = consecutiveTimes[i];
+          const nextSlotIso = new Date(`${date}T${nextSlotTime}:00`).toISOString();
+
+          try {
+            await supabase.rpc("book_appointment", {
+              p_shop_slug: shopSlug,
+              p_service_id: serviceId,
+              p_start_time: nextSlotIso,
+              p_customer_name: `${customerName} (${i + 1}ª Pessoa / Vaga Bloqueada)`,
+              p_customer_phone: customerPhone,
+              p_customer_email: customerEmail || null,
+              p_notes: `✂️ [VAGA BLOQUEADA] ${i + 1}ª Pessoa do grupo/família de ${customerName}. Início do corte às ${time}. Horário indisponível para outros clientes.`
+            });
+          } catch (slotErr) {
+            console.warn(`Aviso ao reservar slot consecutivo ${nextSlotTime} no Supabase:`, slotErr);
+          }
+        }
+      }
+
       const returnedAppt = data.appointment || {};
       if (totalPrice) {
         returnedAppt.service_price = totalPrice;
@@ -275,15 +323,15 @@ export async function createBooking({
 
   // Local storage simulation with conflict check
   const localBookings = getLocalAppointments();
-  const hasConflict = localBookings.some(
-    (b) => b.date === date && b.time === time && b.status !== "cancelled"
+  const hasConflict = consecutiveTimes.some((slotTime) =>
+    localBookings.some((b) => b.date === date && b.time === slotTime && b.status !== "cancelled")
   );
 
   if (hasConflict) {
     return {
       success: false,
       error: "SLOT_ALREADY_TAKEN",
-      message: "Este horário acabou de ser reservado. Por favor escolha outro horário."
+      message: "Um dos horários necessários para este agendamento já se encontra reservado. Por favor escolha outro horário."
     };
   }
 
@@ -294,7 +342,7 @@ export async function createBooking({
     service_id: serviceId,
     service_name: servicesSummaryStr || service.name,
     service_price: totalPrice || service.priceFormatted || `${service.price} €`,
-    service_duration: duration * (totalQuantity || 1),
+    service_duration: 30 * (totalQuantity || 1),
     barber_name: "Gabriel Silva",
     customer_name: customerName,
     customer_phone: customerPhone,
@@ -310,6 +358,35 @@ export async function createBooking({
   };
 
   localBookings.push(newAppointment);
+
+  // Also block consecutive slots in local bookings
+  if (totalQuantity > 1) {
+    for (let i = 1; i < consecutiveTimes.length; i++) {
+      const slotTime = consecutiveTimes[i];
+      localBookings.push({
+        id: `local-${Date.now()}-${i}`,
+        shop_name: shopInfo.name,
+        shop_phone: shopInfo.phone,
+        service_id: serviceId,
+        service_name: `[Vaga Bloqueada] ${i + 1}ª Pessoa`,
+        service_price: "0,00 €",
+        service_duration: 30,
+        barber_name: "Gabriel Silva",
+        customer_name: `${customerName} (${i + 1}ª Pessoa)`,
+        customer_phone: customerPhone,
+        customer_email: customerEmail,
+        customer_notes: `[Vaga Bloqueada] ${i + 1}ª Pessoa de ${customerName}. Início às ${time}.`,
+        date,
+        time: slotTime,
+        start_time: `${date}T${slotTime}:00`,
+        formatted_date: new Date(date).toLocaleDateString("pt-PT"),
+        formatted_time: slotTime,
+        status: "confirmed",
+        created_at: new Date().toISOString()
+      });
+    }
+  }
+
   saveLocalAppointments(localBookings);
 
   return {

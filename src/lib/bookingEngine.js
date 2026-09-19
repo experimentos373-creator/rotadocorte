@@ -13,7 +13,8 @@ export function generateAvailableSlots({
   serviceId,
   existingBookings = [],
   slotIntervalMinutes = 30,
-  minNoticeHours = 1
+  minNoticeHours = 1,
+  requiredSlots = 1
 }) {
   const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay(); // 0 = Sunday
@@ -55,7 +56,7 @@ export function generateAvailableSlots({
 
   const currentMinutesFromMidnight = now.getHours() * 60 + now.getMinutes() + minNoticeHours * 60;
 
-  const slots = [];
+  const rawSlots = [];
 
   for (
     let slotStart = shiftStartMinutes;
@@ -73,7 +74,7 @@ export function generateAvailableSlots({
 
     // Check past times if today
     if (isToday && slotStart < currentMinutesFromMidnight) {
-      slots.push({
+      rawSlots.push({
         time: timeString,
         minutes: slotStart,
         period,
@@ -83,15 +84,19 @@ export function generateAvailableSlots({
       continue;
     }
 
-    // Check conflict: exactly 1 booking = 1 slot occupied (strictly the exact time of that booking)
+    // Check conflict: accounts for appointment duration (e.g. 60min booking blocks both 15:00 and 15:30)
     const hasConflict = existingBookings.some((b) => {
       if (b.date !== date || b.status === "cancelled") return false;
-      return b.time === timeString;
+      const bTime = b.time || b.formatted_time;
+      if (!bTime) return false;
+      const bStart = timeStringToMinutes(bTime);
+      const bDuration = Number(b.service_duration || b.duration) || 30;
+      return slotStart >= bStart && slotStart < bStart + bDuration;
     });
 
     if (hasConflict) {
-      // Slot remains VISIBLE in the grid, but marked as occupied/disabled!
-      slots.push({
+      // Slot remains VISIBLE in the grid, but marked as occupied/disabled
+      rawSlots.push({
         time: timeString,
         minutes: slotStart,
         period,
@@ -99,7 +104,7 @@ export function generateAvailableSlots({
         reason: "occupied"
       });
     } else {
-      slots.push({
+      rawSlots.push({
         time: timeString,
         minutes: slotStart,
         period,
@@ -108,7 +113,36 @@ export function generateAvailableSlots({
     }
   }
 
-  return slots;
+  // If multiple slots are required (e.g. 2, 3, or 4 people/services),
+  // verify that subsequent consecutive 30-min slots are also free and within shift
+  if (requiredSlots <= 1) {
+    return rawSlots;
+  }
+
+  return rawSlots.map((slot, idx) => {
+    if (!slot.available) return slot;
+
+    let hasConsecutive = true;
+    for (let k = 1; k < requiredSlots; k++) {
+      const nextSlot = rawSlots[idx + k];
+      const expectedMinutes = slot.minutes + k * slotIntervalMinutes;
+      if (!nextSlot || !nextSlot.available || nextSlot.minutes !== expectedMinutes) {
+        hasConsecutive = false;
+        break;
+      }
+    }
+
+    if (!hasConsecutive) {
+      return {
+        ...slot,
+        available: false,
+        reason: "insufficient_duration",
+        reasonLabel: `Requer ${requiredSlots * 30} min livres`
+      };
+    }
+
+    return slot;
+  });
 }
 
 export function minutesToTimeString(minutes) {
