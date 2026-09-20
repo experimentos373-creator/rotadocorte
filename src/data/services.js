@@ -48,7 +48,7 @@ export const servicesData = [
     badge: "Novo",
     shortDesc: "Corte de cabelo personalizado seguido de tratamento facial completo com toalha quente, massagem, limpeza e máscara facial.",
     image: "/images/facial-spa.jpg",
-    video: null,
+    video: "/videos/tratamento_facial.mp4",
     featured: true,
     details: [
       "Corte de cabelo personalizado ao seu estilo",
