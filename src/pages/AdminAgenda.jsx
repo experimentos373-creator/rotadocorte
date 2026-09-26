@@ -12,82 +12,57 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  Euro,
   Lock,
-  ArrowLeft,
   Search,
   SlidersHorizontal,
   Scissors,
   Check,
   AlertCircle,
   Layers,
-  Sparkles,
-  ExternalLink,
   ChevronDown,
   Pencil,
   Trash2,
   BarChart3,
   Users,
-  Award,
-  Flame,
-  Coffee,
-  PieChart,
-  ArrowUpRight,
-  ShieldAlert,
-  DollarSign,
-  Percent,
-  CalendarDays,
-  Sunrise,
   Sun,
   Moon,
-  Lightbulb,
-  Star,
   Eye,
   EyeOff,
   LogOut,
-  KeyRound,
   ShieldCheck,
-  Activity,
-  Timer,
-  Zap,
-  Target,
-  TrendingDown,
-  ArrowRight,
-  LayoutDashboard,
-  CalendarRange,
-  FileSpreadsheet,
+  CalendarDays,
   Download,
   Bell,
-  BellOff,
   Volume2,
   VolumeX,
   Menu,
   X,
-  UserCheck,
   Archive,
-  Receipt
+  Receipt,
+  Grid3X3,
+  List
 } from "lucide-react";
 import { WhatsAppIcon } from "../components/WhatsAppButton";
 import {
-  getLocalAppointments,
-  saveLocalAppointments,
   updateAppointment,
   deleteAppointment,
   getAllAppointments,
   createBlockSlot,
   verifyAdminPin,
   subscribeToAppointments,
-  createBooking,
-  isSupabaseConfigured,
-  supabase
+  subscribeToLiveAlerts,
+  createBooking
 } from "../lib/supabase";
 import {
   playLuxuryChime,
+  playReminderChime,
   showSystemNotification,
   isSoundEnabled,
   setSoundEnabled,
   isNotificationsEnabled,
   setNotificationsEnabled,
+  isRemindersEnabled,
+  setRemindersEnabled,
   requestNotificationPermission,
   getNotificationPermission,
   unlockAudioContext
@@ -136,17 +111,20 @@ export default function AdminAgenda() {
   // Navigation Tabs: 'agenda' | 'stats' | 'crm' | 'blocks'
   const [activeTab, setActiveTab] = useState("agenda");
 
+  // View Mode inside Agenda: 'table' (Lista Detalhada) | 'timeline' (Vista Horária)
+  const [agendaViewMode, setAgendaViewMode] = useState("table");
+
   // Selected Date for Agenda View
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
   );
 
-  // Global & Day Appointments
+  // Appointments State
   const [allAppointments, setAllAppointments] = useState([]);
   const [dayAppointments, setDayAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Scope in Agenda View: 'all' (Todas as Marcações) | 'day' (Agenda do Dia Selecionado)
+  // Scope in Agenda View: 'day' (Agenda do Dia Selecionado) | 'all' (Todas as Marcações)
   const [agendaScope, setAgendaScope] = useState("day");
 
   // Sorting Mode: 'newest' | 'oldest' | 'price_desc' | 'price_asc'
@@ -160,18 +138,16 @@ export default function AdminAgenda() {
 
   // Stats Period Selector: 'today' | 'week' | 'month' | '30days' | 'all'
   const [statsPeriod, setStatsPeriod] = useState("month");
-  const [hoveredService, setHoveredService] = useState(null);
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [manualName, setManualName] = useState("");
   const [manualPhone, setManualPhone] = useState("");
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [manualTime, setManualTime] = useState("11:00");
   const [manualServiceId, setManualServiceId] = useState("corte-barba-terapia");
   const [manualNotes, setManualNotes] = useState("");
-  const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
-  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   // Modal: Edit Appointment
@@ -183,8 +159,6 @@ export default function AdminAgenda() {
   const [editServiceId, setEditServiceId] = useState("");
   const [editStatus, setEditStatus] = useState("confirmed");
   const [editNotes, setEditNotes] = useState("");
-  const [isEditTimeDropdownOpen, setIsEditTimeDropdownOpen] = useState(false);
-  const [isEditServiceDropdownOpen, setIsEditServiceDropdownOpen] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Modal: Block Slot (Time Off / Pausa / Ausência)
@@ -206,11 +180,11 @@ export default function AdminAgenda() {
     return isNaN(num) ? 0 : num;
   };
 
-  // 🔒 Financial Ledger & CRM state (Livro de Faturação Imutável)
+  // 🔒 Financial Ledger & CRM state
   const [ledgerCounter, setLedgerCounter] = useState(0);
   const refreshLedger = () => setLedgerCounter((prev) => prev + 1);
   const [archivedClientKeys, setArchivedClientKeys] = useState(() => getArchivedClients());
-  const [crmFilter, setCrmFilter] = useState("all"); // 'all' | 'active' | 'archived'
+  const [crmFilter, setCrmFilter] = useState("all");
 
   // Modal: Venda Direta / Faturação Balcão
   const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
@@ -223,20 +197,24 @@ export default function AdminAgenda() {
   const [directSaleNotes, setDirectSaleNotes] = useState("Venda balcão / Cliente direto");
   const [isSavingDirectSale, setIsSavingDirectSale] = useState(false);
 
-  // Unified Appointments (Garante que dados faturados ou arquivados NUNCA desapareçam ao eliminar horários)
+  // Unified Appointments (Never lose financial or archived data)
   const unifiedAppointments = useMemo(() => {
     return mergeAppointmentsWithLedger(allAppointments);
   }, [allAppointments, ledgerCounter]);
 
-  // 🔔 Live Audio & Push Notification States
+  // 🔔 Live Audio, Push Notification & Advance Reminder States
   const [isSoundOn, setIsSoundOn] = useState(() => isSoundEnabled());
   const [isNotifOn, setIsNotifOn] = useState(() => isNotificationsEnabled());
+  const [isRemindersOn, setIsRemindersOn] = useState(() => isRemindersEnabled());
   const [pushPermission, setPushPermission] = useState(() => getNotificationPermission());
   const [isNotifPopoverOpen, setIsNotifPopoverOpen] = useState(false);
   const [incomingAlert, setIncomingAlert] = useState(null);
   const alertTimerRef = useRef(null);
   const knownApptIdsRef = useRef(new Set());
   const isInitialLoadDoneRef = useRef(false);
+  const lastAdminCreatedIdRef = useRef(null);
+  const alertedBookingIdsRef = useRef(new Set());
+  const remindedKeysRef = useRef(new Set());
 
   const toggleSound = () => {
     const next = !isSoundOn;
@@ -245,6 +223,16 @@ export default function AdminAgenda() {
     if (next) {
       unlockAudioContext();
       playLuxuryChime(0.8);
+    }
+  };
+
+  const toggleReminders = () => {
+    const next = !isRemindersOn;
+    setIsRemindersOn(next);
+    setRemindersEnabled(next);
+    if (next) {
+      unlockAudioContext();
+      playReminderChime(0.8);
     }
   };
 
@@ -258,27 +246,43 @@ export default function AdminAgenda() {
     unlockAudioContext();
     playLuxuryChime(1.0);
     showSystemNotification({
-      title: "✂️ Teste de Notificação Sonora",
-      body: "O som e os alertas em tempo real estão a funcionar a 100% no painel da Rota do Corte!",
+      title: "✂️ NOVA MARCAÇÃO DE CLIENTE!",
+      body: "Manuel Ferreira marcou para as 16:30 (Corte & Barboterapia).",
       tag: "test-alert"
     });
   };
 
-  const triggerIncomingBookingAlert = (booking) => {
+  const handleTestReminder = () => {
+    unlockAudioContext();
+    playReminderChime(1.0);
+    showSystemNotification({
+      title: "⏳ PREPARAÇÃO (2h Antes)",
+      body: "⏳ PREPARAÇÃO — Esteja preparado: Marcação de Tiago Rodrigues às 18:00 (Corte Clássico).",
+      tag: "test-reminder"
+    });
+  };
+
+  // Disparo de Notificação para Novo Agendamento
+  const triggerIncomingBookingAlert = (booking, source = "client_online") => {
     if (!booking) return;
 
-    // 1. Toca o sino de luxo sintetizado
+    if (booking.id && booking.id === lastAdminCreatedIdRef.current) return;
+    if (source === "admin_manual" || booking.source === "admin_manual") return;
+    if (booking.id) {
+      if (alertedBookingIdsRef.current.has(booking.id)) return;
+      alertedBookingIdsRef.current.add(booking.id);
+    }
+
     playLuxuryChime();
 
-    // 2. Dispara notificação nativa do sistema / telemóvel
     const clientName = booking.customer_name || booking.name || "Cliente";
     const serviceName = booking.service_name || "Serviço";
     const dateStr = booking.date || "Hoje";
     const timeStr = booking.time || "";
 
     showSystemNotification({
-      title: "✂️ NOVO AGENDAMENTO RECEBIDO!",
-      body: `${clientName} marcou ${serviceName} para ${dateStr}${timeStr ? " às " + timeStr : ""}.`,
+      title: "✂️ NOVA MARCAÇÃO DE CLIENTE!",
+      body: `${clientName} marcou para as ${timeStr} do dia ${dateStr} (${serviceName}).`,
       tag: `booking-${booking.id || Date.now()}`,
       onClick: () => {
         if (booking.date) {
@@ -288,9 +292,9 @@ export default function AdminAgenda() {
       }
     });
 
-    // 3. Exibe o banner visual de alta prioridade no topo do painel
     setIncomingAlert({
       id: booking.id || Date.now(),
+      type: "new_booking",
       name: clientName,
       phone: booking.customer_phone || booking.phone || "",
       service: serviceName,
@@ -303,7 +307,84 @@ export default function AdminAgenda() {
     if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
     alertTimerRef.current = setTimeout(() => {
       setIncomingAlert(null);
-    }, 18000);
+    }, 20000);
+  };
+
+  // Lembretes de Antecedência
+  useEffect(() => {
+    if (!isAuthenticated || !isRemindersOn) return;
+
+    const checkAdvanceReminders = () => {
+      try {
+        const now = new Date();
+        const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+        const currentLisbonMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const activeToday = allAppointments.filter(
+          (a) => a.date === todayStr && a.status === "confirmed" && a.time
+        );
+
+        activeToday.forEach((appt) => {
+          const [hStr, mStr] = appt.time.split(":");
+          const apptMinutes = parseInt(hStr, 10) * 60 + parseInt(mStr, 10);
+          const diffMinutes = apptMinutes - currentLisbonMinutes;
+
+          const key2h = `notified_2h_${appt.id}_${todayStr}`;
+          const key1h = `notified_1h_${appt.id}_${todayStr}`;
+
+          if (diffMinutes > 60 && diffMinutes <= 120) {
+            let alreadyNotified = remindedKeysRef.current.has(key2h);
+            if (!alreadyNotified) {
+              remindedKeysRef.current.add(key2h);
+              triggerReminderAlert(appt, "2h", diffMinutes);
+            }
+          }
+
+          if (diffMinutes > 0 && diffMinutes <= 60) {
+            let alreadyNotified = remindedKeysRef.current.has(key1h);
+            if (!alreadyNotified) {
+              remindedKeysRef.current.add(key1h);
+              triggerReminderAlert(appt, "1h", diffMinutes);
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("Erro no motor de lembretes:", err);
+      }
+    };
+
+    checkAdvanceReminders();
+    const reminderInterval = setInterval(checkAdvanceReminders, 30000);
+    return () => clearInterval(reminderInterval);
+  }, [isAuthenticated, isRemindersOn, allAppointments]);
+
+  const triggerReminderAlert = (appt, milestone, diffMinutes) => {
+    playReminderChime();
+    const title = milestone === "1h" ? "⏰ PRÓXIMA MARCAÇÃO (Falta 1h)!" : "⏳ PREPARAÇÃO (Faltam 2h)!";
+    const body = `${appt.customer_name} às ${appt.time} (${appt.service_name || "Serviço"}).`;
+
+    showSystemNotification({
+      title,
+      body,
+      tag: `reminder-${appt.id}-${milestone}`
+    });
+
+    setIncomingAlert({
+      id: `rem-${appt.id}-${milestone}`,
+      type: milestone === "1h" ? "reminder_1h" : "reminder_2h",
+      name: appt.customer_name,
+      phone: appt.customer_phone || "",
+      service: appt.service_name || "Corte",
+      price: appt.service_price || "15,00 €",
+      date: appt.date,
+      time: appt.time,
+      diffMinutes
+    });
+
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = setTimeout(() => {
+      setIncomingAlert(null);
+    }, 25000);
   };
 
   // Login Handler
@@ -342,7 +423,7 @@ export default function AdminAgenda() {
 
   const isFetchingRef = useRef(false);
 
-  // Load All Appointments (Both for Day View, Multi-Period Stats & CRM)
+  // Load Appointments
   const loadAppointments = async (silent = false) => {
     if (!isAuthenticated || !currentAdminPin) return;
     if (isFetchingRef.current) return;
@@ -352,14 +433,12 @@ export default function AdminAgenda() {
     try {
       const data = await getAllAppointments(currentAdminPin);
       if (Array.isArray(data)) {
-        // Auto-selar no livro de faturação qualquer atendimento já concluído
         data.forEach((appt) => {
           if (appt.status === "completed") {
             sealCompletedAppointment(appt);
           }
         });
 
-        // Detecção de novas marcações via polling de segurança
         if (isInitialLoadDoneRef.current && data.length > 0) {
           const freshBookings = data.filter(
             (a) => !knownApptIdsRef.current.has(a.id) && a.status !== "cancelled"
@@ -378,7 +457,6 @@ export default function AdminAgenda() {
         setDayAppointments(forDay);
       }
     } catch (_) {
-      // Handled silently with cache fallback in supabase.js
     } finally {
       if (!silent) setIsLoading(false);
       isFetchingRef.current = false;
@@ -389,533 +467,367 @@ export default function AdminAgenda() {
     if (isAuthenticated && currentAdminPin) {
       loadAppointments();
 
-      // Realtime live sync whenever any new booking is made
-      const unsubscribe = subscribeToAppointments((payload) => {
-        if (payload?.eventType === "INSERT" && payload?.new) {
-          const newAppt = payload.new;
-          let dateStr = selectedDate;
-          let timeStr = "";
-          if (newAppt.start_time) {
-            const dt = new Date(newAppt.start_time);
-            dateStr = dt.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
-            timeStr = dt.toLocaleTimeString("pt-PT", {
-              timeZone: "Europe/Lisbon",
-              hour: "2-digit",
-              minute: "2-digit"
-            });
-          }
-          triggerIncomingBookingAlert({
-            id: newAppt.id,
-            customer_name: newAppt.customer_name,
-            customer_phone: newAppt.customer_phone,
-            service_name: newAppt.service_name || "Serviço",
-            service_price: newAppt.service_price || "15,00 €",
-            date: dateStr,
-            time: timeStr,
-            notes: newAppt.customer_notes
-          });
-        }
+      const unsubLive = subscribeToLiveAlerts((payload) => {
+        if (!payload) return;
+        if (payload.id && payload.id === lastAdminCreatedIdRef.current) return;
+        if (payload.source === "admin_manual") return;
+
+        triggerIncomingBookingAlert(payload, "client_online");
         loadAppointments(true);
       });
 
-      // Background auto-refresh polling interval (every 20s, only when tab is visible)
-      const pollInterval = setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      const unsubscribe = subscribeToAppointments((payload) => {
+        if (payload?.eventType === "INSERT" && payload?.new) {
+          const newAppt = payload.new;
+          if (newAppt.id && newAppt.id === lastAdminCreatedIdRef.current) return;
+          loadAppointments(true);
+        } else if (payload?.eventType === "UPDATE" || payload?.eventType === "DELETE") {
           loadAppointments(true);
         }
-      }, 20000);
-
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === "visible") {
-          loadAppointments(true);
-        }
-      };
-      document.addEventListener("visibilitychange", handleVisibilityChange);
+      });
 
       return () => {
-        unsubscribe();
-        clearInterval(pollInterval);
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        if (typeof unsubLive === "function") unsubLive();
+        if (typeof unsubscribe === "function") unsubscribe();
       };
     }
-  }, [selectedDate, isAuthenticated, currentAdminPin]);
+  }, [isAuthenticated, currentAdminPin, selectedDate]);
 
-  // Lock background scroll when any modal is open
   useEffect(() => {
-    const isAnyModalOpen = isNewModalOpen || editingAppt || isBlockModalOpen || isDirectSaleModalOpen;
-    if (isAnyModalOpen) {
-      document.body.classList.add("modal-open");
-      document.documentElement.classList.add("modal-open");
-      document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
-      document.body.style.touchAction = "none";
-    } else {
-      document.body.classList.remove("modal-open");
-      document.documentElement.classList.remove("modal-open");
-      document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-      document.body.style.touchAction = "";
-    }
-    return () => {
-      document.body.classList.remove("modal-open");
-      document.documentElement.classList.remove("modal-open");
-      document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-      document.body.style.touchAction = "";
-    };
-  }, [isNewModalOpen, editingAppt, isBlockModalOpen, isDirectSaleModalOpen]);
+    const forDay = allAppointments.filter((a) => a.date === selectedDate);
+    forDay.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    setDayAppointments(forDay);
+  }, [selectedDate, allAppointments]);
 
-  const changeDay = (delta) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + delta);
-    setSelectedDate(d.toISOString().split("T")[0]);
-  };
+  // Handlers for Appointment Status Changes
+  const handleStatusChange = async (id, newStatus) => {
+    const target = allAppointments.find((a) => a.id === id);
+    if (!target) return;
 
-  // Status Updater (Com auto-selagem perpétua ao concluir)
-  const handleUpdateStatus = async (id, newStatus) => {
-    const targetAppt = allAppointments.find((a) => a.id === id);
-    if (newStatus === "completed" && targetAppt) {
-      sealCompletedAppointment({ ...targetAppt, status: "completed" });
+    if (newStatus === "completed") {
+      sealCompletedAppointment(target);
       refreshLedger();
     }
+
+    const updated = { ...target, status: newStatus };
+    setAllAppointments((prev) => prev.map((a) => (a.id === id ? updated : a)));
+
     await updateAppointment(id, { status: newStatus }, currentAdminPin);
-    await loadAppointments();
+    loadAppointments(true);
   };
 
-  // Save Edit
+  const handleDeleteAppointment = async (id, isBlock = false) => {
+    const apptToDelete = allAppointments.find((a) => a.id === id);
+    if (apptToDelete && !isBlock) {
+      preserveAppointmentBeforeDelete(apptToDelete);
+      refreshLedger();
+    }
+
+    if (!window.confirm("Tem certeza que deseja remover este horário?")) return;
+
+    setAllAppointments((prev) => prev.filter((a) => a.id !== id));
+    await deleteAppointment(id, currentAdminPin);
+    if (editingAppt?.id === id) setEditingAppt(null);
+    loadAppointments(true);
+  };
+
+  // Manual New Booking
+  const handleManualSubmit = async (e) => {
+    e.preventDefault();
+    if (!manualName.trim() || !manualPhone.trim()) return;
+
+    setIsSavingManual(true);
+    const serviceObj = servicesData.find((s) => s.id === manualServiceId) || servicesData[0];
+
+    try {
+      const res = await createBooking({
+        shopSlug: "rotadocorte",
+        serviceId: manualServiceId,
+        date: manualDate,
+        time: manualTime,
+        customerName: manualName.trim(),
+        customerPhone: manualPhone.trim(),
+        customerNotes: manualNotes.trim(),
+        source: "admin_manual"
+      });
+
+      setIsSavingManual(false);
+
+      if (res.success) {
+        lastAdminCreatedIdRef.current = res.appointment?.id;
+        setIsNewModalOpen(false);
+        setManualName("");
+        setManualPhone("");
+        setManualNotes("");
+        loadAppointments();
+      } else {
+        alert(res.message || "Erro ao criar marcação");
+      }
+    } catch (_) {
+      setIsSavingManual(false);
+      alert("Erro na gravação da marcação.");
+    }
+  };
+
+  // Edit Booking Save
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingAppt) return;
+
     setIsSavingEdit(true);
+    const serviceObj = servicesData.find((s) => s.id === editServiceId) || servicesData[0];
 
-    const res = await updateAppointment(
-      editingAppt.id,
-      {
-        customer_name: editName.trim(),
-        customer_phone: editPhone.trim(),
-        date: editDate,
-        time: editTime,
-        service_id: editServiceId,
-        status: editStatus,
-        customer_notes: editNotes.trim()
-      },
-      currentAdminPin
-    );
+    const updates = {
+      customer_name: editName.trim(),
+      customer_phone: editPhone.trim(),
+      date: editDate,
+      time: editTime,
+      service_id: editServiceId,
+      service_name: serviceObj.name,
+      service_price: serviceObj.priceFormatted,
+      service_duration: parseInt(serviceObj.duration, 10) || 30,
+      status: editStatus,
+      customer_notes: editNotes.trim()
+    };
 
+    if (editStatus === "completed") {
+      sealCompletedAppointment({ ...editingAppt, ...updates });
+      refreshLedger();
+    }
+
+    await updateAppointment(editingAppt.id, updates, currentAdminPin);
     setIsSavingEdit(false);
+    setEditingAppt(null);
+    loadAppointments();
+  };
+
+  // Create Block Slot
+  const handleCreateBlock = async (e) => {
+    e.preventDefault();
+    setIsSavingBlock(true);
+
+    const [sh, sm] = blockStartTime.split(":").map(Number);
+    const [eh, em] = blockEndTime.split(":").map(Number);
+    const duration = Math.max((eh * 60 + em) - (sh * 60 + sm), 30);
+
+    const res = await createBlockSlot({
+      date: blockDate,
+      time: blockStartTime,
+      durationMinutes: duration,
+      reason: blockReason.trim() || "Pausa / Indisponível"
+    }, currentAdminPin);
+
+    setIsSavingBlock(false);
+
     if (res.success) {
-      if (editDate !== selectedDate) {
-        setSelectedDate(editDate);
-      }
-      await loadAppointments();
-      setEditingAppt(null);
+      setIsBlockModalOpen(false);
+      setBlockReason("Pausa de Almoço");
+      loadAppointments();
+    } else {
+      alert("Erro ao bloquear horário");
     }
   };
 
-  // Delete / Unblock (🔒 Com Salvaguarda Financeira Imutável)
-  const handleDeleteAppointment = async (id, isBlock = false) => {
-    const targetAppt = allAppointments.find((a) => a.id === id);
-    const targetPrice = targetAppt ? parsePrice(targetAppt.service_price) : 0;
-    const isCompleted = targetAppt?.status === "completed";
-
-    const msg = isBlock
-      ? "Deseja desbloquear e libertar este horário na agenda?"
-      : isCompleted || targetPrice > 0
-        ? `Deseja libertar este horário da agenda diária?\n\n🔒 GARANTIA DE FATURAÇÃO:\nO valor deste atendimento (${targetPrice.toFixed(2)} €) e o histórico do cliente ficam 100% blindados e preservados no balanço e relatórios financeiros.`
-        : "Deseja remover esta marcação da agenda?";
-
-    if (window.confirm(msg)) {
-      if (!isBlock && targetAppt) {
-        // Salvaguardar no Livro de Faturação antes de eliminar da tabela do Supabase
-        preserveAppointmentBeforeDelete(targetAppt, isCompleted || targetPrice > 0);
-        refreshLedger();
-      }
-      await deleteAppointment(id, currentAdminPin);
-      setEditingAppt(null);
-      await loadAppointments();
-    }
-  };
-
-  // Toggle Arquivar Cliente (CRM)
-  const handleToggleArchiveClient = (clientKey) => {
-    const updated = toggleArchiveClient(clientKey);
-    setArchivedClientKeys([...updated]);
-  };
-
-  // Registar Venda Direta / Faturação Balcão
+  // Direct Sale / Venda Balcão
   const handleSaveDirectSale = (e) => {
     e.preventDefault();
     if (!directSaleCustomer.trim()) return;
+
     setIsSavingDirectSale(true);
     recordDirectSale({
       customerName: directSaleCustomer.trim(),
       customerPhone: directSalePhone.trim(),
-      serviceName: directSaleService,
-      price: parseLedgerPrice(directSalePrice),
       date: directSaleDate,
       time: directSaleTime,
+      serviceName: directSaleService,
+      price: parseFloat(directSalePrice) || 0,
       notes: directSaleNotes.trim()
     });
+
+    refreshLedger();
     setIsSavingDirectSale(false);
     setIsDirectSaleModalOpen(false);
     setDirectSaleCustomer("");
     setDirectSalePhone("");
-    setDirectSalePrice("10.00");
-    setDirectSaleDate(new Date().toISOString().split("T")[0]);
-    setDirectSaleTime("12:00");
     setDirectSaleNotes("Venda balcão / Cliente direto");
-    refreshLedger();
   };
 
-  // Exportar Relatório Financeiro CSV
   const handleExportCSV = () => {
     exportFinancialReportCSV(unifiedAppointments);
   };
 
-  // Open Edit Modal
-  const openEditModal = (appt) => {
-    setEditingAppt(appt);
-    setEditName(appt.customer_name || "");
-    setEditPhone(appt.customer_phone || "");
-    setEditDate(appt.date || selectedDate);
-    setEditTime(appt.time || "10:30");
-    const matchedService =
-      servicesData.find(
-        (s) =>
-          s.name?.toLowerCase() === appt.service_name?.toLowerCase() ||
-          s.id === appt.service_id
-      ) || servicesData[3];
-    setEditServiceId(matchedService.id);
-    setEditStatus(appt.status || "confirmed");
-    setEditNotes(appt.customer_notes || "");
-    setIsEditTimeDropdownOpen(false);
-    setIsEditServiceDropdownOpen(false);
+  const handleArchiveToggle = (clientKey) => {
+    const updated = toggleArchiveClient(clientKey);
+    setArchivedClientKeys(updated);
   };
 
-  // Create Manual Appointment (Saved directly to central database)
-  const handleCreateManual = async (e) => {
-    e.preventDefault();
-    setIsSavingManual(true);
-    await createBooking({
-      shopSlug: "rotadocorte",
-      serviceId: manualServiceId,
-      date: selectedDate,
-      time: manualTime,
-      customerName: manualName.trim(),
-      customerPhone: manualPhone.trim(),
-      customerNotes: manualNotes.trim()
-    });
-    setIsSavingManual(false);
-    setIsNewModalOpen(false);
-    setManualName("");
-    setManualPhone("");
-    setManualNotes("");
-    await loadAppointments();
+  // Step Date Forward/Backward
+  const stepDate = (days) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split("T")[0]);
   };
 
-  // Create Block Slot (Time Off)
-  const handleCreateBlock = async (e) => {
-    e.preventDefault();
-    setIsSavingBlock(true);
-    await createBlockSlot({
-      date: blockDate,
-      startTime: blockStartTime,
-      endTime: blockEndTime,
-      reason: blockReason,
-      pin: currentAdminPin
-    });
-    setIsSavingBlock(false);
-    setIsBlockModalOpen(false);
-    if (blockDate === selectedDate) {
-      await loadAppointments();
-    } else {
-      setSelectedDate(blockDate);
-    }
-  };
-
-  // Active list based on scope (all or day)
-  const currentScopeList = agendaScope === "day" ? dayAppointments : allAppointments;
-
-  // Filtered & Sorted Appointments List for Agenda View
+  // Filtered & Sorted Appointments
   const sortedAndFilteredAppointments = useMemo(() => {
-    const sourceList = agendaScope === "day" ? dayAppointments : allAppointments;
+    const base = agendaScope === "day" ? dayAppointments : allAppointments;
 
-    const filtered = sourceList.filter((a) => {
-      const matchesStatus =
-        filterStatus === "all"
-          ? true
-          : filterStatus === "blocked"
-            ? a.status === "blocked"
-            : a.status === filterStatus;
+    let filtered = base.filter((appt) => {
+      if (filterStatus !== "all" && appt.status !== filterStatus) return false;
 
-      const query = searchQuery.toLowerCase().trim();
-      const matchesQuery =
-        !query ||
-        a.customer_name?.toLowerCase().includes(query) ||
-        a.customer_phone?.includes(query) ||
-        a.service_name?.toLowerCase().includes(query) ||
-        a.customer_notes?.toLowerCase().includes(query) ||
-        a.date?.includes(query);
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = (appt.customer_name || "").toLowerCase().includes(q);
+        const matchesPhone = (appt.customer_phone || "").includes(q);
+        const matchesService = (appt.service_name || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesPhone && !matchesService) return false;
+      }
 
-      return matchesStatus && matchesQuery;
+      return true;
     });
 
-    return [...filtered].sort((a, b) => {
-      if (sortBy === "newest") {
-        const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
-        const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
-        return timeB - timeA;
-      }
-      if (sortBy === "oldest") {
-        const timeA = new Date(a.start_time || `${a.date || "2000-01-01"}T${a.time || "00:00"}:00`).getTime() || 0;
-        const timeB = new Date(b.start_time || `${b.date || "2000-01-01"}T${b.time || "00:00"}:00`).getTime() || 0;
-        return timeA - timeB;
-      }
-      if (sortBy === "price_desc") {
-        return parsePrice(b.service_price) - parsePrice(a.service_price);
-      }
-      if (sortBy === "price_asc") {
-        return parsePrice(a.service_price) - parsePrice(b.service_price);
-      }
-      return 0;
+    filtered.sort((a, b) => {
+      if (sortBy === "price_desc") return parsePrice(b.service_price) - parsePrice(a.service_price);
+      if (sortBy === "price_asc") return parsePrice(a.service_price) - parsePrice(b.service_price);
+      if (sortBy === "oldest") return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
+      return `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`);
     });
+
+    return filtered;
   }, [agendaScope, dayAppointments, allAppointments, filterStatus, searchQuery, sortBy]);
 
-  // =========================================================================
-  // MULTI-PERIOD STATS CALCULATIONS (DASHBOARD & METRICS)
-  // =========================================================================
+  // Statistics Calculations
   const statsData = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+    const todayStr = now.toISOString().split("T")[0];
 
-    // Start of Current Week (Monday 00:00:00 to Sunday 23:59:59)
-    const d = new Date(now);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(sunday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-
-    // Filter appointments by period (using unifiedAppointments protected by Financial Ledger)
-    const filtered = unifiedAppointments.filter((a) => {
+    const targetList = unifiedAppointments.filter((a) => {
       if (!a.date) return false;
-      const apptDate = new Date(`${a.date}T12:00:00`);
-
-      if (statsPeriod === "today") {
-        return a.date === todayStr;
-      }
+      if (statsPeriod === "today") return a.date === todayStr;
       if (statsPeriod === "week") {
-        return apptDate >= monday && apptDate <= sunday;
+        const d = new Date(a.date);
+        const diff = (now - d) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= 7;
       }
       if (statsPeriod === "month") {
-        return (
-          apptDate.getFullYear() === now.getFullYear() &&
-          apptDate.getMonth() === now.getMonth()
-        );
+        return a.date.substring(0, 7) === todayStr.substring(0, 7);
       }
       if (statsPeriod === "30days") {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(now.getDate() - 30);
-        thirtyDaysAgo.setHours(0, 0, 0, 0);
-        return apptDate >= thirtyDaysAgo;
+        const d = new Date(a.date);
+        const diff = (now - d) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= 30;
       }
-      return true; // 'all'
+      return true;
     });
 
-    const nonBlocked = filtered.filter((a) => a.status !== "blocked");
-    const completed = filtered.filter((a) => a.status === "completed");
-    const confirmed = filtered.filter((a) => a.status === "confirmed");
-    const cancelled = filtered.filter((a) => a.status === "cancelled");
-    const active = filtered.filter((a) => a.status !== "cancelled" && a.status !== "blocked");
+    const nonBlocked = targetList.filter((a) => a.status !== "blocked");
+    const completed = targetList.filter((a) => a.status === "completed");
+    const confirmed = targetList.filter((a) => a.status === "confirmed");
+    const cancelled = targetList.filter((a) => a.status === "cancelled");
 
-    const completedRev = completed.reduce((acc, c) => acc + parsePrice(c.service_price), 0);
-    const estimatedRev = active.reduce((acc, c) => acc + parsePrice(c.service_price), 0);
+    const completedRev = completed.reduce((sum, a) => sum + parsePrice(a.service_price), 0);
+    const estimatedRev = nonBlocked
+      .filter((a) => a.status !== "cancelled")
+      .reduce((sum, a) => sum + parsePrice(a.service_price), 0);
 
-    // Unique Clients Count in Period
-    const uniqueClientsInPeriod = new Set(
-      nonBlocked
-        .map((a) => (a.customer_phone || a.customer_name || "").trim())
-        .filter((k) => k && k !== "---")
-    );
-    const uniqueClientsCount = uniqueClientsInPeriod.size || nonBlocked.length;
+    const avgTicket = completed.length > 0 ? completedRev / completed.length : 0;
+    const completionRate = nonBlocked.length > 0 ? Math.round((completed.length / nonBlocked.length) * 100) : 0;
 
-    // Ticket Médio (€)
-    const avgTicket = completed.length > 0 ? completedRev / completed.length : active.length > 0 ? estimatedRev / active.length : 0;
+    const clientSet = new Set(nonBlocked.map((a) => a.customer_phone || a.customer_name).filter(Boolean));
+    const uniqueClientsCount = clientSet.size;
 
-    // Taxa de Conclusão / Comparecimento (%)
-    const totalFinishedOrCancelled = completed.length + cancelled.length;
-    const completionRate = totalFinishedOrCancelled > 0 ? Math.round((completed.length / totalFinishedOrCancelled) * 100) : 100;
+    // Days activity
+    const daysCount = [0, 0, 0, 0, 0, 0];
+    const daysRevenue = [0, 0, 0, 0, 0, 0];
+    const dayNames = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-    // Client Retention / Repeat Rate (%)
-    const clientVisitCounts = {};
-    unifiedAppointments.forEach((a) => {
-      if (a.status === "blocked") return;
-      const key = (a.customer_phone || a.customer_name || "").trim();
-      if (!key || key === "---") return;
-      clientVisitCounts[key] = (clientVisitCounts[key] || 0) + 1;
+    completed.forEach((a) => {
+      const d = new Date(a.date);
+      const dayIdx = d.getDay();
+      if (dayIdx >= 1 && dayIdx <= 6) {
+        daysCount[dayIdx - 1] += 1;
+        daysRevenue[dayIdx - 1] += parsePrice(a.service_price);
+      }
     });
-    const totalUniqueAllTime = Object.keys(clientVisitCounts).length;
-    const repeatClientsCount = Object.values(clientVisitCounts).filter((c) => c > 1).length;
-    const repeatRate = totalUniqueAllTime > 0 ? Math.round((repeatClientsCount / totalUniqueAllTime) * 100) : 0;
 
-    // Days of Week Breakdown (Seg a Sáb)
-    const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const daysActivityMap = {
-      1: { label: "Seg", name: "Segunda", count: 0, revenue: 0 },
-      2: { label: "Ter", name: "Terça", count: 0, revenue: 0 },
-      3: { label: "Qua", name: "Quarta", count: 0, revenue: 0 },
-      4: { label: "Qui", name: "Quinta", count: 0, revenue: 0 },
-      5: { label: "Sex", name: "Sexta", count: 0, revenue: 0 },
-      6: { label: "Sáb", name: "Sábado", count: 0, revenue: 0 }
+    const maxDayCount = Math.max(...daysCount, 1);
+    let peakDayIdx = 0;
+    daysCount.forEach((c, i) => {
+      if (c > daysCount[peakDayIdx]) peakDayIdx = i;
+    });
+
+    const peakDay = {
+      name: dayNames[peakDayIdx],
+      count: daysCount[peakDayIdx],
+      revenue: daysRevenue[peakDayIdx]
     };
 
-    active.forEach((a) => {
-      if (!a.date) return;
-      const dow = new Date(a.date).getDay();
-      if (daysActivityMap[dow]) {
-        daysActivityMap[dow].count += 1;
-        daysActivityMap[dow].revenue += parsePrice(a.service_price);
-      }
+    const daysActivity = dayNames.map((name, i) => ({
+      label: name,
+      count: daysCount[i],
+      revenue: daysRevenue[i]
+    }));
+
+    // Service composition
+    const sMap = {};
+    completed.forEach((a) => {
+      const s = a.service_name || "Outros";
+      sMap[s] = (sMap[s] || 0) + parsePrice(a.service_price);
     });
 
-    const daysActivity = Object.values(daysActivityMap);
-    const maxDayCount = Math.max(...daysActivity.map((d) => d.count), 1);
-    const peakDay = daysActivity.reduce((max, curr) => (curr.count > max.count ? curr : max), daysActivity[0]);
+    const serviceRanking = Object.entries(sMap)
+      .map(([name, rev]) => ({
+        name,
+        revenue: rev,
+        percent: completedRev > 0 ? Math.round((rev / completedRev) * 100) : 0,
+        hex: "#C6924B"
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
 
-    // Service Breakdown & Ranking
-    const serviceMap = {};
-    active.forEach((a) => {
-      const sName = a.service_name || "Outro Serviço";
-      const price = parsePrice(a.service_price);
-      if (!serviceMap[sName]) {
-        serviceMap[sName] = { name: sName, count: 0, revenue: 0 };
-      }
-      serviceMap[sName].count += 1;
-      serviceMap[sName].revenue += price;
-    });
-
-    const rawServiceRanking = Object.values(serviceMap).sort((a, b) => b.revenue - a.revenue);
-
-    const PALETTE = [
-      { stroke: "#C89B58", text: "#C89B58", bg: "bg-[#C89B58]/10 text-[#C89B58] border-[#C89B58]/30", hex: "#C89B58" },
-      { stroke: "#38BDF8", text: "#38BDF8", bg: "bg-sky-500/10 text-sky-400 border-sky-500/30", hex: "#38BDF8" },
-      { stroke: "#34D399", text: "#34D399", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30", hex: "#34D399" },
-      { stroke: "#FB923C", text: "#FB923C", bg: "bg-orange-500/10 text-orange-400 border-orange-500/30", hex: "#FB923C" },
-      { stroke: "#A3E635", text: "#A3E635", bg: "bg-lime-500/10 text-lime-400 border-lime-500/30", hex: "#A3E635" },
-      { stroke: "#94A3B8", text: "#94A3B8", bg: "bg-slate-500/10 text-slate-400 border-slate-500/30", hex: "#94A3B8" }
-    ];
-
-    let accumulatedAngle = 0;
-    const perimeter = 2 * Math.PI * 65;
-
-    const serviceRanking = rawServiceRanking.map((s, idx) => {
-      const colorScheme = PALETTE[idx % PALETTE.length];
-      const percent = estimatedRev > 0 ? (s.revenue / estimatedRev) * 100 : 0;
-      const dashLength = Math.max((percent / 100) * perimeter, percent > 0 ? 3 : 0);
-      const dashOffset = -(accumulatedAngle / 100) * perimeter;
-      accumulatedAngle += percent;
-
-      const matched = servicesData.find(
-        (sd) => sd.name?.toLowerCase() === s.name?.toLowerCase() || sd.id === s.id
-      );
-      const durationMin = matched ? parseInt(matched.duration, 10) || 30 : 30;
-      const avgPrice = s.count > 0 ? s.revenue / s.count : 0;
-      const hourlyYield = durationMin > 0 ? (avgPrice / (durationMin / 60)) : 0;
-
-      return {
-        ...s,
-        percent: Math.round(percent),
-        exactPercent: percent,
-        color: colorScheme.stroke,
-        textColor: colorScheme.text,
-        bgClass: colorScheme.bg,
-        hex: colorScheme.hex,
-        dashLength,
-        dashOffset,
-        durationMin,
-        avgPrice,
-        hourlyYield
-      };
-    });
-
-    // Timeline Trend for Smooth Bezier Curve
+    // SVG Timeline points
     const dateMap = {};
-    active.forEach((a) => {
-      const dStr = a.date;
-      if (!dStr) return;
-      if (!dateMap[dStr]) {
-        const dObj = new Date(dStr);
-        dateMap[dStr] = {
-          date: dStr,
-          label: dayNames[dObj.getDay()] || dStr.slice(5),
-          fullLabel: dObj.toLocaleDateString("pt-PT", { day: "numeric", month: "short" }),
-          count: 0,
-          revenue: 0
-        };
-      }
-      dateMap[dStr].count += 1;
-      dateMap[dStr].revenue += parsePrice(a.service_price);
+    completed.forEach((a) => {
+      dateMap[a.date] = (dateMap[a.date] || 0) + parsePrice(a.service_price);
     });
 
-    const timelineData = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
-    const maxTimelineRevenue = Math.max(...timelineData.map((d) => d.revenue), 20);
+    const sortedDates = Object.keys(dateMap).sort();
+    const timelineData = sortedDates.map((d) => ({
+      date: d,
+      label: d.substring(5),
+      revenue: dateMap[d]
+    }));
 
-    // High-Resolution Smooth Spline Generator
-    let chartSvgPath = "";
-    let chartAreaPath = "";
-    let chartPoints = [];
+    const maxRev = Math.max(...timelineData.map((t) => t.revenue), 100);
+
     const chartW = 600;
-    const chartH = 180;
-    const padL = 45;
+    const chartH = 200;
+    const padL = 40;
     const padR = 20;
     const padT = 20;
     const padB = 30;
 
-    if (timelineData.length > 0) {
-      chartPoints = timelineData.map((d, i) => {
-        const x = timelineData.length === 1
-          ? chartW / 2
-          : padL + (i / (timelineData.length - 1)) * (chartW - padL - padR);
-        const y = chartH - padB - (d.revenue / maxTimelineRevenue) * (chartH - padT - padB);
-        return { ...d, x, y };
+    let chartSvgPath = "";
+    let chartAreaPath = "";
+    const chartPoints = [];
+
+    if (timelineData.length > 1) {
+      const stepX = (chartW - padL - padR) / (timelineData.length - 1);
+      timelineData.forEach((item, idx) => {
+        const x = padL + idx * stepX;
+        const y = chartH - padB - (item.revenue / maxRev) * (chartH - padT - padB);
+        chartPoints.push({ ...item, x, y });
       });
 
-      if (chartPoints.length === 1) {
-        chartSvgPath = `M ${chartPoints[0].x - 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartPoints[0].y}`;
-        chartAreaPath = `M ${chartPoints[0].x - 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartPoints[0].y} L ${chartPoints[0].x + 20} ${chartH - padB} L ${chartPoints[0].x - 20} ${chartH - padB} Z`;
-      } else if (chartPoints.length === 2) {
-        chartSvgPath = `M ${chartPoints[0].x.toFixed(1)} ${chartPoints[0].y.toFixed(1)} L ${chartPoints[1].x.toFixed(1)} ${chartPoints[1].y.toFixed(1)}`;
-        chartAreaPath = `${chartSvgPath} L ${chartPoints[1].x.toFixed(1)} ${chartH - padB} L ${chartPoints[0].x.toFixed(1)} ${chartH - padB} Z`;
-      } else {
-        // Cubic Bezier Spline
-        let d = `M ${chartPoints[0].x.toFixed(1)} ${chartPoints[0].y.toFixed(1)}`;
-        for (let i = 0; i < chartPoints.length - 1; i++) {
-          const p0 = chartPoints[Math.max(i - 1, 0)];
-          const p1 = chartPoints[i];
-          const p2 = chartPoints[i + 1];
-          const p3 = chartPoints[Math.min(i + 2, chartPoints.length - 1)];
-
-          const cp1x = p1.x + (p2.x - p0.x) / 6;
-          const cp1y = p1.y + (p2.y - p0.y) / 6;
-          const cp2x = p2.x - (p3.x - p1.x) / 6;
-          const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-          d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-        }
-        chartSvgPath = d;
-        chartAreaPath = `${d} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${chartH - padB} L ${chartPoints[0].x.toFixed(1)} ${chartH - padB} Z`;
+      let d = `M ${chartPoints[0].x.toFixed(1)} ${chartPoints[0].y.toFixed(1)}`;
+      for (let i = 0; i < chartPoints.length - 1; i++) {
+        const p1 = chartPoints[i];
+        const p2 = chartPoints[i + 1];
+        const cx = (p1.x + p2.x) / 2;
+        d += ` C ${cx.toFixed(1)} ${p1.y.toFixed(1)}, ${cx.toFixed(1)} ${p2.y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
       }
+      chartSvgPath = d;
+      chartAreaPath = `${d} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${chartH - padB} L ${chartPoints[0].x.toFixed(1)} ${chartH - padB} Z`;
     }
-
-    // Grid line values
-    const gridLevels = [
-      { pct: 1.0, val: maxTimelineRevenue, y: padT },
-      { pct: 0.66, val: maxTimelineRevenue * 0.66, y: padT + (chartH - padT - padB) * 0.33 },
-      { pct: 0.33, val: maxTimelineRevenue * 0.33, y: padT + (chartH - padT - padB) * 0.66 },
-      { pct: 0.0, val: 0, y: chartH - padB }
-    ];
 
     return {
       total: nonBlocked.length,
@@ -927,30 +839,25 @@ export default function AdminAgenda() {
       estimatedRevenue: estimatedRev,
       avgTicket,
       completionRate,
-      repeatRate,
       daysActivity,
       maxDayCount,
       peakDay,
       serviceRanking,
       timelineData,
-      maxTimelineRevenue,
+      maxRev,
       chartSvgPath,
       chartAreaPath,
       chartPoints,
-      gridLevels,
       chartW,
       chartH,
       padL,
       padR,
       padT,
-      padB,
-      perimeter
+      padB
     };
   }, [unifiedAppointments, statsPeriod]);
 
-  // =========================================================================
-  // MINI-CRM AGGREGATION (PROTECTED & UNIFIED WITH IMMUTABLE FINANCIAL LEDGER)
-  // =========================================================================
+  // Mini-CRM
   const { crmClients, crmCounts } = useMemo(() => {
     const map = {};
 
@@ -1023,11 +930,10 @@ export default function AdminAgenda() {
       archived: list.filter((c) => c.isArchived).length
     };
 
-    // Filter by Archive state
     const statusFiltered = list.filter((c) => {
       if (crmFilter === "active") return !c.isArchived;
       if (crmFilter === "archived") return c.isArchived;
-      return true; // 'all'
+      return true;
     });
 
     const query = crmSearchQuery.toLowerCase().trim();
@@ -1050,34 +956,32 @@ export default function AdminAgenda() {
     year: "numeric"
   });
 
-  // 🔒 Lock Screen View when not authenticated
+  // 🔒 PIN LOCK SCREEN
   if (!isAuthenticated) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-4 font-sans transition-colors ${
-        isLight ? "bg-[#F3F4F6] text-[#111827]" : "bg-[#090A0E] text-[#FAF8F5]"
+        isLight ? "bg-zinc-100 text-zinc-900" : "bg-zinc-950 text-zinc-100"
       }`}>
-        <div className={`w-full max-w-sm rounded-3xl p-7 shadow-2xl space-y-6 border transition-all ${
-          isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+        <div className={`w-full max-w-sm rounded-2xl p-6 sm:p-8 shadow-2xl border transition-all ${
+          isLight ? "bg-white border-zinc-200" : "bg-zinc-900/90 border-zinc-800"
         }`}>
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3 border ${
-              isLight ? "bg-neutral-100 border-neutral-200 text-[#C89B58]" : "bg-white/5 border-white/10 text-[#C89B58]"
+          <div className="text-center space-y-2 mb-6">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 border ${
+              isLight ? "bg-zinc-100 border-zinc-200 text-[#C6924B]" : "bg-zinc-800 border-zinc-700 text-[#C6924B]"
             }`}>
-              <Lock className="w-5 h-5" />
+              <Scissors className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">
-              Acesso ao Painel
+            <h1 className="text-lg font-semibold tracking-tight">
+              Acesso à Administração
             </h1>
-            <p className="text-xs text-neutral-500 leading-relaxed">
-              Introduza o PIN de administrador para aceder ao sistema de gestão da Rota Do Corte.
+            <p className="text-xs text-zinc-400">
+              Introduza o código PIN de Gabriel Silva para gerir a agenda.
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
+              <label className="text-xs font-medium text-zinc-400">
                 Código PIN
               </label>
               <div className="relative">
@@ -1090,96 +994,76 @@ export default function AdminAgenda() {
                   }}
                   placeholder="••••"
                   autoFocus
-                  className={`w-full border rounded-2xl px-4 py-3.5 text-center text-xl tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-[#C89B58] transition-all ${
+                  className={`w-full border rounded-lg px-4 py-2.5 text-center text-lg tracking-widest font-mono focus:outline-none focus:ring-1 focus:ring-zinc-400 transition-all ${
                     isLight
-                      ? "bg-neutral-50 border-neutral-200 text-neutral-900"
-                      : "bg-black/40 border-white/10 text-white"
+                      ? "bg-zinc-50 border-zinc-200 text-zinc-900"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-100"
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {pinError && (
+                <p className="text-xs text-red-400 pt-1 text-center font-medium">
+                  {pinError}
+                </p>
+              )}
             </div>
-
-            {pinError && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-xs text-red-500">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{pinError}</span>
-              </div>
-            )}
 
             <button
               type="submit"
               disabled={isVerifyingPin}
-              className="w-full py-3.5 rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-2.5 px-4 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              {isVerifyingPin ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>A validar...</span>
-                </>
-              ) : (
-                <span>Entrar no Painel</span>
-              )}
+              {isVerifyingPin ? "A verificar..." : "Entrar no Painel"}
             </button>
           </form>
-
-          <div className="pt-2 text-center border-t border-neutral-200 dark:border-white/5">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Voltar ao website público</span>
-            </Link>
-          </div>
         </div>
       </div>
     );
   }
 
-  // 🎛️ FULL DASHBOARD SHELL LAYOUT
+  // =========================================================================
+  // AUTHENTICATED SHADCN DASHBOARD LAYOUT
+  // =========================================================================
   return (
-    <div className={`min-h-screen font-sans flex transition-colors ${
-      isLight ? "bg-[#F4F5F7] text-[#111827]" : "bg-[#0A0B0E] text-[#FAF8F5]"
+    <div className={`min-h-screen flex font-sans transition-colors ${
+      isLight ? "bg-zinc-50 text-zinc-900" : "bg-zinc-950 text-zinc-100"
     }`}>
-
-      {/* ========================================================================= */}
-      {/* 1. LEFT SIDEBAR NAVIGATION (INSPIRATION IMAGE 1)                           */}
-      {/* ========================================================================= */}
-      {/* Mobile Overlay */}
+      {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-xs"
+          className="fixed inset-0 bg-black/70 z-40 lg:hidden backdrop-blur-xs"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col justify-between p-4 border-r transition-all duration-300 lg:static lg:translate-x-0 ${
+      {/* ========================================================================= */}
+      {/* SHADCN SIDEBAR BLOCK                                                      */}
+      {/* ========================================================================= */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col justify-between p-4 border-r transition-all duration-200 lg:static lg:translate-x-0 ${
         isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
       } ${
-        isLight
-          ? "bg-white border-neutral-200 shadow-sm"
-          : "bg-[#111319] border-white/10"
+        isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800"
       }`}>
         <div className="space-y-6">
           {/* Brand Header */}
           <div className="flex items-center justify-between px-2 pt-1">
-            <Link to="/" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-2xl bg-[#C89B58] flex items-center justify-center text-black font-black text-base shadow-md group-hover:scale-105 transition-transform">
-                <Scissors className="w-5 h-5" />
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="w-8 h-8 rounded-lg bg-[#C6924B]/15 border border-[#C6924B]/30 flex items-center justify-center text-[#C6924B] shrink-0 group-hover:scale-105 transition-transform">
+                <Scissors className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="font-bold text-sm leading-tight font-serif tracking-tight">
-                  Rota Do Corte
+                <h2 className="font-semibold text-sm leading-tight tracking-tight">
+                  Rota do Corte
                 </h2>
-                <span className="text-[11px] text-neutral-400 font-sans block">
-                  Studio Dashboard
+                <span className="text-[10px] text-zinc-500 font-mono block">
+                  Studio Admin
                 </span>
               </div>
             </Link>
@@ -1187,14 +1071,14 @@ export default function AdminAgenda() {
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="lg:hidden p-1.5 rounded-xl text-neutral-400 hover:text-white"
+              className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Main Navigation Links */}
-          <nav className="space-y-1.5">
+          {/* Navigation Items */}
+          <nav className="space-y-1">
             {[
               { id: "agenda", label: "Agenda & Marcações", icon: CalendarDays, badge: dayAppointments.length },
               { id: "stats", label: "Faturação & Métricas", icon: BarChart3 },
@@ -1211,27 +1095,29 @@ export default function AdminAgenda() {
                     setActiveTab(item.id);
                     setIsMobileSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     isActive
                       ? isLight
-                        ? "bg-[#C89B58] text-black font-bold shadow-sm"
-                        : "bg-[#C89B58] text-black font-bold shadow-md"
+                        ? "bg-zinc-100 text-zinc-950 font-semibold"
+                        : "bg-zinc-800 text-zinc-100 font-semibold"
                       : isLight
-                        ? "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
-                        : "text-neutral-400 hover:bg-white/5 hover:text-white"
+                        ? "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                        : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-4 h-4 shrink-0" />
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4 shrink-0 text-zinc-400" />
                     <span>{item.label}</span>
                   </div>
                   {item.badge !== undefined && (
-                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md ${
                       isActive
-                        ? "bg-black/20 text-black"
+                        ? isLight
+                          ? "bg-zinc-200 text-zinc-800"
+                          : "bg-zinc-700 text-zinc-100"
                         : isLight
-                          ? "bg-neutral-200 text-neutral-700"
-                          : "bg-white/10 text-neutral-300"
+                          ? "bg-zinc-100 text-zinc-600"
+                          : "bg-zinc-900 text-zinc-400"
                     }`}>
                       {item.badge}
                     </span>
@@ -1243,23 +1129,32 @@ export default function AdminAgenda() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="space-y-3 pt-4 border-t border-neutral-200 dark:border-white/10">
+        <div className={`space-y-3 pt-3 border-t ${isLight ? "border-zinc-200" : "border-zinc-800"}`}>
+          {/* Quick Sound/Alert Status */}
+          <div className="flex items-center justify-between px-2 text-xs text-zinc-500">
+            <span className="text-[11px]">Sons & Lembretes</span>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isSoundOn ? "bg-emerald-500" : "bg-zinc-600"}`} />
+              <span className="font-mono text-[10px]">{isSoundOn ? "Ativo" : "Mudo"}</span>
+            </div>
+          </div>
+
           {/* User Profile & Logout */}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-[#C89B58]/20 border border-[#C89B58]/40 text-[#C89B58] flex items-center justify-center font-bold text-xs shrink-0">
+          <div className="flex items-center justify-between px-2 pt-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-[#C6924B]/20 text-[#C6924B] flex items-center justify-center font-bold text-xs shrink-0">
                 G
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold truncate">Gabriel Silva</p>
-                <p className="text-[10px] text-neutral-400 truncate">Paião, PT</p>
+                <p className="text-xs font-semibold truncate">Gabriel Silva</p>
+                <p className="text-[10px] text-zinc-500 truncate">Paião, PT</p>
               </div>
             </div>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="p-2 rounded-xl text-neutral-400 hover:text-red-500 transition-colors"
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
               title="Sair"
             >
               <LogOut className="w-4 h-4" />
@@ -1269,88 +1164,46 @@ export default function AdminAgenda() {
       </aside>
 
       {/* ========================================================================= */}
-      {/* 2. MAIN APP CANVAS CONTAINER                                              */}
+      {/* MAIN APP CANVAS & SHADCN HEADER                                           */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto pb-24 lg:pb-8">
-
-        {/* 🔔 LIVE INCOMING BOOKING ALERT (BANNER DE ALERTA SONORO & VISUAL) */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Live Incoming Alert Banner */}
         {incomingAlert && (
-          <div className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-50 w-[94vw] max-w-lg animate-in slide-in-from-top-4 duration-500">
-            <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#0D0E12]/95 border-2 border-[#C89B58] p-4 sm:p-5 shadow-2xl backdrop-blur-2xl text-white">
-              {/* Ambient Gold Glow */}
-              <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#C89B58]/20 rounded-full blur-2xl pointer-events-none" />
-              
-              {/* Top Bar: Live Badge + Close */}
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C89B58] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#C89B58]"></span>
-                  </span>
-                  <span className="text-[11px] sm:text-xs font-black tracking-wider uppercase text-[#C89B58] font-mono">
-                    🔔 NOVO AGENDAMENTO RECEBIDO!
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIncomingAlert(null)}
-                  className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                  title="Fechar Alerta"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          <div className="sticky top-0 z-40 px-4 py-2 bg-zinc-950 border-b border-zinc-800 text-xs animate-in slide-in-from-top-2">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-zinc-100 truncate">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="font-semibold text-emerald-400 font-mono text-[11px] uppercase">
+                  {incomingAlert.type === "new_booking" ? "Nova Marcação:" : "Lembrete:"}
+                </span>
+                <span className="font-medium truncate">
+                  {incomingAlert.name} — {incomingAlert.service} às {incomingAlert.time}
+                </span>
               </div>
 
-              {/* Content Details */}
-              <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-3 space-y-1.5 text-xs sm:text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white text-sm sm:text-base flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-[#C89B58]" />
-                    {incomingAlert.name}
-                  </span>
-                  <span className="font-mono text-[#C89B58] font-bold">
-                    {incomingAlert.price}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-neutral-300 text-xs">
-                  <span>💈 {incomingAlert.service}</span>
-                  <span className="font-mono font-semibold text-white">
-                    📅 {incomingAlert.date} às {incomingAlert.time}
-                  </span>
-                </div>
-                {incomingAlert.notes && (
-                  <p className="text-[11px] text-neutral-400 italic pt-1 border-t border-white/5">
-                    "{incomingAlert.notes}"
-                  </p>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {incomingAlert.phone && (
                   <a
-                    href={`https://wa.me/${incomingAlert.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Olá ${incomingAlert.name}! Confirmamos o seu agendamento na Rota do Corte para ${incomingAlert.date} às ${incomingAlert.time} (${incomingAlert.service}).`)}`}
+                    href={`https://wa.me/${incomingAlert.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                      `Olá ${incomingAlert.name}! Confirmamos o seu agendamento na Rota do Corte para ${incomingAlert.date} às ${incomingAlert.time}.`
+                    )}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#25D366] hover:bg-[#20ba59] text-black font-bold text-xs rounded-xl transition-colors shadow-sm cursor-pointer"
+                    className="px-2.5 py-1 rounded bg-[#25D366] hover:bg-[#20ba59] text-white text-[11px] font-semibold flex items-center gap-1"
                   >
-                    <WhatsAppIcon className="w-4 h-4" />
+                    <WhatsAppIcon className="w-3.5 h-3.5 fill-white" />
                     <span>WhatsApp</span>
                   </a>
                 )}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (incomingAlert.date) {
-                      setSelectedDate(incomingAlert.date);
-                      setAgendaScope("day");
-                    }
-                    setIncomingAlert(null);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-[#C89B58] hover:bg-[#b08443] text-black font-bold text-xs rounded-xl transition-colors shadow-sm cursor-pointer"
+                  onClick={() => setIncomingAlert(null)}
+                  className="p-1 text-zinc-500 hover:text-zinc-100"
                 >
-                  <CalendarIcon className="w-4 h-4" />
-                  <span>Ver na Agenda</span>
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -1358,181 +1211,127 @@ export default function AdminAgenda() {
         )}
 
         {/* Top Header App Bar */}
-        <header className={`sticky top-0 z-30 px-3 sm:px-8 py-3.5 sm:py-4 border-b backdrop-blur-md transition-colors ${
-          isLight
-            ? "bg-white/90 border-neutral-200 shadow-xs"
-            : "bg-[#0A0B0E]/90 border-white/10 shadow-xs"
+        <header className={`sticky top-0 z-30 px-4 sm:px-8 py-3 border-b backdrop-blur-md transition-colors ${
+          isLight ? "bg-white/90 border-zinc-200" : "bg-zinc-950/90 border-zinc-800"
         }`}>
-          {/* Main Top Row */}
-          <div className="flex items-center justify-between gap-2.5 sm:gap-4">
-            {/* Left: Mobile Menu Toggle + Studio Brand */}
-            <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            {/* Left: Mobile Toggle + Breadcrumbs */}
+            <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-xl border border-neutral-200 dark:border-white/10 shrink-0 text-neutral-400 hover:text-white"
-                title="Abrir Menu"
+                className="lg:hidden p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100"
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="w-4 h-4" />
               </button>
 
-              <div className="lg:hidden flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-xl bg-[#C89B58] flex items-center justify-center text-black font-black shrink-0">
-                  <Scissors className="w-3.5 h-3.5" />
-                </div>
-                <h2 className="font-bold text-xs leading-tight font-serif truncate">
-                  Rota Do Corte
-                </h2>
-              </div>
-
-              {/* Desktop Search */}
-              <div className="relative hidden lg:block w-72">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar cliente, contacto..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight
-                      ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
-                      : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
-                  }`}
-                />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 hidden sm:inline">Admin /</span>
+                <h1 className="text-sm font-semibold tracking-tight text-zinc-100 capitalize">
+                  {activeTab === "agenda" ? "Agenda & Marcações" : activeTab === "stats" ? "Faturação & Métricas" : activeTab === "crm" ? "Base de Clientes" : "Pausas & Bloqueios"}
+                </h1>
               </div>
             </div>
 
-            {/* Right: Actions */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              {/* Notification & Sound Popover Button */}
+            {/* Center: Global Search (Desktop) */}
+            <div className="relative hidden md:block w-64 lg:w-80">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Pesquisar marcação, cliente..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-400 ${
+                  isLight
+                    ? "bg-zinc-100 border-zinc-200 text-zinc-900 placeholder:text-zinc-400"
+                    : "bg-zinc-900/60 border-zinc-800 text-zinc-100 placeholder:text-zinc-500"
+                }`}
+              />
+            </div>
+
+            {/* Right: Quick Action Buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Notifications Popover */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setIsNotifPopoverOpen(!isNotifPopoverOpen)}
-                  className={`relative p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
-                    isSoundOn
-                      ? "bg-[#C89B58]/10 border-[#C89B58]/40 text-[#C89B58] hover:bg-[#C89B58]/20"
-                      : isLight
-                      ? "bg-neutral-100 border-neutral-200 text-neutral-400 hover:bg-neutral-200"
-                      : "bg-[#111319] border-white/10 text-neutral-500 hover:bg-white/10"
+                  className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                    isSoundOn || isRemindersOn
+                      ? "border-zinc-700 bg-zinc-800 text-zinc-200"
+                      : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"
                   }`}
-                  title="Definições de Som e Notificações"
+                  title="Configurar Notificações & Áudio"
                 >
-                  {isSoundOn ? (
-                    <Volume2 className="w-4 h-4" />
-                  ) : (
-                    <VolumeX className="w-4 h-4" />
-                  )}
-                  {/* Status Indicator Dot */}
-                  <span
-                    className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
-                      isSoundOn ? "bg-emerald-500 shadow-[0_0_6px_#10b981]" : "bg-neutral-500"
-                    }`}
-                  />
+                  <Bell className="w-3.5 h-3.5" />
                 </button>
 
-                {/* Popover Menu */}
                 {isNotifPopoverOpen && (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setIsNotifPopoverOpen(false)}
-                    />
-                    <div
-                      className={`absolute right-0 top-full mt-2 z-50 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 ${
-                        isLight
-                          ? "bg-white border-neutral-200 text-neutral-900 shadow-neutral-300"
-                          : "bg-[#111319] border-white/10 text-white shadow-black/90"
-                      }`}
-                    >
-                      <div className={`flex items-center justify-between pb-3 border-b mb-3 ${
-                        isLight ? "border-neutral-200" : "border-white/10"
-                      }`}>
-                        <div className="flex items-center gap-2">
-                          <Bell className="w-4 h-4 text-[#C89B58]" />
-                          <h4 className="text-xs font-bold font-serif uppercase tracking-wider text-[#C89B58]">
-                            Alertas do Barbeiro
-                          </h4>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsNotifPopoverOpen(false)}
-                          className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
+                    <div className="fixed inset-0 z-40" onClick={() => setIsNotifPopoverOpen(false)} />
+                    <div className={`absolute right-0 top-full mt-2 w-72 rounded-xl p-3 shadow-2xl z-50 space-y-3 border text-xs ${
+                      isLight ? "bg-white border-zinc-200" : "bg-zinc-900 border-zinc-800"
+                    }`}>
+                      <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                        <span className="font-semibold text-zinc-100">Sons & Alertas</span>
+                        <button type="button" onClick={() => setIsNotifPopoverOpen(false)}>
+                          <X className="w-3.5 h-3.5 text-zinc-500" />
                         </button>
                       </div>
 
-                      <div className="space-y-3">
-                        {/* Som do Sino */}
-                        <div className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${
-                          isLight
-                            ? "bg-neutral-50 border-neutral-200 text-neutral-900"
-                            : "bg-white/5 border-white/10 text-white"
-                        }`}>
-                          <div className="min-w-0">
-                            <p className={`text-xs font-bold flex items-center gap-1.5 ${
-                              isLight ? "text-neutral-900" : "text-white"
-                            }`}>
-                              <span>Sino de Agendamento</span>
-                              {isSoundOn && (
-                                <span className="text-[10px] text-emerald-500 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
-                                  LIGADO
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[11px] text-neutral-400 leading-tight mt-0.5">
-                              Toca acorde de luxo a cada nova marcação.
-                            </p>
-                          </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-400">Sino de Nova Marcação</span>
                           <button
                             type="button"
                             onClick={toggleSound}
-                            className={`p-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shrink-0 ${
-                              isSoundOn
-                                ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-sm"
-                                : isLight
-                                ? "bg-neutral-200 hover:bg-neutral-300 text-neutral-700"
-                                : "bg-white/10 hover:bg-white/20 text-neutral-300"
+                            className={`p-1.5 rounded-md border text-xs ${
+                              isSoundOn ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-zinc-800 text-zinc-500 border-zinc-700"
                             }`}
-                            title={isSoundOn ? "Desativar Som" : "Ativar Som"}
                           >
-                            {isSoundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                            {isSoundOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
                           </button>
                         </div>
 
-                        {/* Botão Testar Sino */}
-                        <button
-                          type="button"
-                          onClick={handleTestChime}
-                          className="w-full py-2.5 px-3 rounded-xl bg-[#C89B58]/15 hover:bg-[#C89B58]/25 border border-[#C89B58]/35 text-[#C89B58] text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-                        >
-                          <Volume2 className="w-3.5 h-3.5" />
-                          <span>🔔 Testar Som do Sino</span>
-                        </button>
-
-                        {/* Notificações do Navegador / Telemóvel */}
-                        <div className={`pt-2.5 border-t ${isLight ? "border-neutral-200" : "border-white/10"}`}>
-                          {pushPermission === "granted" ? (
-                            <div className="flex items-center gap-2 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
-                              <CheckCircle2 className="w-4 h-4 shrink-0" />
-                              <span>Alertas de ecrã ativos no telemóvel/PC.</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={handleEnablePush}
-                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                                isLight
-                                  ? "bg-neutral-900 hover:bg-black text-white"
-                                  : "bg-[#C89B58] hover:bg-[#D4A966] text-black"
-                              }`}
-                            >
-                              <Bell className="w-3.5 h-3.5" />
-                              <span>Ativar Alertas no Telemóvel</span>
-                            </button>
-                          )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-400">Avisos de Preparação (2h e 1h)</span>
+                          <button
+                            type="button"
+                            onClick={toggleReminders}
+                            className={`p-1.5 rounded-md border text-xs ${
+                              isRemindersOn ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                            }`}
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleTestChime}
+                            className="py-1 px-2 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[10px] font-medium"
+                          >
+                            Testar Sino
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleTestReminder}
+                            className="py-1 px-2 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-[10px] font-medium"
+                          >
+                            Testar Lembrete
+                          </button>
+                        </div>
+
+                        {pushPermission !== "granted" && (
+                          <button
+                            type="button"
+                            onClick={handleEnablePush}
+                            className="w-full py-1.5 px-2 rounded-md bg-zinc-100 text-zinc-950 font-semibold text-[11px] mt-1"
+                          >
+                            Ativar Notificações Push
+                          </button>
+                        )}
                       </div>
                     </div>
                   </>
@@ -1543,106 +1342,171 @@ export default function AdminAgenda() {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
-                  isLight
-                    ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
-                    : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
-                }`}
-                title={isLight ? "Ativar Modo Escuro" : "Ativar Modo Claro"}
+                className="p-2 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors cursor-pointer"
+                title={isLight ? "Modo Escuro" : "Modo Claro"}
               >
-                {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-[#C89B58]" />}
+                {isLight ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-[#C6924B]" />}
               </button>
 
               {/* Refresh Button */}
               <button
                 type="button"
                 onClick={() => loadAppointments(false)}
-                className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-colors cursor-pointer ${
-                  isLight
-                    ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200"
-                    : "bg-[#111319] border-white/10 text-neutral-300 hover:bg-white/10"
-                }`}
-                title="Atualizar Dados"
+                className="p-2 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors cursor-pointer"
+                title="Recarregar dados"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-[#C89B58]" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#C6924B]" : ""}`} />
               </button>
 
-              {/* Block Slot Button (Desktop) */}
+              {/* Block Slot Button */}
               <button
                 type="button"
                 onClick={() => {
                   setBlockDate(selectedDate);
                   setIsBlockModalOpen(true);
                 }}
-                className={`hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border text-xs font-semibold cursor-pointer transition-colors ${
-                  isLight
-                    ? "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-100"
-                    : "bg-[#111319] border-white/10 text-neutral-200 hover:bg-white/5"
-                }`}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-medium cursor-pointer"
               >
-                <Lock className="w-3.5 h-3.5 text-[#C89B58]" />
-                <span>Bloquear Horário</span>
+                <Lock className="w-3.5 h-3.5 text-[#C6924B]" />
+                <span>Bloquear</span>
               </button>
 
-              {/* New Manual Booking Button */}
+              {/* New Booking Primary Button */}
               <button
                 type="button"
                 onClick={() => setIsNewModalOpen(true)}
-                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black text-xs font-bold shadow-md cursor-pointer transition-all shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold tracking-tight shadow-xs cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden xs:inline">Marcar Cliente</span>
-                <span className="xs:hidden">Marcar</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Marcar</span>
               </button>
             </div>
           </div>
 
-          {/* Mobile Search Input (full width on small screens) */}
-          <div className="mt-2.5 lg:hidden relative w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+          {/* Mobile Search */}
+          <div className="mt-2.5 md:hidden">
             <input
               type="text"
-              placeholder="Pesquisar cliente, contacto ou serviço..."
+              placeholder="Pesquisar marcação, cliente..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-9 pr-4 py-2 text-xs rounded-xl sm:rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                isLight
-                  ? "bg-neutral-100 border-neutral-200 text-neutral-900 placeholder-neutral-400"
-                  : "bg-[#111319] border-white/10 text-white placeholder-neutral-500"
-              }`}
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
             />
           </div>
         </header>
 
-        {/* Main Content View Switcher */}
-        <main className="p-3.5 sm:p-8 space-y-5 sm:space-y-6 flex-1 max-w-7xl w-full mx-auto">
+        {/* Main Content Area */}
+        <main className="p-4 sm:p-8 space-y-6 flex-1 max-w-7xl w-full mx-auto">
+          {/* ========================================================================= */}
+          {/* 4 TOP METRIC CARDS BLOCK (SHADCN KPI CARDS)                               */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Card 1: Faturação Real */}
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+            }`}>
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="font-medium">Faturação Real</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  {statsData.completedCount} concluídos
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-zinc-100">
+                  {statsData.completedRevenue.toFixed(2)} €
+                </h3>
+                <p className="text-[11px] text-zinc-500 font-mono">
+                  Previsto: {statsData.estimatedRevenue.toFixed(2)} €
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Total Marcações */}
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+            }`}>
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="font-medium">Total de Marcações</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-zinc-800 text-zinc-300">
+                  {statsData.confirmedCount} ativas
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-zinc-100">
+                  {statsData.total}
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  {statsData.cancelledCount} canceladas
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Ticket Médio */}
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+            }`}>
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="font-medium">Ticket Médio</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Média
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-zinc-100">
+                  {statsData.avgTicket.toFixed(2)} €
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  Por corte concluído
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Comparência */}
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+            }`}>
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="font-medium">Comparência</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Taxa
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-xl sm:text-2xl font-bold font-mono text-zinc-100">
+                  {statsData.completionRate}%
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  {statsData.uniqueClientsCount} clientes únicos
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* ========================================================================= */}
-          {/* TAB: AGENDA & MARCAÇÕES (TIMELINE + CONTROLS)                             */}
+          {/* TAB 1: AGENDA & MARCAÇÕES                                                 */}
           {/* ========================================================================= */}
           {activeTab === "agenda" && (
-            <div className="space-y-4 sm:space-y-6 animate-fadeIn">
-              {/* Agenda Scope, Stepper & Filters */}
-              <div className={`p-4 sm:p-5 rounded-3xl border shadow-xs space-y-3 sm:space-y-4 ${
-                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            <div className="space-y-4 animate-fadeIn">
+              {/* Controls Bar: Scope, Stepper & Filters */}
+              <div className={`p-4 rounded-xl border space-y-3.5 ${
+                isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
               }`}>
-                {/* Row 1: Scope & Stepper */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-neutral-100 dark:border-white/5">
-                  <div className={`grid grid-cols-2 sm:flex items-center gap-1.5 p-1 rounded-2xl border w-full sm:w-fit ${
-                    isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/40 border-white/10"
-                  }`}>
+                {/* Row 1: Scope Switcher + Date Stepper + View Toggle */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-800/60">
+                  {/* Scope Tabs */}
+                  <div className="flex items-center gap-1 p-1 rounded-lg border border-zinc-800 bg-zinc-950/60 w-fit">
                     <button
                       type="button"
                       onClick={() => setAgendaScope("day")}
-                      className={`px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                         agendaScope === "day"
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+                          ? "bg-zinc-800 text-zinc-100 font-semibold"
+                          : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      <CalendarDays className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Agenda do Dia</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-black/20 text-black font-bold">
+                      <CalendarDays className="w-3.5 h-3.5" />
+                      <span>Agenda do Dia</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-700 text-zinc-200">
                         {dayAppointments.length}
                       </span>
                     </button>
@@ -1650,119 +1514,118 @@ export default function AdminAgenda() {
                     <button
                       type="button"
                       onClick={() => setAgendaScope("all")}
-                      className={`px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                         agendaScope === "all"
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+                          ? "bg-zinc-800 text-zinc-100 font-semibold"
+                          : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      <Layers className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Todas</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-white/10 text-neutral-300">
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Todas</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">
                         {allAppointments.length}
                       </span>
                     </button>
                   </div>
 
                   {/* Day Stepper */}
-                  {agendaScope === "day" && (
-                    <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => changeDay(-1)}
-                          className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                            isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-                          }`}
-                          title="Dia Anterior"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-                          className="px-3 py-2 rounded-xl bg-[#C89B58]/15 border border-[#C89B58]/30 text-[#C89B58] text-xs font-bold cursor-pointer font-mono"
-                        >
-                          Hoje
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => changeDay(1)}
-                          className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                            isLight ? "bg-neutral-100 border-neutral-200 text-neutral-700 hover:bg-neutral-200" : "bg-white/5 border-white/10 text-white hover:bg-white/10"
-                          }`}
-                          title="Dia Seguinte"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <span className="text-xs sm:text-sm font-bold capitalize font-serif text-[#C89B58]">
-                        {formattedPortugueseDate}
-                      </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => stepDate(-1)}
+                      className="px-2.5 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-xs font-medium text-zinc-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Dia Anterior</span>
+                    </button>
+
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-950 font-mono text-xs font-semibold text-zinc-100 cursor-pointer focus:outline-none"
+                      />
                     </div>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={() => stepDate(1)}
+                      className="px-2.5 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-xs font-medium text-zinc-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="hidden sm:inline">Dia Seguinte</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* View Switcher: Table vs Timeline */}
+                    <div className="flex items-center gap-1 ml-auto p-1 rounded-lg border border-zinc-800 bg-zinc-950/60">
+                      <button
+                        type="button"
+                        onClick={() => setAgendaViewMode("table")}
+                        className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
+                          agendaViewMode === "table" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                        title="Vista Lista"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAgendaViewMode("timeline")}
+                        className={`p-1.5 rounded-md text-xs transition-colors cursor-pointer ${
+                          agendaViewMode === "timeline" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                        title="Vista Horária / Timeline"
+                      >
+                        <Grid3X3 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Row 2: Status Filter & Sorting */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
-                  <div className={`flex items-center gap-1 overflow-x-auto scrollbar-none p-1 rounded-2xl border ${
-                    isLight ? "bg-neutral-100 border-neutral-200" : "bg-black/30 border-white/5"
-                  }`}>
-                    {["all", "confirmed", "completed", "cancelled", "blocked"].map((st) => (
+                {/* Row 2: Status Tabs Filter & Sort Dropdown */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                    {[
+                      { id: "all", label: "Todos" },
+                      { id: "confirmed", label: "Confirmados" },
+                      { id: "completed", label: "Concluídos" },
+                      { id: "cancelled", label: "Cancelados" },
+                      { id: "blocked", label: "Bloqueios" }
+                    ].map((st) => (
                       <button
-                        key={st}
+                        key={st.id}
                         type="button"
-                        onClick={() => setFilterStatus(st)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                          filterStatus === st
-                            ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                            : "text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
+                        onClick={() => setFilterStatus(st.id)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shrink-0 ${
+                          filterStatus === st.id
+                            ? "bg-zinc-100 text-zinc-950 font-semibold"
+                            : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                         }`}
                       >
-                        {st === "all"
-                          ? "Todos"
-                          : st === "confirmed"
-                            ? "Confirmados"
-                            : st === "completed"
-                              ? "Concluídos"
-                              : st === "cancelled"
-                                ? "Cancelados"
-                                : "Bloqueios"}
+                        {st.label}
                       </button>
                     ))}
                   </div>
 
-                  {/* Sorting Mode Dropdown */}
+                  {/* Sort Dropdown */}
                   <div className="relative shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                      className={`w-full sm:w-auto px-3.5 py-2 rounded-xl sm:rounded-2xl border text-xs font-medium flex items-center justify-between gap-2.5 cursor-pointer ${
-                        isLight ? "bg-white border-neutral-200" : "bg-black/40 border-white/10"
-                      }`}
+                      className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-950/60 text-xs font-medium text-zinc-300 flex items-center gap-2 cursor-pointer"
                     >
-                      <div className="flex items-center gap-2">
-                        <SlidersHorizontal className="w-3.5 h-3.5 text-[#C89B58]" />
-                        <span className="text-neutral-400 hidden xs:inline">Ordenar:</span>
-                        <span className="font-bold text-[#C89B58]">
-                          {sortBy === "newest"
-                            ? "Mais Recentes"
-                            : sortBy === "oldest"
-                              ? "Mais Antigos"
-                              : sortBy === "price_desc"
-                                ? "Preço: Maior"
-                                : "Preço: Menor"}
-                        </span>
-                      </div>
-                      <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>
+                        {sortBy === "newest" ? "Recentes" : sortBy === "oldest" ? "Antigos" : sortBy === "price_desc" ? "Preço: Maior" : "Preço: Menor"}
+                      </span>
+                      <ChevronDown className="w-3 h-3 text-zinc-500" />
                     </button>
 
                     {isSortDropdownOpen && (
                       <>
                         <div className="fixed inset-0 z-20" onClick={() => setIsSortDropdownOpen(false)} />
-                        <div className={`absolute right-0 top-full mt-1.5 w-52 rounded-2xl p-1.5 shadow-2xl z-30 space-y-1 border ${
-                          isLight ? "bg-white border-neutral-200" : "bg-[#14161F] border-white/15"
-                        }`}>
+                        <div className="absolute right-0 top-full mt-1.5 w-48 rounded-lg p-1 shadow-2xl z-30 space-y-0.5 border border-zinc-800 bg-zinc-900 text-xs">
                           {[
                             { id: "newest", label: "Mais recentes primeiro" },
                             { id: "oldest", label: "Mais antigos primeiro" },
@@ -1776,8 +1639,8 @@ export default function AdminAgenda() {
                                 setSortBy(opt.id);
                                 setIsSortDropdownOpen(false);
                               }}
-                              className={`w-full px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors cursor-pointer ${
-                                sortBy === opt.id ? "bg-[#C89B58] text-black font-bold" : "hover:bg-neutral-100 dark:hover:bg-white/5"
+                              className={`w-full px-2.5 py-1.5 rounded-md text-left transition-colors cursor-pointer ${
+                                sortBy === opt.id ? "bg-zinc-800 text-zinc-100 font-semibold" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                               }`}
                             >
                               {opt.label}
@@ -1790,1161 +1653,623 @@ export default function AdminAgenda() {
                 </div>
               </div>
 
-              {/* Appointments List */}
-              {isLoading ? (
-                <div className={`py-20 text-center space-y-3 rounded-3xl border ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="w-8 h-8 border-2 border-[#C89B58] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-xs text-neutral-400 font-mono">A carregar agendamentos...</p>
-                </div>
-              ) : sortedAndFilteredAppointments.length === 0 ? (
-                <div className={`p-14 text-center space-y-3 rounded-3xl border ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <CalendarIcon className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
-                  <h3 className="text-sm font-bold">Nenhuma marcação encontrada</h3>
-                  <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-                    {searchQuery
-                      ? "Nenhum resultado corresponde à sua pesquisa."
-                      : agendaScope === "all"
-                        ? "Ainda não existem marcações registadas no sistema."
-                        : `Não existem marcações registadas para ${formattedPortugueseDate}.`}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {sortedAndFilteredAppointments.map((appt) => {
-                    const isCancelled = appt.status === "cancelled";
-                    const isCompleted = appt.status === "completed";
-                    const isBlocked = appt.status === "blocked";
+              {/* Data Table View */}
+              {agendaViewMode === "table" && (
+                <div>
+                  {isLoading ? (
+                    <div className="py-20 text-center space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                      <div className="w-6 h-6 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-xs text-zinc-400 font-mono">A carregar agendamentos...</p>
+                    </div>
+                  ) : sortedAndFilteredAppointments.length === 0 ? (
+                    <div className="p-12 text-center space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                      <CalendarIcon className="w-8 h-8 text-zinc-500 mx-auto" />
+                      <h3 className="text-sm font-semibold text-zinc-300">Nenhuma marcação encontrada</h3>
+                      <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                        {searchQuery ? "Nenhum resultado corresponde à pesquisa." : `Não existem marcações para ${formattedPortugueseDate}.`}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {sortedAndFilteredAppointments.map((appt) => {
+                        const isCancelled = appt.status === "cancelled";
+                        const isCompleted = appt.status === "completed";
+                        const isBlocked = appt.status === "blocked";
 
-                    const apptFormattedDate = appt.date
-                      ? new Date(appt.date).toLocaleDateString("pt-PT", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short"
-                        })
-                      : "";
-
-                    const whatsAppClientText = encodeURIComponent(
-                      `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota Do Corte para ${appt.formatted_date || appt.date} às ${appt.time} (${appt.service_name}). Até já!`
-                    );
-
-                    if (isBlocked) {
-                      return (
-                        <div
-                          key={appt.id}
-                          className="p-4 rounded-3xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
-                        >
-                          <div className="flex items-center gap-3.5">
-                            <div className="px-3.5 py-2 rounded-2xl bg-amber-500/20 text-amber-500 font-mono font-bold text-sm flex items-center gap-1.5">
-                              <Lock className="w-3.5 h-3.5" />
-                              <span>{appt.time}</span>
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-amber-500">
-                                  {appt.customer_name}
+                        if (isBlocked) {
+                          return (
+                            <div
+                              key={appt.id}
+                              className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono font-semibold px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {appt.time}
                                 </span>
-                                <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500">
-                                  Horário Bloqueado
+                                <div>
+                                  <span className="font-semibold text-amber-300">
+                                    {appt.customer_name}
+                                  </span>
+                                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                                    Duração: {appt.service_duration} min • Horário Bloqueado
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAppointment(appt.id, true)}
+                                className="px-2.5 py-1 rounded-md border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium cursor-pointer"
+                              >
+                                Desbloquear
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={appt.id}
+                            className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              isCancelled
+                                ? "bg-red-500/5 border-red-500/20 opacity-60"
+                                : isCompleted
+                                  ? "bg-zinc-900/30 border-zinc-800/80"
+                                  : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                            }`}
+                          >
+                            {/* Time & Client Info */}
+                            <div className="flex items-start sm:items-center gap-3 min-w-0">
+                              <div className="font-mono text-center px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 shrink-0">
+                                <span className="text-xs font-bold text-zinc-100 block">
+                                  {appt.time}
+                                </span>
+                                <span className="text-[9px] text-zinc-500 block">
+                                  {appt.service_duration}m
                                 </span>
                               </div>
-                              <p className="text-[11px] text-neutral-400 mt-0.5">
-                                Duração: {appt.service_duration} min • Indisponível no agendamento público
-                              </p>
+
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-semibold text-xs sm:text-sm text-zinc-100 truncate">
+                                    {appt.customer_name}
+                                  </h4>
+                                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-md ${
+                                    isCancelled
+                                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                      : isCompleted
+                                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                        : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                                  }`}>
+                                    {isCancelled ? "Cancelado" : isCompleted ? "Concluído" : "Confirmado"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-[11px] text-zinc-400 flex-wrap">
+                                  <span className="text-[#C6924B] font-medium">{appt.service_name}</span>
+                                  <span>•</span>
+                                  <span className="font-mono">{appt.customer_phone}</span>
+                                  {appt.customer_notes && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="italic text-zinc-500 truncate max-w-[200px]">"{appt.customer_notes}"</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Price & Actions */}
+                            <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/60">
+                              <span className="font-mono font-bold text-xs sm:text-sm text-zinc-100">
+                                {appt.service_price}
+                              </span>
+
+                              <div className="flex items-center gap-1.5">
+                                {appt.customer_phone && (
+                                  <a
+                                    href={`https://wa.me/${appt.customer_phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                                      `Olá ${appt.customer_name}! Confirmamos o seu agendamento na Rota do Corte para ${appt.date} às ${appt.time} (${appt.service_name}). Até já!`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                                    title="WhatsApp Direto"
+                                  >
+                                    <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
+                                  </a>
+                                )}
+
+                                {!isCompleted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStatusChange(appt.id, "completed")}
+                                    className="p-1.5 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 transition-colors cursor-pointer"
+                                    title="Marcar como Concluído"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAppt(appt);
+                                    setEditName(appt.customer_name || "");
+                                    setEditPhone(appt.customer_phone || "");
+                                    setEditDate(appt.date || selectedDate);
+                                    setEditTime(appt.time || "10:00");
+                                    setEditServiceId(appt.service_id || "corte-barba-terapia");
+                                    setEditStatus(appt.status || "confirmed");
+                                    setEditNotes(appt.customer_notes || "");
+                                  }}
+                                  className="p-1.5 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
+                                  title="Editar"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAppointment(appt.id)}
+                                  className="p-1.5 rounded-md border border-zinc-800 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAppointment(appt.id, true)}
-                            className="px-3 py-1.5 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 text-xs font-bold flex items-center gap-1.5 cursor-pointer self-end sm:self-auto"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Desbloquear</span>
-                          </button>
+              {/* Timeline Schedule View */}
+              {agendaViewMode === "timeline" && (
+                <div className={`p-4 rounded-xl border space-y-2 ${
+                  isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+                }`}>
+                  <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                    <span className="text-xs font-medium text-zinc-400">
+                      Grelha Horária • {formattedPortugueseDate}
+                    </span>
+                    <span className="text-[11px] font-mono text-zinc-500">
+                      Cadeiras: 1 (Gabriel Silva)
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
+                    {[
+                      "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
+                      "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
+                      "16:00", "16:30", "17:00", "17:30", "18:00", "18:30",
+                      "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"
+                    ].map((slotTime) => {
+                      const match = dayAppointments.find((a) => a.time === slotTime && a.status !== "cancelled");
+                      const isFree = !match;
+
+                      return (
+                        <div
+                          key={slotTime}
+                          className={`flex items-center gap-3 p-2 rounded-lg border text-xs transition-colors ${
+                            match
+                              ? match.status === "blocked"
+                                ? "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                                : match.status === "completed"
+                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                                  : "bg-zinc-900 border-zinc-800 text-zinc-100"
+                              : "bg-zinc-950/40 border-zinc-800/40 text-zinc-500 hover:border-zinc-700"
+                          }`}
+                        >
+                          <span className="font-mono font-semibold w-12 shrink-0 text-zinc-400">
+                            {slotTime}
+                          </span>
+
+                          {match ? (
+                            <div className="flex-1 flex items-center justify-between truncate">
+                              <span className="font-medium truncate">
+                                {match.customer_name} ({match.service_name})
+                              </span>
+                              <span className="font-mono text-[11px] font-semibold">
+                                {match.service_price}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-between text-zinc-600">
+                              <span className="italic">Horário Livre</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManualDate(selectedDate);
+                                  setManualTime(slotTime);
+                                  setIsNewModalOpen(true);
+                                }}
+                                className="text-[10px] text-zinc-400 hover:text-zinc-200 font-medium px-2 py-0.5 rounded border border-zinc-800"
+                              >
+                                + Marcar
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
-                    }
-
-                    return (
-                      <div
-                        key={appt.id}
-                        className={`p-4 sm:p-5 rounded-3xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4 ${
-                          isCancelled
-                            ? "opacity-60 bg-red-500/5 border-red-500/20"
-                            : isCompleted
-                              ? isLight ? "bg-emerald-50/50 border-emerald-200" : "bg-emerald-950/10 border-emerald-500/20"
-                              : isLight ? "bg-white border-neutral-200 hover:border-[#C89B58]/60 shadow-xs" : "bg-[#111319] border-white/10 hover:border-[#C89B58]/60 shadow-xs"
-                        }`}
-                      >
-                        {/* Time & Details */}
-                        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
-                          <div className={`px-3 py-2 sm:px-4 sm:py-3 rounded-2xl border text-center font-mono shrink-0 shadow-inner min-w-[70px] sm:min-w-[76px] ${
-                            isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/40 border-white/10"
-                          }`}>
-                            {appt.date && (
-                              <span className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider block border-b border-neutral-200 dark:border-white/5 pb-0.5 mb-1 truncate">
-                                {apptFormattedDate}
-                              </span>
-                            )}
-                            <span className="text-sm sm:text-base font-bold text-[#C89B58] block">
-                              {appt.time}
-                            </span>
-                            <span className="text-[9px] sm:text-[10px] text-neutral-400 block mt-0.5">
-                              {appt.service_duration} min
-                            </span>
-                          </div>
-
-                          <div className="space-y-1 min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-sm font-serif truncate">
-                                {appt.customer_name}
-                              </h3>
-                              <span
-                                className={`text-[9px] font-mono uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${
-                                  isCancelled
-                                    ? "bg-red-500/10 text-red-500 border border-red-500/20"
-                                    : isCompleted
-                                      ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                                      : "bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                                }`}
-                              >
-                                {appt.status === "confirmed"
-                                  ? "Confirmado"
-                                  : appt.status === "completed"
-                                    ? "Concluído"
-                                    : appt.status === "cancelled"
-                                      ? "Cancelado"
-                                      : appt.status}
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-[#C89B58] font-medium flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <Scissors className="w-3.5 h-3.5 shrink-0" />
-                              <span className="truncate">{appt.service_name}</span>
-                              <span>•</span>
-                              <span className="font-mono font-bold">{appt.service_price}</span>
-                            </p>
-
-                            <div className="flex items-center gap-2.5 text-xs text-neutral-400 pt-0.5 flex-wrap">
-                              <a
-                                href={`tel:${appt.customer_phone?.replace(/\s/g, "")}`}
-                                className="flex items-center gap-1 hover:text-[#C89B58] transition-colors font-mono font-medium"
-                              >
-                                <Phone className="w-3 h-3 text-[#C89B58]" /> {appt.customer_phone}
-                              </a>
-                              {appt.customer_notes && (
-                                <span className="italic line-clamp-1 text-[11px]">
-                                  "{appt.customer_notes}"
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Action Controls (Responsive on Mobile) */}
-                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-neutral-200 dark:border-white/5">
-                          {appt.customer_phone && appt.customer_phone !== "---" && (
-                            <a
-                              href={`https://wa.me/${appt.customer_phone.replace(/\D/g, "")}?text=${whatsAppClientText}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-2 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                            >
-                              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(appt)}
-                            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span>Editar</span>
-                          </button>
-
-                          {!isCompleted && !isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(appt.id, "completed")}
-                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Concluir</span>
-                            </button>
-                          )}
-
-                          {isCompleted && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(appt.id, "confirmed")}
-                              className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                            >
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>Reabrir</span>
-                            </button>
-                          )}
-
-                          {isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(appt.id, "confirmed")}
-                              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                              title="Reverter cancelamento e reativar marcação"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              <span>Reativar / Reverter</span>
-                            </button>
-                          )}
-
-                          {!isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(appt.id, "cancelled")}
-                              className="px-3 py-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/15 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[38px]"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                              <span>Cancelar</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAppointment(appt.id)}
-                            className="col-span-2 sm:col-span-1 p-2 rounded-xl bg-neutral-100 dark:bg-white/5 hover:bg-red-500/20 border border-neutral-200 dark:border-white/10 hover:border-red-500/30 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer flex items-center justify-center min-h-[38px]"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="sm:hidden text-xs font-semibold ml-1.5">Eliminar</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                    })}
+                  </div>
                 </div>
               )}
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* TAB: FATURAÇÃO & MÉTRICAS (EXECUTIVE ANALYTICS & REVENUE)                 */}
+          {/* TAB 2: FATURAÇÃO & MÉTRICAS                                               */}
           {/* ========================================================================= */}
           {activeTab === "stats" && (
-            <div className="space-y-6 animate-fadeIn">
-              
-              {/* Header & Period Selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight">Faturação & Métricas</h1>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Análise financeira, rentabilidade por serviço e comportamento de clientes.
-                  </p>
+            <div className="space-y-5 animate-fadeIn">
+              {/* Controls & Quick Actions */}
+              <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
+              }`}>
+                {/* Period Selector */}
+                <div className="flex items-center gap-1 p-1 rounded-lg border border-zinc-800 bg-zinc-950/60 overflow-x-auto">
+                  {[
+                    { id: "today", label: "Hoje" },
+                    { id: "week", label: "Semana" },
+                    { id: "month", label: "Mês Atual" },
+                    { id: "30days", label: "30 Dias" },
+                    { id: "all", label: "Histórico Total" }
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setStatsPeriod(p.id)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shrink-0 ${
+                        statsPeriod === p.id
+                          ? "bg-zinc-100 text-zinc-950 font-semibold"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Period Pills & Actions */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className={`flex items-center gap-1 p-1 rounded-2xl border overflow-x-auto ${
-                    isLight ? "bg-white border-neutral-200 shadow-xs" : "bg-[#111319] border-white/10"
-                  }`}>
-                    {[
-                      { id: "today", label: "Hoje" },
-                      { id: "week", label: "Esta Semana" },
-                      { id: "month", label: "Este Mês" },
-                      { id: "30days", label: "Últimos 30 Dias" },
-                      { id: "all", label: "Total Histórico" }
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setStatsPeriod(p.id)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                          statsPeriod === p.id
-                            ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                            : "text-neutral-400 hover:text-neutral-700 dark:hover:text-white"
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 🔒 Shield Guarantee Banner & Quick Actions */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-5 h-5 shrink-0 text-emerald-500" />
-                  <div>
-                    <h4 className="text-xs font-bold leading-tight">Livro de Faturação Blindado & Perpétuo</h4>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                      Os valores faturados e clientes históricos nunca são apagados ou perdidos ao eliminar/libertar horários da agenda diária.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsDirectSaleModalOpen(true)}
-                    className="px-3.5 py-1.5 rounded-2xl bg-[#C89B58] hover:bg-[#b58b4c] text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Receipt className="w-3.5 h-3.5" />
                     <span>+ Venda Balcão</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={handleExportCSV}
-                    className={`px-3.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      isLight ? "bg-white border-neutral-200 text-neutral-800 hover:bg-neutral-50" : "bg-white/5 border-white/10 text-neutral-200 hover:bg-white/10"
-                    }`}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Download className="w-3.5 h-3.5 text-[#C89B58]" />
+                    <Download className="w-3.5 h-3.5" />
                     <span>Exportar CSV</span>
                   </button>
                 </div>
               </div>
 
-              {/* 4 Top KPI Cards Row (2x2 on Mobile, 4 on Desktop) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {/* 1. Faturação Concluída */}
-                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Faturação Real</span>
-                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
-                      <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                      <span>{statsData.completedCount}</span>
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight text-[#C89B58] truncate">
-                      {statsData.completedRevenue.toFixed(2)} €
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
-                      Previsto: <strong className="text-neutral-300 font-mono">{statsData.estimatedRevenue.toFixed(0)} €</strong>
-                    </p>
-                  </div>
-                </div>
-
-                {/* 2. Total de Atendimentos */}
-                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Total Marcações</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
-                      {statsData.total}
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
-                      {statsData.confirmedCount} confirmados
-                    </p>
-                  </div>
-                </div>
-
-                {/* 3. Ticket Médio */}
-                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Ticket Médio</span>
-                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      Média
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
-                      {statsData.avgTicket.toFixed(2)} €
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
-                      Rendimento / marcação
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4. Taxa de Comparência */}
-                <div className={`p-3.5 sm:p-5 rounded-3xl border transition-all shadow-xs space-y-2 sm:space-y-3 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-[11px] sm:text-xs font-semibold text-neutral-400 truncate">Comparência</span>
-                    <span className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      {statsData.completionRate}%
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate">
-                      {statsData.completionRate}%
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-neutral-400 mt-0.5 truncate">
-                      {statsData.cancelledCount} cancelados
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Middle Section Grid: Revenue Chart (8 cols) & Side Widgets (4 cols) */}
+              {/* Chart & Ranking Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Large Chart Card (8 cols) */}
-                <div className={`lg:col-span-8 p-6 rounded-3xl border shadow-xs space-y-5 flex flex-col justify-between ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                {/* Chart Card (8 cols) */}
+                <div className={`lg:col-span-8 p-5 rounded-xl border space-y-4 ${
+                  isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
                 }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base">Evolução de Faturação</h3>
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/15 text-[#C89B58] border border-[#C89B58]/30">
-                          {statsPeriod === "today" ? "Hoje" : statsPeriod === "week" ? "Semanal" : statsPeriod === "month" ? "Mensal" : statsPeriod === "30days" ? "30 Dias" : "Geral"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-neutral-400 mt-0.5">
-                        Receita diária acumulada ao longo do período selecionado.
+                      <h3 className="font-semibold text-sm text-zinc-100">
+                        Evolução da Faturação
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Rendimento diário no período selecionado.
                       </p>
                     </div>
-                    <div className="text-left sm:text-right">
-                      <span className="text-xs text-neutral-400 block">Total no Período</span>
-                      <span className="text-lg font-mono font-bold text-[#C89B58]">
-                        {statsData.completedRevenue.toFixed(2)} €
-                      </span>
-                    </div>
+                    <span className="font-mono font-bold text-base text-zinc-100">
+                      {statsData.completedRevenue.toFixed(2)} €
+                    </span>
                   </div>
 
-                  {/* High-Resolution SVG Chart with Bezier curve, horizontal grid lines & Y-Axis labels */}
                   {statsData.timelineData.length === 0 ? (
-                    <div className="py-20 text-center text-xs text-neutral-400">
-                      Sem dados suficientes de faturação para este período.
+                    <div className="py-20 text-center text-xs text-zinc-500">
+                      Sem dados de faturação suficientes para este período.
                     </div>
                   ) : (
-                    <div className="space-y-3 relative">
-                      {/* Floating Tooltip when hovering any point */}
-                      {hoveredChartPoint && (
-                        <div
-                          className="absolute z-20 pointer-events-none -translate-x-1/2 -translate-y-full mb-3 px-3 py-2 rounded-xl bg-black/90 border border-white/20 text-white shadow-2xl backdrop-blur-md text-[11px] whitespace-nowrap transition-all"
-                          style={{
-                            left: `${(hoveredChartPoint.x / statsData.chartW) * 100}%`,
-                            top: `${(hoveredChartPoint.y / statsData.chartH) * 100}%`
-                          }}
-                        >
-                          <p className="font-bold text-neutral-300">{hoveredChartPoint.fullLabel || hoveredChartPoint.date}</p>
-                          <p className="font-mono font-bold text-[#C89B58] text-xs">
-                            {hoveredChartPoint.revenue.toFixed(2)} €
-                          </p>
-                          <p className="text-[10px] text-neutral-400">
-                            {hoveredChartPoint.count} {hoveredChartPoint.count === 1 ? "marcação" : "marcações"}
-                          </p>
-                        </div>
-                      )}
-
+                    <div className="space-y-3">
                       <div className="w-full relative">
                         <svg
-                          className="w-full h-52 overflow-visible"
+                          className="w-full h-48 overflow-visible"
                           viewBox={`0 0 ${statsData.chartW} ${statsData.chartH}`}
                           preserveAspectRatio="none"
                         >
                           <defs>
-                            <linearGradient id="execRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#C89B58" stopOpacity="0.45" />
-                              <stop offset="50%" stopColor="#C89B58" stopOpacity="0.15" />
-                              <stop offset="100%" stopColor="#C89B58" stopOpacity="0.0" />
+                            <linearGradient id="zincRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#C6924B" stopOpacity="0.35" />
+                              <stop offset="100%" stopColor="#C6924B" stopOpacity="0.0" />
                             </linearGradient>
                           </defs>
 
-                          {/* Horizontal Grid Lines & Y-Axis Ticks */}
-                          {statsData.gridLevels.map((lvl, idx) => (
-                            <g key={idx}>
-                              <line
-                                x1={statsData.padL}
-                                y1={lvl.y}
-                                x2={statsData.chartW - statsData.padR}
-                                y2={lvl.y}
-                                stroke={isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.07)"}
-                                strokeDasharray="3 3"
-                                strokeWidth="1"
-                              />
-                              <text
-                                x={statsData.padL - 8}
-                                y={lvl.y + 3.5}
-                                textAnchor="end"
-                                fontSize="9"
-                                fill={isLight ? "#9CA3AF" : "#6B7280"}
-                                fontFamily="monospace"
-                              >
-                                {lvl.val.toFixed(0)}€
-                              </text>
-                            </g>
-                          ))}
-
-                          {/* Area Fill */}
                           {statsData.chartAreaPath && (
-                            <path d={statsData.chartAreaPath} fill="url(#execRevenueGrad)" />
+                            <path d={statsData.chartAreaPath} fill="url(#zincRevenueGrad)" />
                           )}
 
-                          {/* Spline Stroke Line */}
                           {statsData.chartSvgPath && (
                             <path
                               d={statsData.chartSvgPath}
                               fill="none"
-                              stroke="#C89B58"
-                              strokeWidth="3.5"
+                              stroke="#C6924B"
+                              strokeWidth="2.5"
                               strokeLinecap="round"
                               strokeLinejoin="round"
                             />
                           )}
 
-                          {/* Data Points on Curve with Hover Effects */}
                           {statsData.chartPoints.map((pt, i) => (
-                            <g
+                            <circle
                               key={i}
-                              className="cursor-pointer group"
-                              onMouseEnter={() => setHoveredChartPoint(pt)}
-                              onMouseLeave={() => setHoveredChartPoint(null)}
-                            >
-                              <circle
-                                cx={pt.x}
-                                cy={pt.y}
-                                r="4.5"
-                                fill="#C89B58"
-                                stroke={isLight ? "#FFFFFF" : "#111319"}
-                                strokeWidth="2"
-                                className="transition-transform group-hover:scale-150"
-                              />
-                              <circle
-                                cx={pt.x}
-                                cy={pt.y}
-                                r="12"
-                                fill="transparent"
-                              />
-                            </g>
+                              cx={pt.x}
+                              cy={pt.y}
+                              r="3.5"
+                              fill="#C6924B"
+                              stroke="#18181B"
+                              strokeWidth="2"
+                            />
                           ))}
                         </svg>
                       </div>
 
-                      {/* X-Axis Date Labels */}
-                      <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 pt-2 border-t border-neutral-100 dark:border-white/5 pl-10 pr-4">
-                        {statsData.timelineData.length <= 8 ? (
-                          statsData.timelineData.map((d) => (
-                            <span key={d.date}>{d.label || d.date}</span>
-                          ))
-                        ) : (
-                          <>
-                            <span>{statsData.timelineData[0]?.label}</span>
-                            <span>{statsData.timelineData[Math.floor(statsData.timelineData.length / 3)]?.label}</span>
-                            <span>{statsData.timelineData[Math.floor((statsData.timelineData.length * 2) / 3)]?.label}</span>
-                            <span>{statsData.timelineData[statsData.timelineData.length - 1]?.label}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Service Composition Segment Bar */}
-                  {statsData.serviceRanking.length > 0 && (
-                    <div className="space-y-2 pt-3 border-t border-neutral-100 dark:border-white/5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-neutral-400 font-medium">Distribuição por Tipo de Serviço</span>
-                        <span className="text-[11px] font-mono font-bold text-[#C89B58]">
-                          {statsData.serviceRanking.length} categorias
-                        </span>
-                      </div>
-
-                      {/* Proportional horizontal bar */}
-                      <div className="h-3 w-full rounded-full bg-neutral-100 dark:bg-white/5 flex overflow-hidden p-0.5 gap-0.5">
-                        {statsData.serviceRanking.map((s) => (
-                          <div
-                            key={s.name}
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: `${Math.max(s.percent, 3)}%`,
-                              backgroundColor: s.hex || s.color
-                            }}
-                            title={`${s.name}: ${s.revenue.toFixed(2)} € (${s.percent}%)`}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Chips */}
-                      <div className="flex items-center gap-3 flex-wrap pt-1 text-[11px]">
-                        {statsData.serviceRanking.slice(0, 4).map((s) => (
-                          <div key={s.name} className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.hex || s.color }} />
-                            <span className="text-neutral-300 font-medium truncate">{s.name}:</span>
-                            <span className="font-mono font-bold text-neutral-400">{s.percent}%</span>
-                          </div>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-800">
+                        {statsData.timelineData.map((d) => (
+                          <span key={d.date}>{d.label}</span>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Side Column Widgets (4 cols) */}
-                <div className="lg:col-span-4 space-y-5 flex flex-col justify-between">
-                  {/* Widget 1: Dias Mais Ativos (Bar Chart) */}
-                  <div className={`p-6 rounded-3xl border shadow-xs space-y-4 ${
-                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-sm">Dias Mais Ativos</h4>
-                      <span className="text-[10px] font-bold text-[#C89B58] uppercase">Seg - Sáb</span>
-                    </div>
-
-                    <div className="grid grid-cols-6 gap-2 items-end h-32 pt-2">
-                      {statsData.daysActivity.map((d) => {
-                        const isPeak = d.count === statsData.maxDayCount && d.count > 0;
-                        const heightPct = statsData.maxDayCount > 0 && d.count > 0
-                          ? Math.max((d.count / statsData.maxDayCount) * 100, 20)
-                          : 0;
-
-                        return (
-                          <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end group">
-                            {/* Value badge over bar when count > 0 */}
-                            {d.count > 0 ? (
-                              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all ${
-                                isPeak
-                                  ? "text-black bg-[#C89B58] shadow-xs"
-                                  : "text-[#C89B58] bg-[#C89B58]/15"
-                              }`}>
-                                {d.count}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-mono text-transparent select-none py-0.5">
-                                -
-                              </span>
-                            )}
-
-                            {/* Track & Bar: transparent when count is 0 */}
-                            <div className="w-full rounded-xl bg-transparent relative flex items-end justify-center h-full">
-                              {d.count > 0 ? (
-                                <div
-                                  className={`w-full rounded-xl transition-all duration-500 ${
-                                    isPeak
-                                      ? "bg-[#C89B58] shadow-md shadow-[#C89B58]/30"
-                                      : "bg-[#C89B58]/50 hover:bg-[#C89B58]/70"
-                                  }`}
-                                  style={{ height: `${heightPct}%` }}
-                                />
-                              ) : (
-                                <div className={`w-full h-1 rounded-full ${
-                                  isLight ? "bg-neutral-200" : "bg-white/5"
-                                }`} />
-                              )}
-                            </div>
-
-                            <span className={`text-[10px] font-bold ${
-                              d.count > 0 ? (isPeak ? "text-[#C89B58]" : isLight ? "text-neutral-700" : "text-neutral-300") : "text-neutral-500"
-                            }`}>
-                              {d.label}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className={`p-3 rounded-2xl border text-center text-xs ${
-                      isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                    }`}>
-                      {statsData.peakDay?.count > 0 ? (
-                        <>
-                          <p className="text-neutral-400">
-                            Pico de movimento: <strong className="text-[#C89B58] font-bold">{statsData.peakDay.name}</strong>
-                          </p>
-                          <p className="text-[10px] text-neutral-400 font-mono mt-0.5">
-                            {statsData.peakDay.count} {statsData.peakDay.count === 1 ? "corte" : "cortes"} • {statsData.peakDay.revenue.toFixed(2)} €
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-neutral-400 text-[11px]">
-                          Sem movimento registado neste período
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Widget 2: Taxa de Retenção de Clientes (Radial Gauge) */}
-                  <div className={`p-6 rounded-3xl border shadow-xs space-y-3 text-center ${
-                    isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                  }`}>
-                    <div className="flex items-center justify-between text-left">
-                      <h4 className="font-bold text-sm">Fidelização de Clientes</h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
-                        Recorrentes
-                      </span>
-                    </div>
-
-                    {/* Semi-circular Speedometer Arc */}
-                    <div className="relative w-36 h-20 mx-auto mt-2 flex items-center justify-center">
-                      <svg className="w-full h-full overflow-visible" viewBox="0 0 100 55">
-                        {/* Background track arc */}
-                        <path
-                          d="M 10 50 A 40 40 0 0 1 90 50"
-                          fill="none"
-                          stroke={isLight ? "#E5E7EB" : "rgba(255,255,255,0.08)"}
-                          strokeWidth="10"
-                          strokeLinecap="round"
-                        />
-                        {/* Foreground value arc */}
-                        <path
-                          d="M 10 50 A 40 40 0 0 1 90 50"
-                          fill="none"
-                          stroke="#10B981"
-                          strokeWidth="10"
-                          strokeDasharray={`${(statsData.repeatRate / 100) * 125.6} 125.6`}
-                          strokeLinecap="round"
-                          className="transition-all duration-700"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-end pb-1 text-center">
-                        <span className="text-2xl font-mono font-bold text-emerald-500 leading-none">
-                          {statsData.repeatRate}%
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-[11px] text-neutral-400">
-                      Clientes que agendam 2 ou mais vezes na barbearia.
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("crm")}
-                      className={`w-full py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer ${
-                        isLight
-                          ? "bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-700"
-                          : "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-                      }`}
-                    >
-                      Ver Base de Clientes (CRM)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Row Grid: Service Ranking Table (7 cols) & Donut Mix (5 cols) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Ranking de Rentabilidade de Serviços (7 cols - Inspired by Image 1) */}
-                <div className={`lg:col-span-7 p-6 rounded-3xl border shadow-xs space-y-4 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+                {/* Days of Week (4 cols) */}
+                <div className={`lg:col-span-4 p-5 rounded-xl border space-y-4 ${
+                  isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
                 }`}>
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-base">Ranking de Rentabilidade por Serviço</h3>
-                      <p className="text-xs text-neutral-400">
-                        Volume, receita gerada e rendimento por cada 60 minutos de cadeira.
-                      </p>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-[#C89B58]">
-                      {statsData.serviceRanking.length} Serviços
-                    </span>
+                    <h3 className="font-semibold text-sm text-zinc-100">
+                      Dias Mais Ativos
+                    </h3>
+                    <span className="text-[10px] font-mono text-zinc-500">Seg – Sáb</span>
                   </div>
 
-                  {statsData.serviceRanking.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-neutral-400">
-                      Sem marcações no período selecionado.
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {statsData.serviceRanking.map((s, idx) => (
-                        <div
-                          key={s.name}
-                          className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
-                            isLight ? "bg-neutral-50 hover:bg-white border-neutral-200" : "bg-black/30 hover:bg-white/5 border-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <span className="w-7 h-7 rounded-xl bg-[#C89B58]/20 text-[#C89B58] text-xs font-bold font-mono flex items-center justify-center shrink-0">
-                              #{idx + 1}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-bold text-xs truncate">{s.name}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-neutral-400 mt-0.5">
-                                <span>{s.count} {s.count === 1 ? "marcação" : "marcações"}</span>
-                                <span>•</span>
-                                <span>{s.durationMin} min</span>
-                                <span>•</span>
-                                <span className="font-mono text-[#C89B58]">{s.percent}% total</span>
-                              </div>
-                            </div>
-                          </div>
+                  <div className="grid grid-cols-6 gap-1.5 items-end h-32 pt-2">
+                    {statsData.daysActivity.map((d) => {
+                      const heightPct = statsData.maxDayCount > 0 && d.count > 0
+                        ? Math.max((d.count / statsData.maxDayCount) * 100, 15)
+                        : 0;
 
-                          <div className="text-right shrink-0">
-                            <span className="font-mono font-bold text-sm text-[#C89B58] block">
-                              {s.revenue.toFixed(2)} €
-                            </span>
-                            <span className="text-[10px] font-mono text-emerald-500 font-bold">
-                              {s.hourlyYield.toFixed(0)} € / hora
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Donut Mix (5 cols) */}
-                <div className={`lg:col-span-5 p-6 rounded-3xl border shadow-xs space-y-4 flex flex-col justify-between ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-base">Mix de Faturação</h3>
-                      <p className="text-xs text-neutral-400">Distribuição percentual por serviço.</p>
-                    </div>
-                    <PieChart className="w-4 h-4 text-[#C89B58]" />
-                  </div>
-
-                  {statsData.serviceRanking.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-neutral-400">
-                      Sem dados no período.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Donut graphic */}
-                      <div className="relative w-40 h-40 mx-auto flex items-center justify-center">
-                        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            className={isLight ? "stroke-neutral-100" : "stroke-white/5"}
-                            strokeWidth="16"
-                            fill="transparent"
-                          />
-                          {statsData.serviceRanking.map((s) => {
-                            const isHovered = hoveredService === s.name;
-                            const r = 60;
-                            const circ = 2 * Math.PI * r;
-                            const dashL = Math.max((s.exactPercent / 100) * circ, s.exactPercent > 0 ? 3 : 0);
-                            const dashOff = -(s.dashOffset / statsData.perimeter) * circ;
-
-                            return (
-                              <circle
-                                key={s.name}
-                                cx="80"
-                                cy="80"
-                                r="60"
-                                fill="transparent"
-                                stroke={s.color}
-                                strokeWidth={isHovered ? "20" : "16"}
-                                strokeDasharray={`${dashL} ${circ}`}
-                                strokeDashoffset={dashOff}
-                                strokeLinecap="round"
-                                className="transition-all duration-300 cursor-pointer"
-                                onMouseEnter={() => setHoveredService(s.name)}
-                                onMouseLeave={() => setHoveredService(null)}
+                      return (
+                        <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end">
+                          <span className="text-[9px] font-mono text-zinc-400">
+                            {d.count > 0 ? d.count : "-"}
+                          </span>
+                          <div className="w-full rounded-md bg-zinc-800/40 h-full flex items-end">
+                            {d.count > 0 && (
+                              <div
+                                className="w-full rounded-md bg-[#C6924B]/70"
+                                style={{ height: `${heightPct}%` }}
                               />
-                            );
-                          })}
-                        </svg>
-
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-3">
-                          <span className="text-[10px] uppercase font-bold text-neutral-400">
-                            Faturado Real
-                          </span>
-                          <span className="text-lg font-mono font-bold mt-0.5 text-[#C89B58]">
-                            {statsData.completedRevenue.toFixed(2)} €
+                            )}
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-medium">
+                            {d.label}
                           </span>
                         </div>
-                      </div>
+                      );
+                    })}
+                  </div>
 
-                      {/* Legend List */}
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                        {statsData.serviceRanking.map((s) => (
-                          <div
-                            key={s.name}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                              isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                              <span className="font-bold truncate">{s.name}</span>
-                            </div>
-                            <span className="font-mono font-bold text-[#C89B58] shrink-0">
-                              {s.percent}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-950/60 text-center text-xs">
+                    <span className="text-zinc-400">Dia de maior movimento: </span>
+                    <strong className="text-zinc-100">{statsData.peakDay.name}</strong>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      {statsData.peakDay.count} cortes • {statsData.peakDay.revenue.toFixed(2)} €
+                    </p>
+                  </div>
                 </div>
               </div>
-
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* TAB: BASE DE CLIENTES (CRM)                                               */}
+          {/* TAB 3: BASE DE CLIENTES / MINI-CRM                                        */}
           {/* ========================================================================= */}
           {activeTab === "crm" && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3.5 ${
-                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            <div className="space-y-4 animate-fadeIn">
+              {/* CRM Top Controls */}
+              <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
               }`}>
-                <div>
-                  <h2 className="font-bold text-lg flex items-center gap-2">
-                    <Users className="w-5 h-5 text-[#C89B58]" />
-                    <span>Base de Clientes & Fidelização</span>
-                  </h2>
-                  <p className="text-xs text-neutral-400">
-                    Histórico imutável de clientes, faturação acumulada e fidelização.
-                  </p>
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar cliente por nome ou contacto..."
+                    value={crmSearchQuery}
+                    onChange={(e) => setCrmSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+                  />
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  {/* Status Filter Pills: Todos / Ativos / Arquivados */}
-                  <div className={`flex items-center gap-1 p-1 rounded-2xl border shrink-0 ${
-                    isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/40 border-white/10"
-                  }`}>
+                <div className="flex items-center gap-1 p-1 rounded-lg border border-zinc-800 bg-zinc-950/60">
+                  {[
+                    { id: "all", label: `Todos (${crmCounts.all})` },
+                    { id: "active", label: `Ativos (${crmCounts.active})` },
+                    { id: "archived", label: `Arquivados (${crmCounts.archived})` }
+                  ].map((f) => (
                     <button
+                      key={f.id}
                       type="button"
-                      onClick={() => setCrmFilter("all")}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        crmFilter === "all"
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-white"
+                      onClick={() => setCrmFilter(f.id)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                        crmFilter === f.id ? "bg-zinc-800 text-zinc-100 font-semibold" : "text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      Todos ({crmCounts?.all || 0})
+                      {f.label}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setCrmFilter("active")}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        crmFilter === "active"
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-white"
-                      }`}
-                    >
-                      Ativos ({crmCounts?.active || 0})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCrmFilter("archived")}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        crmFilter === "archived"
-                          ? "bg-[#C89B58] text-black shadow-xs font-bold"
-                          : "text-neutral-400 hover:text-white"
-                      }`}
-                    >
-                      Arquivados ({crmCounts?.archived || 0})
-                    </button>
-                  </div>
-
-                  <div className="relative w-full sm:w-60">
-                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                    <input
-                      type="text"
-                      placeholder="Pesquisar cliente..."
-                      value={crmSearchQuery}
-                      onChange={(e) => setCrmSearchQuery(e.target.value)}
-                      className={`w-full pl-9 pr-4 py-2 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                        isLight ? "bg-neutral-100 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                      }`}
-                    />
-                  </div>
+                  ))}
                 </div>
               </div>
 
+              {/* CRM Clients List */}
               {crmClients.length === 0 ? (
-                <div className={`p-14 text-center rounded-3xl border space-y-2 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <Users className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
-                  <h3 className="text-sm font-bold">Nenhum cliente encontrado</h3>
-                  <p className="text-xs text-neutral-400">
-                    {crmSearchQuery
-                      ? "Nenhum resultado corresponde à pesquisa."
-                      : crmFilter === "archived"
-                        ? "Não existem clientes no arquivo."
-                        : "Ainda não existem clientes registados."}
-                  </p>
+                <div className="p-12 text-center space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <Users className="w-8 h-8 text-zinc-500 mx-auto" />
+                  <h3 className="text-sm font-semibold text-zinc-300">Nenhum cliente encontrado</h3>
+                  <p className="text-xs text-zinc-500">Ajuste os filtros de pesquisa.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {crmClients.map((client) => {
-                    const whatsAppChatUrl = client.phone && client.phone !== "---"
-                      ? `https://wa.me/${client.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                          `Olá ${client.name}! Daqui é o Gabriel Silva da Rota Do Corte.`
-                        )}`
-                      : null;
-
-                    return (
-                      <div
-                        key={client.key}
-                        className={`p-5 rounded-3xl border transition-all space-y-3.5 shadow-xs flex flex-col justify-between ${
-                          client.isArchived
-                            ? "opacity-75 bg-neutral-900/30 border-dashed border-neutral-700"
-                            : isLight
-                              ? "bg-white border-neutral-200 hover:border-[#C89B58]"
-                              : "bg-[#111319] border-white/10 hover:border-[#C89B58]"
-                        }`}
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-9 h-9 rounded-2xl bg-[#C89B58]/20 text-[#C89B58] font-bold text-xs flex items-center justify-center">
-                                {client.name.charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-sm leading-tight">{client.name}</h4>
-                                {client.phone && client.phone !== "---" && (
-                                  <span className="text-[11px] font-mono text-neutral-400">
-                                    {client.phone}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              {client.isArchived && (
-                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-neutral-700/50 text-neutral-300">
-                                  Arquivado
-                                </span>
-                              )}
-                              {client.isVip && (
-                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#C89B58]/20 text-[#C89B58] flex items-center gap-1">
-                                  <Star className="w-2.5 h-2.5 fill-[#C89B58]" />
-                                  <span>VIP</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
-                              <span className="text-[9px] uppercase text-neutral-400 block">Visitas</span>
-                              <span className="text-xs font-mono font-bold">{client.totalBookings}</span>
-                            </div>
-                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
-                              <span className="text-[9px] uppercase text-neutral-400 block">Total</span>
-                              <span className="text-xs font-mono font-bold text-[#C89B58]">{client.totalSpent.toFixed(0)} €</span>
-                            </div>
-                            <div className={`p-2 rounded-xl border ${isLight ? "bg-neutral-50 border-neutral-200" : "bg-black/30 border-white/5"}`}>
-                              <span className="text-[9px] uppercase text-neutral-400 block">Ticket</span>
-                              <span className="text-xs font-mono font-bold">{client.avgTicket.toFixed(0)} €</span>
-                            </div>
-                          </div>
-
-                          <div className="text-[11px] text-neutral-400 space-y-1">
-                            <p className="flex items-center gap-1.5">
-                              <Scissors className="w-3 h-3 text-[#C89B58]" />
-                              <span>Favorito: <strong>{client.favService}</strong></span>
-                            </p>
-                            {client.lastVisit && (
-                              <p className="flex items-center gap-1.5 text-[10px]">
-                                <Clock className="w-3 h-3" />
-                                <span>Última visita: {new Date(client.lastVisit).toLocaleDateString("pt-PT")}</span>
-                              </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {crmClients.map((client) => (
+                    <div
+                      key={client.key}
+                      className={`p-4 rounded-xl border transition-all space-y-3 ${
+                        client.isArchived
+                          ? "bg-zinc-950/40 border-zinc-900 opacity-60"
+                          : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-xs sm:text-sm text-zinc-100 truncate">
+                              {client.name}
+                            </h4>
+                            {client.isVip && (
+                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-[#C6924B]/10 text-[#C6924B] border border-[#C6924B]/30 font-semibold">
+                                VIP
+                              </span>
                             )}
                           </div>
+                          <p className="font-mono text-xs text-zinc-400 mt-0.5">
+                            {client.phone || "Sem contacto telefónico"}
+                          </p>
                         </div>
 
-                        <div className="flex items-center gap-2 pt-2">
-                          {whatsAppChatUrl && (
-                            <a
-                              href={whatsAppChatUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 py-2 px-3 rounded-2xl bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                              <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleArchiveClient(client.key)}
-                            title={client.isArchived ? "Restaurar para Ativos" : "Arquivar cliente (ocultar sem apagar faturação)"}
-                            className={`py-2 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                              client.isArchived
-                                ? "bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25"
-                                : isLight
-                                  ? "bg-neutral-100 border-neutral-200 text-neutral-600 hover:text-neutral-900"
-                                  : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
-                            }`}
-                          >
-                            <Archive className="w-3.5 h-3.5" />
-                            <span>{client.isArchived ? "Restaurar" : "Arquivar"}</span>
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveToggle(client.key)}
+                          className="p-1.5 rounded-md border border-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
+                          title={client.isArchived ? "Desarquivar Cliente" : "Arquivar Cliente"}
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/60 text-center">
+                        <div className="p-1.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60">
+                          <span className="text-[10px] text-zinc-500 block">Total Gasto</span>
+                          <span className="font-mono font-bold text-xs text-zinc-100 block">
+                            {client.totalSpent.toFixed(2)} €
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60">
+                          <span className="text-[10px] text-zinc-500 block">Visitas</span>
+                          <span className="font-mono font-bold text-xs text-zinc-100 block">
+                            {client.totalBookings}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60">
+                          <span className="text-[10px] text-zinc-500 block">Ticket Médio</span>
+                          <span className="font-mono font-bold text-xs text-zinc-100 block">
+                            {client.avgTicket.toFixed(2)} €
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {client.phone && (
+                        <a
+                          href={`https://wa.me/${client.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                            `Olá ${client.name}! Como tem passado? Esperamos voltar a vê-lo em breve na Rota do Corte!`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-1.5 px-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
+                          <span>Contactar no WhatsApp</span>
+                        </a>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* TAB: PAUSAS & BLOQUEIOS                                                   */}
+          {/* TAB 4: PAUSAS & BLOQUEIOS                                                 */}
           {/* ========================================================================= */}
           {activeTab === "blocks" && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className={`p-6 rounded-3xl border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            <div className="space-y-4 animate-fadeIn">
+              <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
+                isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
               }`}>
                 <div>
-                  <h2 className="font-bold text-lg flex items-center gap-2">
-                    <Lock className="w-5 h-5 text-[#C89B58]" />
-                    <span>Gestão de Pausas & Bloqueios</span>
-                  </h2>
-                  <p className="text-xs text-neutral-400">
-                    Defina horários de almoço, folgas e períodos indisponíveis para o público.
+                  <h3 className="font-semibold text-sm text-zinc-100">
+                    Gestão de Pausas e Folgas
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Bloqueie horários ou dias inteiros para impedir marcações públicas.
                   </p>
                 </div>
-
                 <button
                   type="button"
                   onClick={() => setIsBlockModalOpen(true)}
-                  className="px-4 py-2.5 rounded-2xl bg-[#C89B58] text-black text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Novo Bloqueio</span>
                 </button>
               </div>
 
               {allAppointments.filter((a) => a.status === "blocked").length === 0 ? (
-                <div className={`p-14 text-center rounded-3xl border space-y-2 ${
-                  isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
-                }`}>
-                  <Lock className="w-10 h-10 text-neutral-400 mx-auto opacity-40" />
-                  <h3 className="text-sm font-bold">Sem bloqueios ativos</h3>
-                  <p className="text-xs text-neutral-400">
-                    Todos os horários comerciais estão abertos ao público.
-                  </p>
+                <div className="p-12 text-center space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                  <Lock className="w-8 h-8 text-zinc-500 mx-auto" />
+                  <h3 className="text-sm font-semibold text-zinc-300">Sem horários bloqueados</h3>
+                  <p className="text-xs text-zinc-500">Todos os horários estão livres para marcações.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
                   {allAppointments
                     .filter((a) => a.status === "blocked")
                     .map((block) => (
                       <div
                         key={block.id}
-                        className="p-5 rounded-3xl border border-amber-500/30 bg-amber-500/10 flex items-center justify-between gap-3"
+                        className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3 text-xs"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="px-3 py-2 rounded-2xl bg-amber-500/20 text-amber-500 font-mono font-bold text-xs">
-                            {block.time}
-                          </div>
+                          <span className="font-mono font-semibold px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {block.date} às {block.time}
+                          </span>
                           <div>
-                            <h4 className="font-bold text-xs text-amber-500">{block.customer_name}</h4>
-                            <p className="text-[10px] text-neutral-400">{block.date} • {block.service_duration} min</p>
+                            <span className="font-semibold text-amber-300">
+                              {block.customer_name}
+                            </span>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">
+                              Duração: {block.service_duration} min
+                            </p>
                           </div>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => handleDeleteAppointment(block.id, true)}
-                          className="px-3 py-1.5 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                          className="px-2.5 py-1 rounded-md border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Desbloquear</span>
+                          Remover Bloqueio
                         </button>
                       </div>
                     ))}
@@ -2952,219 +2277,109 @@ export default function AdminAgenda() {
               )}
             </div>
           )}
-
         </main>
-
-        {/* ========================================================================= */}
-        {/* MOBILE BOTTOM NAVIGATION DOCK (Native App Feel)                           */}
-        {/* ========================================================================= */}
-        <nav
-          className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 px-2 py-1.5 border-t backdrop-blur-xl transition-colors shadow-2xl ${
-            isLight
-              ? "bg-white/95 border-neutral-200"
-              : "bg-[#0C0E14]/95 border-white/10"
-          }`}
-        >
-          <div className="flex items-center justify-around max-w-md mx-auto">
-            {/* 1. Agenda */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("agenda");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer relative ${
-                activeTab === "agenda"
-                  ? "text-[#C89B58] font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <div className="relative">
-                <CalendarDays className="w-5 h-5" />
-                {dayAppointments.length > 0 && (
-                  <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-[#C89B58] text-black text-[9px] font-mono font-bold flex items-center justify-center">
-                    {dayAppointments.length}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] tracking-tight">Agenda</span>
-            </button>
-
-            {/* 2. Métricas */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("stats");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer ${
-                activeTab === "stats"
-                  ? "text-[#C89B58] font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <BarChart3 className="w-5 h-5" />
-              <span className="text-[10px] tracking-tight">Métricas</span>
-            </button>
-
-            {/* 3. Center Elevated Action: Marcar */}
-            <button
-              type="button"
-              onClick={() => setIsNewModalOpen(true)}
-              className="flex flex-col items-center -mt-4 cursor-pointer group"
-            >
-              <div className="w-11 h-11 rounded-full bg-[#C89B58] hover:bg-[#D4A966] text-black flex items-center justify-center shadow-lg shadow-[#C89B58]/30 group-active:scale-95 transition-transform border-2 border-[#0C0E14]">
-                <Plus className="w-5 h-5 stroke-[2.5]" />
-              </div>
-              <span className="text-[9px] font-bold text-[#C89B58] mt-0.5">Marcar</span>
-            </button>
-
-            {/* 4. CRM / Clientes */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("crm");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer relative ${
-                activeTab === "crm"
-                  ? "text-[#C89B58] font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span className="text-[10px] tracking-tight">Clientes</span>
-            </button>
-
-            {/* 5. Pausas / Bloqueios */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("blocks");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-2xl transition-all cursor-pointer ${
-                activeTab === "blocks"
-                  ? "text-[#C89B58] font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Lock className="w-5 h-5" />
-              <span className="text-[10px] tracking-tight">Pausas</span>
-            </button>
-          </div>
-        </nav>
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: MARCAR CLIENTE (MANUAL BOOKING)                                   */}
+      {/* SHADCN DIALOG: NOVA MARCAÇÃO MANUAL                                       */}
       {/* ========================================================================= */}
       {isNewModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => {
-            setIsTimeDropdownOpen(false);
-            setIsServiceDropdownOpen(false);
-          }}
+          onClick={() => setIsNewModalOpen(false)}
         >
           <div
-            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
-              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            className={`relative max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800 text-zinc-100"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-lg font-bold">Marcar Cliente Manualmente</h3>
+              <div>
+                <h3 className="text-base font-semibold tracking-tight">Nova Marcação Manual</h3>
+                <p className="text-xs text-zinc-400">Registo direto pelo barbeiro</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsNewModalOpen(false)}
-                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateManual} className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Nome do Cliente *
-                </label>
+            <form onSubmit={handleManualSubmit} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Nome do Cliente *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Nome do cliente"
+                  placeholder="Ex: André Simões"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Telemóvel / WhatsApp *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Contacto / WhatsApp *</label>
                 <input
                   type="tel"
                   required
-                  placeholder="+351 9xx xxx xxx"
+                  placeholder="Ex: 912 345 678"
                   value={manualPhone}
                   onChange={(e) => setManualPhone(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Horário *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Data *</label>
+                  <input
+                    type="date"
+                    required
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Horário *</label>
                   <input
                     type="time"
                     required
                     value={manualTime}
                     onChange={(e) => setManualTime(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Serviço *
-                  </label>
-                  <select
-                    value={manualServiceId}
-                    onChange={(e) => setManualServiceId(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
-                    }`}
-                  >
-                    {servicesData.map((s) => (
-                      <option key={s.id} value={s.id} className="bg-[#111319] text-white">
-                        {s.name} ({s.priceFormatted})
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Notas / Observações
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Serviço *</label>
+                <select
+                  value={manualServiceId}
+                  onChange={(e) => setManualServiceId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
+                >
+                  {servicesData.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.priceFormatted})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Notas / Observações</label>
                 <input
                   type="text"
-                  placeholder="Ex: Corte à tesoura e barba desenhada"
+                  placeholder="Ex: Corte clássico sem barba"
                   value={manualNotes}
                   onChange={(e) => setManualNotes(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
@@ -3172,16 +2387,16 @@ export default function AdminAgenda() {
                 <button
                   type="button"
                   onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingManual}
-                  className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black cursor-pointer shadow-md disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  {isSavingManual ? "A Guardar..." : "Confirmar Marcação"}
+                  {isSavingManual ? "A registar..." : "Registar Marcação"}
                 </button>
               </div>
             </form>
@@ -3190,126 +2405,102 @@ export default function AdminAgenda() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: EDITAR MARCAÇÃO                                                  */}
+      {/* SHADCN DIALOG: EDITAR MARCAÇÃO                                            */}
       {/* ========================================================================= */}
       {editingAppt && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => {
-            setIsEditTimeDropdownOpen(false);
-            setIsEditServiceDropdownOpen(false);
-          }}
+          onClick={() => setEditingAppt(null)}
         >
           <div
-            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
-              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            className={`relative max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800 text-zinc-100"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-lg font-bold">Editar Marcação</h3>
+              <div>
+                <h3 className="text-base font-semibold tracking-tight">Editar Marcação</h3>
+                <p className="text-xs text-zinc-400">Altere horário, estado ou serviço</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditingAppt(null)}
-                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Nome do Cliente *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Nome *</label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Telemóvel / WhatsApp *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Telemóvel *</label>
                 <input
                   type="tel"
                   required
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Data *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Data *</label>
                   <input
                     type="date"
                     required
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Horário *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Horário *</label>
                   <input
                     type="time"
                     required
                     value={editTime}
                     onChange={(e) => setEditTime(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Serviço *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Serviço *</label>
                   <select
                     value={editServiceId}
                     onChange={(e) => setEditServiceId(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   >
                     {servicesData.map((s) => (
-                      <option key={s.id} value={s.id} className="bg-[#111319] text-white">
+                      <option key={s.id} value={s.id}>
                         {s.name} ({s.priceFormatted})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Estado *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Estado *</label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   >
                     <option value="confirmed">Confirmado</option>
                     <option value="completed">Concluído</option>
@@ -3318,44 +2509,39 @@ export default function AdminAgenda() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Notas / Observações
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Notas</label>
                 <input
                   type="text"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                 />
               </div>
 
-              <div className="pt-3 flex items-center justify-between border-t border-neutral-200 dark:border-white/5">
+              <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
                 <button
                   type="button"
                   onClick={() => handleDeleteAppointment(editingAppt.id)}
-                  className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar</span>
+                  Eliminar
                 </button>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setEditingAppt(null)}
-                    className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingEdit}
-                    className="px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-2xl bg-[#C89B58] hover:bg-[#D4A966] text-black cursor-pointer shadow-md disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                   >
-                    {isSavingEdit ? "A Guardar..." : "Guardar Alterações"}
+                    {isSavingEdit ? "A guardar..." : "Guardar Alterações"}
                   </button>
                 </div>
               </div>
@@ -3365,7 +2551,7 @@ export default function AdminAgenda() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: BLOQUEAR HORÁRIO / PAUSA                                         */}
+      {/* SHADCN DIALOG: BLOQUEAR HORÁRIO / PAUSA                                   */}
       {/* ========================================================================= */}
       {isBlockModalOpen && (
         <div
@@ -3373,90 +2559,74 @@ export default function AdminAgenda() {
           onClick={() => setIsBlockModalOpen(false)}
         >
           <div
-            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
-              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            className={`relative max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800 text-zinc-100"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-500" />
-                <h3 className="font-serif text-lg font-bold">Bloquear Horário / Pausa</h3>
+                <h3 className="text-base font-semibold tracking-tight">Bloquear Horário / Pausa</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsBlockModalOpen(false)}
-                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-neutral-400">
-              O horário selecionado ficará indisponível para marcações de clientes.
+            <p className="text-xs text-zinc-400">
+              O horário selecionado ficará indisponível para marcações online de clientes.
             </p>
 
             <form onSubmit={handleCreateBlock} className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Data a Bloquear *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Data *</label>
                 <input
                   type="date"
                   required
                   value={blockDate}
                   onChange={(e) => setBlockDate(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Hora Início *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Hora Início *</label>
                   <input
                     type="time"
                     required
                     value={blockStartTime}
                     onChange={(e) => setBlockStartTime(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Hora Fim *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Hora Fim *</label>
                   <input
                     type="time"
                     required
                     value={blockEndTime}
                     onChange={(e) => setBlockEndTime(e.target.value)}
-                    className={`w-full px-3 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Motivo *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Motivo *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Pausa de Almoço / Formação / Assuntos Pessoais"
+                  placeholder="Ex: Pausa de Almoço / Formação"
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
@@ -3464,16 +2634,16 @@ export default function AdminAgenda() {
                 <button
                   type="button"
                   onClick={() => setIsBlockModalOpen(false)}
-                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingBlock}
-                  className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  {isSavingBlock ? "A Bloquear..." : "Confirmar Bloqueio"}
+                  {isSavingBlock ? "A bloquear..." : "Confirmar Bloqueio"}
                 </button>
               </div>
             </form>
@@ -3482,7 +2652,7 @@ export default function AdminAgenda() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: REGISTAR VENDA BALCÃO / FATURAÇÃO DIRETA                         */}
+      {/* SHADCN DIALOG: REGISTAR VENDA BALCÃO / FATURAÇÃO DIRETA                   */}
       {/* ========================================================================= */}
       {isDirectSaleModalOpen && (
         <div
@@ -3490,98 +2660,79 @@ export default function AdminAgenda() {
           onClick={() => setIsDirectSaleModalOpen(false)}
         >
           <div
-            className={`relative max-w-md w-full rounded-3xl p-6 shadow-2xl space-y-4 my-auto border ${
-              isLight ? "bg-white border-neutral-200" : "bg-[#111319] border-white/10"
+            className={`relative max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 my-auto border ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800 text-zinc-100"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-[#C89B58]" />
-                <h3 className="font-serif text-lg font-bold">Registar Venda Balcão</h3>
+                <Receipt className="w-4 h-4 text-[#C6924B]" />
+                <h3 className="text-base font-semibold tracking-tight">Registar Venda Balcão</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsDirectSaleModalOpen(false)}
-                className="w-8 h-8 rounded-full border border-neutral-200 dark:border-white/10 flex items-center justify-center text-neutral-400 hover:text-white cursor-pointer"
+                className="p-1 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-neutral-400">
-              Faturação direta para clientes de passagem (walk-in) sem marcação prévia. O valor fica 100% gravado no Livro de Faturação.
+            <p className="text-xs text-zinc-400">
+              Faturação para clientes diretos sem marcação prévia. O valor fica registado no Livro de Faturação.
             </p>
 
             <form onSubmit={handleSaveDirectSale} className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Nome do Cliente *
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Nome do Cliente *</label>
                 <input
                   type="text"
                   required
                   placeholder="Ex: Pedro Santos / Cliente Balcão"
                   value={directSaleCustomer}
                   onChange={(e) => setDirectSaleCustomer(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Telemóvel (Opcional)
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Telemóvel (Opcional)</label>
                 <input
                   type="tel"
-                  placeholder="9XXXXXXXX"
+                  placeholder="Ex: 9XXXXXXXX"
                   value={directSalePhone}
                   onChange={(e) => setDirectSalePhone(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs font-mono rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
-              {/* Data e Hora Retroativa (Permite recuperar atendimentos de dias anteriores) */}
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Data do Atendimento *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Data *</label>
                   <input
                     type="date"
                     required
                     value={directSaleDate}
                     onChange={(e) => setDirectSaleDate(e.target.value)}
-                    className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Hora (Opcional)
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Hora</label>
                   <input
                     type="time"
                     value={directSaleTime}
                     onChange={(e) => setDirectSaleTime(e.target.value)}
-                    className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Serviço Realizado *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Serviço *</label>
                   <select
                     value={directSaleService}
                     onChange={(e) => {
@@ -3591,9 +2742,7 @@ export default function AdminAgenda() {
                         setDirectSalePrice(parseLedgerPrice(matched.price).toFixed(2));
                       }
                     }}
-                    className={`w-full px-3 py-2 text-xs font-medium rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                      isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-[#111319] border-white/10 text-white"
-                    }`}
+                    className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                   >
                     {servicesData.map((s) => (
                       <option key={s.id} value={s.name}>
@@ -3604,10 +2753,8 @@ export default function AdminAgenda() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                    Valor Cobrado (€) *
-                  </label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">Valor Cobrado (€) *</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -3616,29 +2763,23 @@ export default function AdminAgenda() {
                       required
                       value={directSalePrice}
                       onChange={(e) => setDirectSalePrice(e.target.value)}
-                      className={`w-full px-3.5 py-2 text-xs font-mono font-bold rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                        isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                      }`}
+                      className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 focus:outline-none"
                     />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-bold">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 font-bold">
                       €
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-neutral-400 uppercase block mb-1">
-                  Notas / Observações
-                </label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-400">Observações</label>
                 <input
                   type="text"
-                  placeholder="Ex: Pagamento Numerário / MBWay"
+                  placeholder="Ex: Numerário / MBWay"
                   value={directSaleNotes}
                   onChange={(e) => setDirectSaleNotes(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 text-xs rounded-2xl border focus:outline-none focus:ring-2 focus:ring-[#C89B58] ${
-                    isLight ? "bg-neutral-50 border-neutral-200 text-neutral-900" : "bg-black/40 border-white/10 text-white"
-                  }`}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                 />
               </div>
 
@@ -3646,24 +2787,22 @@ export default function AdminAgenda() {
                 <button
                   type="button"
                   onClick={() => setIsDirectSaleModalOpen(false)}
-                  className="px-4 py-2 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingDirectSale}
-                  className="px-5 py-2.5 rounded-2xl bg-[#C89B58] hover:bg-[#b58b4c] text-black font-bold text-xs uppercase tracking-wider cursor-pointer shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>{isSavingDirectSale ? "A Registar..." : "Registar Faturação"}</span>
+                  {isSavingDirectSale ? "A registar..." : "Registar Faturação"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }

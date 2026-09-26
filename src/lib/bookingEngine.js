@@ -302,34 +302,43 @@ export async function sendAdminWhatsAppNotification({
   msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg += `📍 _Barbearia Gabriel Silva • Paião_`;
 
-  // 1. Primary Dispatch: Green-API (Sends to dedicated WhatsApp Group or Admin numbers)
+  // 1. Primary Dispatch: Green-API (Sends to dedicated WhatsApp Group AND directly to Gabriel & Paulo)
   if (greenApiUrl && greenApiId && greenApiToken) {
     try {
       const greenEndpoint = `${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`;
-      const targetChatIds = greenApiGroupId
-        ? [greenApiGroupId]
-        : ADMIN_RECIPIENTS.map((r) => `${r.phone}@c.us`);
+      const targetChatIds = Array.from(
+        new Set(
+          [
+            greenApiGroupId,
+            ...ADMIN_RECIPIENTS.map((r) => `${r.phone}@c.us`)
+          ].filter(Boolean)
+        )
+      );
 
       const greenPromises = targetChatIds.map(async (chatId) => {
-        return fetch(greenEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chatId,
-            message: msg
-          })
-        });
+        try {
+          const res = await fetch(greenEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chatId,
+              message: msg
+            })
+          });
+          return res.ok;
+        } catch {
+          return false;
+        }
       });
       await Promise.allSettled(greenPromises);
-      return { success: true };
     } catch (err) {
-      console.warn("Falha no envio Green-API, a tentar fallback:", err);
+      console.warn("Falha no envio Green-API:", err);
     }
   }
 
-  // 2. Secondary Fallback: CallMeBot
+  // 2. Guaranteed Parallel / Fallback Dispatch: CallMeBot (Direto para Gabriel e Paulo)
   const encodedMsg = encodeURIComponent(msg);
-  const promises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
+  const callMeBotPromises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
     if (!recipientPhone || !recipientKey) return;
     const url = `https://api.callmebot.com/whatsapp.php?phone=${recipientPhone}&text=${encodedMsg}&apikey=${recipientKey}`;
     try {
@@ -344,6 +353,6 @@ export async function sendAdminWhatsAppNotification({
     }
   });
 
-  await Promise.allSettled(promises);
+  await Promise.allSettled(callMeBotPromises);
   return { success: true };
 }

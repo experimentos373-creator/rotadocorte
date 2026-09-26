@@ -198,7 +198,8 @@ export async function createBooking({
   customerName,
   customerPhone,
   customerEmail = "",
-  customerNotes = ""
+  customerNotes = "",
+  source = "client_online"
 }) {
   // Validate operating hours schedule:
   const targetDate = new Date(`${date}T12:00:00`);
@@ -312,6 +313,23 @@ export async function createBooking({
         returnedAppt.service_name = servicesSummaryStr;
       }
 
+      // ⚡ Dispara notificação instantânea em broadcast para o painel Admin
+      try {
+        broadcastNewBooking({
+          id: returnedAppt.id || Date.now(),
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
+          customer_notes: customerNotes,
+          service_id: serviceId,
+          service_name: returnedAppt.service_name || service?.name || "Serviço",
+          service_price: returnedAppt.service_price || service?.priceFormatted || "15,00 €",
+          date,
+          time,
+          source: source || "client_online"
+        });
+      } catch (_) {}
+
       return {
         success: true,
         appointment: returnedAppt
@@ -388,6 +406,23 @@ export async function createBooking({
   }
 
   saveLocalAppointments(localBookings);
+
+  // ⚡ Dispara notificação de nova marcação para painel admin (broadcast local / abas)
+  try {
+    broadcastNewBooking({
+      id: newAppointment.id,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_notes: customerNotes,
+      service_id: serviceId,
+      service_name: newAppointment.service_name,
+      service_price: newAppointment.service_price,
+      date,
+      time,
+      source: source || "client_online"
+    });
+  } catch (_) {}
 
   return {
     success: true,
@@ -570,6 +605,112 @@ export function subscribeToAppointments(callback) {
   } catch (_) {
     return () => {};
   }
+}
+
+/**
+ * ⚡ INSTANT BROADCAST: Dispara notificação instantânea para todos os painéis Admin abertos
+ */
+export function broadcastNewBooking(bookingData) {
+  // 1. Broadcast local para a janela atual (CustomEvent)
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new CustomEvent("rotadocorte_new_booking", { detail: bookingData }));
+    } catch (_) {}
+
+    // 2. Broadcast para outras abas abertas no mesmo dispositivo (BroadcastChannel)
+    try {
+      if ("BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("rotadocorte_live_channel");
+        bc.postMessage(bookingData);
+        setTimeout(() => bc.close(), 1000);
+      }
+    } catch (_) {}
+  }
+
+  // 3. Broadcast central via Supabase Realtime (para outros dispositivos / telemóvel)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const channel = supabase.channel("rotadocorte-live-alerts");
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.send({
+            type: "broadcast",
+            event: "new_booking",
+            payload: bookingData
+          }).then(() => {
+            setTimeout(() => {
+              try {
+                supabase.removeChannel(channel);
+              } catch (_) {}
+            }, 3000);
+          }).catch(() => {});
+        }
+      });
+    } catch (_) {}
+  }
+}
+
+/**
+ * ⚡ INSTANT BROADCAST LISTENER: Ouve novas marcações em tempo real sem bloqueio de RLS
+ */
+export function subscribeToLiveAlerts(callback) {
+  const cleanups = [];
+
+  // 1. Ouvir eventos locais na mesma janela
+  if (typeof window !== "undefined") {
+    const handleLocalEvent = (e) => {
+      if (typeof callback === "function" && e?.detail) {
+        callback(e.detail);
+      }
+    };
+    window.addEventListener("rotadocorte_new_booking", handleLocalEvent);
+    cleanups.push(() => window.removeEventListener("rotadocorte_new_booking", handleLocalEvent));
+
+    // 2. Ouvir eventos de outras abas via BroadcastChannel
+    try {
+      if ("BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("rotadocorte_live_channel");
+        bc.onmessage = (event) => {
+          if (typeof callback === "function" && event?.data) {
+            callback(event.data);
+          }
+        };
+        cleanups.push(() => {
+          try {
+            bc.close();
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+  }
+
+  // 3. Ouvir eventos de outros dispositivos via Supabase Realtime
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const channel = supabase
+        .channel("rotadocorte-live-alerts")
+        .on("broadcast", { event: "new_booking" }, ({ payload }) => {
+          if (typeof callback === "function") {
+            callback(payload);
+          }
+        })
+        .subscribe();
+
+      cleanups.push(() => {
+        try {
+          supabase.removeChannel(channel);
+        } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  return () => {
+    cleanups.forEach((fn) => {
+      try {
+        fn();
+      } catch (_) {}
+    });
+  };
 }
 
 /**

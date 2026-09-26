@@ -14,10 +14,8 @@ import {
   AlertCircle,
   Scissors,
   ShieldCheck,
-  Sparkles,
   Sun,
   Moon,
-  Crown,
   Layers,
   Plus,
   Minus,
@@ -42,11 +40,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
-  // Streamlined 4-step wizard + 5th confirmation: 1=Service, 2=Date, 3=Time (30m slots), 4=Customer Details, 5=Confirmation
+  // Streamlined 4-step wizard + 5th confirmation:
+  // 1 = Serviços, 2 = Data, 3 = Horário (slots 30m), 4 = Detalhes, 5 = Confirmação
   const [step, setStep] = useState(1);
 
-  // Form State - Multi-service quantity map: { [serviceId]: quantity }
-  // Defaults to preselected service or best-seller with quantity 1
+  // Multi-service quantity map: { [serviceId]: quantity }
   const [selectedServices, setSelectedServices] = useState({
     [preselectedService?.id || "corte-barba-terapia"]: 1
   });
@@ -64,38 +62,44 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
   const [bookingResult, setBookingResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Computed list of selected services
-  const selectedItemsList = Object.entries(selectedServices)
-    .filter(([_, qty]) => qty > 0)
-    .map(([sId, qty]) => {
-      const s = servicesData.find((item) => item.id === sId);
-      return {
-        id: sId,
-        name: s?.name || sId,
-        price: s?.price || 0,
-        priceFormatted: s?.priceFormatted || `${s?.price} €`,
-        duration: s?.duration || "30 min",
-        quantity: qty,
-        subtotal: (s?.price || 0) * qty,
-        itemData: s
-      };
-    });
-
   const MAX_PERSONS = 4;
 
-  const totalQuantity = selectedItemsList.reduce((acc, item) => acc + item.quantity, 0);
-  const totalPriceNumber = selectedItemsList.reduce((acc, item) => acc + item.subtotal, 0);
+  // Computed list of selected services
+  const selectedItemsList = useMemo(() => {
+    return Object.entries(selectedServices)
+      .filter(([_, qty]) => qty > 0)
+      .map(([sId, qty]) => {
+        const s = servicesData.find((item) => item.id === sId);
+        return {
+          id: sId,
+          name: s?.name || sId,
+          price: s?.price || 0,
+          priceFormatted: s?.priceFormatted || `${s?.price} €`,
+          duration: s?.duration || "30 min",
+          quantity: qty,
+          subtotal: (s?.price || 0) * qty,
+          itemData: s
+        };
+      });
+  }, [selectedServices]);
+
+  const totalQuantity = useMemo(() => {
+    return selectedItemsList.reduce((acc, item) => acc + item.quantity, 0);
+  }, [selectedItemsList]);
+
+  const totalPriceNumber = useMemo(() => {
+    return selectedItemsList.reduce((acc, item) => acc + item.subtotal, 0);
+  }, [selectedItemsList]);
+
   const totalPriceFormatted = `${totalPriceNumber.toFixed(2).replace(".", ",")} €`;
 
   const primaryServiceId = selectedItemsList[0]?.id || "corte-barba-terapia";
   const primaryService = servicesData.find((s) => s.id === primaryServiceId) || servicesData[0];
-  const selectedServiceId = primaryServiceId; // for backward compatibility
 
   const servicesSummaryText = selectedItemsList.length > 0
     ? selectedItemsList.map((item) => `${item.quantity}x ${item.name}`).join(" + ")
     : primaryService.name;
 
-  // Helper to calculate end time based on total 30-min slots
   const calculateEndTime = (startTimeStr, quantity) => {
     if (!startTimeStr) return "";
     const [h, m] = startTimeStr.split(":").map(Number);
@@ -148,8 +152,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     });
   };
 
-  // 🔒 CONSECUTIVE SLOT AVAILABILITY:
-  // If totalQuantity > 1, a slot is only available if all required consecutive 30-min slots are free!
+  // Consecutive Slot Availability for multi-person bookings
   const evaluatedSlots = useMemo(() => {
     if (!availableSlots || availableSlots.length === 0) return [];
     if (totalQuantity <= 1) return availableSlots;
@@ -180,7 +183,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
           ...slot,
           available: false,
           reason: "insufficient_duration",
-          reasonLabel: `Requer ${totalQuantity * 30} min livres`
+          reasonLabel: `Requer ${totalQuantity * 30} min`
         };
       }
 
@@ -188,7 +191,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     });
   }, [availableSlots, totalQuantity]);
 
-  // 🔒 Bulletproof Lock body & html scroll when modal is active
+  // Lock scroll
   useEffect(() => {
     if (isOpen) {
       document.body.classList.add("modal-open");
@@ -235,7 +238,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     }
   }, [isOpen, preselectedService]);
 
-  // Fetch slots whenever selectedDate or primaryServiceId changes
+  // Fetch slots
   useEffect(() => {
     if (!selectedDate || !primaryServiceId) return;
 
@@ -267,7 +270,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
   const currentService = primaryService;
 
-  // Helper to generate next 31 selectable days (Full Month) with elegant natural casing
+  // Next 31 selectable days
   const getNextDays = () => {
     const days = [];
     const base = new Date();
@@ -327,7 +330,6 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         setBookingResult(res.appointment);
         setStep(5);
 
-        // Dispara notificação automática em tempo real para o WhatsApp do Administrador
         sendAdminWhatsAppNotification({
           serviceName: servicesSummaryText || primaryService?.name,
           servicePrice: totalPriceFormatted,
@@ -342,8 +344,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
         try {
           confetti({
-            particleCount: 75,
-            spread: 60,
+            particleCount: 65,
+            spread: 55,
             origin: { y: 0.6 },
             colors: ["#C89B58", "#E5C268", "#FAF8F5", "#25D366"]
           });
@@ -367,113 +369,154 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       })
     : "";
 
+  const stepsList = [
+    { number: 1, label: "Serviços" },
+    { number: 2, label: "Data" },
+    { number: 3, label: "Horário" },
+    { number: 4, label: "Detalhes" }
+  ];
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-5 overflow-hidden animate-fadeIn"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-hidden animate-fadeIn"
       onClick={onClose}
     >
-      {/* Dynamic Modal Container: Step 1 is 96vw, Steps 2-5 are responsive */}
+      {/* shadcn Dialog Block Card */}
       <div
         className={`relative ${
           step === 1
-            ? "w-[96vw] max-w-5xl max-h-[92vh]"
-            : "w-[95vw] sm:w-[85vw] md:w-[75vw] max-w-3xl lg:max-w-4xl max-h-[90vh]"
-        } flex flex-col rounded-[22px] sm:rounded-[30px] p-3.5 sm:p-6 md:p-7 shadow-2xl justify-between border transition-all duration-300 overflow-hidden ${
+            ? "w-full max-w-4xl max-h-[92vh]"
+            : "w-full max-w-2xl max-h-[90vh]"
+        } flex flex-col rounded-2xl border transition-all duration-200 overflow-hidden shadow-2xl ${
           isDark
-            ? "bg-[#171310] border-[#2D251F] text-[#FAF6F0] shadow-black/95"
-            : "bg-white border-[#E8E4DC] text-[#18181B] shadow-2xl shadow-black/15"
+            ? "bg-zinc-950 border-zinc-800 text-zinc-100"
+            : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-950/10"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Vintage Barber Tools Background Vector Watermarks */}
+        {/* Subtle Watermark for Barber Identity */}
         <BarberBackgroundWatermark isDark={isDark} />
 
         {/* ========================================================================= */}
-        {/* TOP BAR: BRAND LOGO + CLOSE BUTTON                                        */}
+        {/* SHADCN DIALOG HEADER & STEPPER                                            */}
         {/* ========================================================================= */}
-        <div className="relative z-10 space-y-2.5 shrink-0 pb-1.5">
-          <div className="flex items-center justify-between gap-3">
-            {/* Left: Brand Name & Location */}
-            <div className="flex flex-col">
-              <span className={`text-xs sm:text-sm font-bold font-sans leading-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
-                Rota do Corte
-              </span>
-              <span className="text-[9px] sm:text-[10px] font-medium text-[#C6924B] leading-tight">
-                Paião
-              </span>
+        <div className={`relative z-10 px-4 sm:px-6 pt-5 pb-4 border-b ${
+          isDark ? "border-zinc-800/80 bg-zinc-950/90" : "border-zinc-200/80 bg-white/90"
+        } backdrop-blur-md shrink-0`}>
+          <div className="flex items-center justify-between gap-4">
+            {/* Brand Title */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#C6924B]/15 border border-[#C6924B]/30 flex items-center justify-center text-[#C6924B] shrink-0">
+                <Scissors className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-sm tracking-tight truncate">
+                    Rota do Corte
+                  </h3>
+                  <span className="text-[10px] font-medium font-mono px-1.5 py-0.2 rounded-md bg-[#C6924B]/10 text-[#C6924B] border border-[#C6924B]/20">
+                    Paião
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400 truncate">
+                  Agendamento Online de Gabriel Silva
+                </p>
+              </div>
             </div>
 
-            {/* Right: Close Button */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={onClose}
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border flex items-center justify-center cursor-pointer transition-colors ${
-                  isDark
-                    ? "bg-white/5 border-white/10 text-[#A39B92] hover:text-white hover:bg-white/15"
-                    : "bg-neutral-50 border-neutral-200 text-neutral-500 hover:text-black hover:bg-neutral-100"
-                }`}
-                aria-label="Fechar"
-              >
-                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-            </div>
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                isDark
+                  ? "border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+                  : "border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              aria-label="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* 4-Segment Progress Bar */}
+          {/* shadcn Stepper Indicator */}
           {step < 5 && (
-            <div className="w-full grid grid-cols-4 gap-2 sm:gap-3 pt-0.5">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className={`h-1 rounded-full transition-all duration-300 ${
-                    i <= step
-                      ? "bg-[#C6924B]"
-                      : isDark
-                        ? "bg-[#2D251F]"
-                        : "bg-[#EAE6DF]"
-                  }`}
-                />
-              ))}
+            <div className="mt-4 pt-3 border-t border-zinc-800/50 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {stepsList.map((s, idx) => {
+                  const isCurrent = step === s.number;
+                  const isDone = step > s.number;
+                  return (
+                    <div key={s.number} className="flex items-center gap-1.5 sm:gap-2">
+                      <div
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors ${
+                          isCurrent
+                            ? "bg-zinc-100 text-zinc-950 font-semibold shadow-xs"
+                            : isDone
+                              ? isDark
+                                ? "bg-zinc-900 text-zinc-300 font-medium"
+                                : "bg-zinc-100 text-zinc-700 font-medium"
+                              : isDark
+                                ? "text-zinc-500"
+                                : "text-zinc-400"
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-mono ${
+                          isDone
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : isCurrent
+                              ? "bg-zinc-950 text-zinc-100"
+                              : "bg-zinc-800 text-zinc-400"
+                        }`}>
+                          {isDone ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : s.number}
+                        </span>
+                        <span className="hidden sm:inline text-xs">{s.label}</span>
+                      </div>
+                      {idx < stepsList.length - 1 && (
+                        <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Step counter badge on small mobile */}
+              <div className="sm:hidden text-[11px] font-mono text-zinc-400 font-medium">
+                Passo {step}/4
+              </div>
             </div>
           )}
         </div>
 
         {/* ========================================================================= */}
-        {/* PASSO 1: ESCOLHA O SERVIÇO (ZERO-SCROLL ERGONOMIC COMPACT LIST/GRID)      */}
+        {/* PASSO 1: ESCOLHA OS SERVIÇOS (SHADCN CARDS GRID)                          */}
         {/* ========================================================================= */}
         {step === 1 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
-            {/* Title & Subtitle with Fraunces Personality */}
-            <div className="shrink-0 pb-1.5">
-              <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
-                Escolha os serviços
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 overflow-hidden animate-fadeIn">
+            {/* Section Header */}
+            <div className="pb-3 shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100">
+                Selecione os serviços
               </h2>
-              <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal ${
-                isDark ? "text-[#A39B92]" : "text-[#71717A]"
-              }`}>
-                Selecione os serviços pretendidos na barbearia de Gabriel Silva.
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Escolha um ou mais serviços pretendidos para o seu atendimento.
               </p>
             </div>
 
-            {/* Helper tip for Parents & Kids / Multi-cut booking */}
-            <div className={`px-3 py-2 rounded-xl border flex items-center gap-2.5 text-[11px] sm:text-xs mb-2 shrink-0 ${
+            {/* Helper Banner for Multi-Bookings */}
+            <div className={`px-3 py-2.5 rounded-lg border flex items-center gap-2.5 text-xs mb-3 shrink-0 ${
               isDark
-                ? "bg-[#C6924B]/10 border-[#C6924B]/30 text-[#E5C268]"
-                : "bg-[#FAF0E4] border-[#E8D4BE] text-[#8C601E]"
+                ? "bg-zinc-900/60 border-zinc-800 text-zinc-300"
+                : "bg-zinc-50 border-zinc-200 text-zinc-700"
             }`}>
               <Users className="w-4 h-4 text-[#C6924B] shrink-0" />
               <div className="leading-tight">
-                <strong>Marcação para Pais &amp; Filhos ou Amigos?</strong> Use o botão <strong>[+]</strong> para agendar até <strong>4 pessoas</strong> (cada corte reserva 30 min consecutivos no calendário)!
+                <strong>Marcação em grupo ou família?</strong> Use o botão <strong>[+]</strong> para agendar até <strong>4 pessoas</strong> (reserva slots de 30 min consecutivos no calendário).
               </div>
             </div>
 
-            {/* Zero-Scroll Compact Grid: Clear hierarchy with generous spacing */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
+            {/* Services Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 flex-1 min-h-0 overflow-y-auto pr-1 py-1">
               {servicesData.map((s) => {
                 const qty = selectedServices[s.id] || 0;
                 const isSelected = qty > 0;
@@ -482,84 +525,64 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   <div
                     key={s.id}
                     onClick={() => handleSelectOrToggle(s.id)}
-                    className={`relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
+                    className={`relative rounded-xl border p-3.5 transition-all cursor-pointer flex flex-col justify-between group ${
                       isSelected
                         ? isDark
-                          ? "bg-[#241D17]/95 border-[#C6924B] ring-1 ring-[#C6924B] shadow-md shadow-[#C6924B]/15 backdrop-blur-xs"
-                          : "bg-[#FAF6F0] border-[#C6924B] ring-1 ring-[#C6924B] shadow-xs"
-                        : isTopSeller
-                          ? isDark
-                            ? "bg-[#1F1914]/95 border-[#C6924B]/60 hover:border-[#C6924B] shadow-xs backdrop-blur-xs"
-                            : "bg-[#FAF8F5] border-[#C6924B]/50 hover:border-[#C6924B] shadow-xs"
-                          : isDark
-                            ? "bg-[#181411]/90 border-[#2D251F] hover:border-[#3F342B] hover:bg-[#1E1915]/95 backdrop-blur-xs"
-                            : "bg-white border-[#E8E4DC] hover:border-[#C6924B]/40 hover:bg-neutral-50 shadow-xs"
+                          ? "bg-zinc-900/90 border-[#C6924B] ring-1 ring-[#C6924B]/40 shadow-xs"
+                          : "bg-zinc-50 border-[#C6924B] ring-1 ring-[#C6924B]/30 shadow-xs"
+                        : isDark
+                          ? "bg-zinc-900/40 border-zinc-800/90 hover:border-zinc-700 hover:bg-zinc-900/70"
+                          : "bg-white border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50/70"
                     }`}
                   >
-                    {/* Top Section: Title & Info + Selected Indicator */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-xs sm:text-[13px] font-bold leading-tight truncate ${
-                            isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-                          }`}>
+                          <span className="text-xs sm:text-[13px] font-semibold tracking-tight text-zinc-100">
                             {s.name}
                           </span>
                           {s.badge && (
-                            <span className={`text-[7.5px] sm:text-[8px] px-1.5 py-0.5 rounded-md font-medium inline-flex items-center gap-1 ${
-                              s.id === "combo-premium"
-                                ? isDark
-                                  ? "border border-[#C6924B]/35 text-[#C6924B] bg-transparent"
-                                  : "border border-[#C6924B]/40 text-[#8C601E] bg-transparent"
-                                : isDark
-                                  ? "bg-[#C6924B]/20 text-[#D8A763] border border-[#C6924B]/40"
-                                  : "bg-[#FAF0E4] text-[#8C601E] border-[#E8D4BE]"
-                            }`}>
-                              {s.id === "combo-premium" && <Layers className="w-2.5 h-2.5 shrink-0" />}
-                              <span>{s.badge}</span>
+                            <span className="text-[9px] font-medium font-mono px-1.5 py-0.2 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700">
+                              {s.badge}
                             </span>
                           )}
                         </div>
-                        <p className={`text-[10px] sm:text-[11px] mt-0.5 leading-tight line-clamp-1 sm:line-clamp-2 ${
-                          isDark ? "text-[#A39B92]" : "text-[#71717A]"
-                        }`}>
-                          {s.shortDesc}
-                        </p>
+
+                        {isSelected && (
+                          <div className="w-4 h-4 rounded-full bg-[#C6924B] text-zinc-950 flex items-center justify-center shrink-0">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
                       </div>
 
-                      {/* Subtle selection check */}
-                      {isSelected && (
-                        <div className="w-4 h-4 rounded-full bg-[#C6924B] text-[#171310] flex items-center justify-center shrink-0 shadow-xs">
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </div>
-                      )}
+                      <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
+                        {s.shortDesc}
+                      </p>
                     </div>
 
-                    {/* Bottom Row: Duration + Price + Stepper */}
-                    <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-white/5 dark:border-white/5">
-                      <div className="flex items-center gap-1 text-[11px] text-[#A39B92] font-medium">
-                        <Clock className="w-3 h-3 text-[#C6924B]" />
+                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-zinc-800/60">
+                      <div className="flex items-center gap-1 text-[11px] text-zinc-400 font-medium">
+                        <Clock className="w-3 h-3 text-zinc-500" />
                         <span>{s.duration}</span>
                       </div>
+
                       <div className="flex items-center gap-2">
-                        <span className={`font-mono font-bold text-xs sm:text-[13px] ${
-                          isDark ? "text-[#D8A763]" : "text-[#18181B]"
-                        }`}>
+                        <span className="font-mono font-semibold text-xs sm:text-sm text-zinc-100">
                           {s.priceFormatted}
                         </span>
 
                         {isSelected ? (
-                          <div className="flex items-center gap-1.5 bg-[#C6924B]/20 border border-[#C6924B]/50 rounded-lg p-0.5">
+                          <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg p-0.5">
                             <button
                               type="button"
                               onClick={(e) => handleDecrement(s.id, e)}
-                              className="w-5 h-5 rounded-md bg-black/30 hover:bg-black/50 text-[#C6924B] flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+                              className="w-5 h-5 rounded-md hover:bg-zinc-700 text-zinc-200 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
                               title="Diminuir quantidade"
                             >
                               <Minus className="w-2.5 h-2.5" />
                             </button>
-                            <span className="font-mono font-bold text-xs text-[#FAF6F0] min-w-[14px] text-center">
-                              {qty}x
+                            <span className="font-mono font-semibold text-xs text-zinc-100 min-w-[14px] text-center">
+                              {qty}
                             </span>
                             <button
                               type="button"
@@ -567,10 +590,10 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                               onClick={(e) => handleIncrement(s.id, e)}
                               className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold transition-colors ${
                                 totalQuantity >= MAX_PERSONS
-                                  ? "bg-neutral-800 text-neutral-500 cursor-not-allowed opacity-40"
-                                  : "bg-[#C6924B] hover:bg-[#D4A966] text-black cursor-pointer"
+                                  ? "text-zinc-600 cursor-not-allowed"
+                                  : "bg-zinc-100 text-zinc-950 hover:bg-white cursor-pointer"
                               }`}
-                              title={totalQuantity >= MAX_PERSONS ? "Limite máximo de 4 pessoas atingido" : "Adicionar mais um corte/serviço"}
+                              title={totalQuantity >= MAX_PERSONS ? "Limite de 4 atingido" : "Adicionar mais um"}
                             >
                               <Plus className="w-2.5 h-2.5 stroke-[3]" />
                             </button>
@@ -583,12 +606,11 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                               e.stopPropagation();
                               handleSelectOrToggle(s.id);
                             }}
-                            className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold border transition-colors flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors flex items-center gap-1 ${
                               totalQuantity >= MAX_PERSONS
-                                ? "border-white/5 text-neutral-600 cursor-not-allowed opacity-40"
-                                : "border-white/10 hover:border-[#C6924B] text-neutral-300 hover:text-[#C6924B] cursor-pointer"
+                                ? "border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50"
+                                : "border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-600 text-zinc-200 cursor-pointer"
                             }`}
-                            title={totalQuantity >= MAX_PERSONS ? "Limite máximo de 4 pessoas atingido" : "Adicionar serviço"}
                           >
                             <Plus className="w-2.5 h-2.5" />
                             <span>Adicionar</span>
@@ -602,67 +624,58 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
             </div>
 
             {/* Step 1 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
-              <div className="flex items-center justify-between sm:justify-start gap-2 text-xs text-[#71717A] dark:text-[#A39B92] w-full sm:w-auto">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
-                  <span className="text-xs">
-                    {totalQuantity > 0 ? (
-                      <strong className="text-[#C6924B] font-mono">
-                        {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"} ({totalPriceFormatted})
-                      </strong>
-                    ) : (
-                      "Selecione pelo menos um serviço"
-                    )}
-                  </span>
-                </div>
-                {totalQuantity > 1 && (
-                  <span className="sm:hidden text-[10.5px] font-semibold text-[#D8A763]">
-                    {totalQuantity * 30} min ({totalQuantity} pessoas)
-                  </span>
-                )}
+            <div className={`pt-4 mt-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 ${
+              isDark ? "border-zinc-800" : "border-zinc-200"
+            }`}>
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <ShieldCheck className="w-4 h-4 text-[#C6924B] shrink-0" />
+                <span>
+                  {totalQuantity > 0 ? (
+                    <>
+                      Selecionado: <strong className="text-zinc-100 font-mono font-semibold">{totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"}</strong> ({totalPriceFormatted})
+                      {totalQuantity > 1 && ` • ${totalQuantity * 30} min`}
+                    </>
+                  ) : (
+                    "Selecione pelo menos um serviço"
+                  )}
+                </span>
               </div>
+
               <button
                 type="button"
                 disabled={totalQuantity === 0}
                 onClick={() => {
                   if (totalQuantity > 0) setStep(2);
                 }}
-                className={`w-full sm:w-auto px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-extrabold tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg shrink-0 ${
+                className={`w-full sm:w-auto px-6 py-2.5 rounded-lg text-xs sm:text-sm font-semibold tracking-tight flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   totalQuantity > 0
-                    ? "bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] shadow-[#C6924B]/20 hover:scale-[1.01] cursor-pointer"
-                    : "bg-white/10 text-white/40 border border-white/10 cursor-not-allowed"
+                    ? "bg-zinc-100 hover:bg-white text-zinc-950 shadow-sm"
+                    : "bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50"
                 }`}
               >
-                <span>
-                  {totalQuantity > 0 ? `Continuar para data (${totalPriceFormatted})` : "Selecione um serviço"}
-                </span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <span>Continuar para data</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 2: SELECIONE O DIA (CALENDÁRIO 7 COLUNAS X 5 SEMANAS)               */}
+        {/* PASSO 2: SELECIONE A DATA (SHADCN CALENDAR GRID BLOCK)                     */}
         {/* ========================================================================= */}
         {step === 2 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
-            <div className="shrink-0 pb-2">
-              <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 overflow-hidden animate-fadeIn">
+            <div className="pb-3 shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100">
                 Selecione o dia
               </h2>
-              <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal ${
-                isDark ? "text-[#A39B92]" : "text-[#71717A]"
-              }`}>
-                Horários: Seg. (13h – 22h) • Ter. a Sex. (10h – 22h) • Sáb. (10h – 18h). Encerrado ao Domingo.
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Segunda (13h – 22h) • Terça a Sexta (10h – 22h) • Sábado (10h – 18h). Encerrado ao Domingo.
               </p>
             </div>
 
-            {/* 31-Day Month Grid (7 columns x 5 weeks) */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 my-auto flex-1 min-h-0 overflow-y-auto py-1 pr-0.5">
+            {/* 31-Day Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 flex-1 min-h-0 overflow-y-auto pr-1 py-1">
               {getNextDays().map((d) => {
                 const isSelected = selectedDate === d.iso;
                 return (
@@ -675,30 +688,28 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                         setSelectedDate(d.iso);
                       }
                     }}
-                    className={`py-1.5 px-0.5 rounded-xl text-center border transition-all flex flex-col items-center justify-center cursor-pointer min-h-[44px] sm:min-h-[48px] ${
+                    className={`py-2 px-1 rounded-lg border text-center transition-all flex flex-col items-center justify-center cursor-pointer min-h-[46px] ${
                       d.isSunday
                         ? isDark
-                          ? "opacity-25 cursor-not-allowed bg-black/30 border-[#2D251F]/40 text-[#6B635A]"
-                          : "opacity-30 cursor-not-allowed bg-neutral-100 border-neutral-200 text-neutral-400"
+                          ? "opacity-25 cursor-not-allowed bg-zinc-900/30 border-zinc-800/40 text-zinc-600"
+                          : "opacity-30 cursor-not-allowed bg-zinc-100 border-zinc-200 text-zinc-400"
                         : isSelected
-                          ? isDark
-                            ? "bg-[#C6924B] text-[#171310] font-bold border-[#C6924B] shadow-md scale-[1.02]"
-                            : "bg-[#18181B] text-white font-bold border-[#18181B] shadow-md scale-[1.02]"
+                          ? "bg-zinc-100 text-zinc-950 font-bold border-zinc-100 shadow-sm"
                           : isDark
-                            ? "bg-[#1B1613] border-[#2D251F] text-[#FAF6F0] hover:border-[#C6924B]/40 hover:bg-[#201A15]"
-                            : "bg-white border-[#E8E4DC] text-[#18181B] hover:border-[#C6924B] hover:bg-[#FAF6F0] shadow-xs"
+                            ? "bg-zinc-900/50 border-zinc-800 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800"
+                            : "bg-white border-zinc-200 text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50"
                     }`}
                   >
-                    <span className={`text-[8px] sm:text-[9px] font-semibold leading-none ${
-                      isSelected ? (isDark ? "text-[#171310]" : "text-neutral-300") : isDark ? "text-[#A39B92]" : "text-neutral-500"
+                    <span className={`text-[9px] font-medium leading-none ${
+                      isSelected ? "text-zinc-900" : "text-zinc-400"
                     }`}>
                       {d.weekday}
                     </span>
-                    <span className="text-xs sm:text-sm font-bold leading-tight my-0.5">
+                    <span className="text-xs sm:text-sm font-semibold font-mono leading-tight my-0.5">
                       {d.dayNum}
                     </span>
-                    <span className={`text-[7.5px] sm:text-[8px] font-medium leading-none ${
-                      isSelected ? (isDark ? "text-[#171310]" : "text-neutral-300") : isDark ? "text-[#A39B92]" : "text-neutral-400"
+                    <span className={`text-[8px] font-medium leading-none ${
+                      isSelected ? "text-zinc-800" : "text-zinc-500"
                     }`}>
                       {d.month}
                     </span>
@@ -707,105 +718,96 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               })}
             </div>
 
-            {/* Selected Date Sub-bar */}
-            <div className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs shrink-0 my-1.5 ${
-              isDark
-                ? "bg-[#1E1915] border-[#2D251F] text-[#FAF6F0]"
-                : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B]"
+            {/* Selection Status Sub-bar */}
+            <div className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 text-xs shrink-0 my-2 ${
+              isDark ? "bg-zinc-900/60 border-zinc-800 text-zinc-300" : "bg-zinc-50 border-zinc-200 text-zinc-700"
             }`}>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <CalendarIcon className="w-3.5 h-3.5 shrink-0 text-[#C6924B]" />
+              <div className="flex items-center gap-2 truncate">
+                <CalendarIcon className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
                 <span className="truncate">
-                  Data: <strong className="capitalize text-[#C6924B]">{formattedDatePortuguese}</strong>
+                  Data selecionada: <strong className="capitalize text-zinc-100">{formattedDatePortuguese}</strong>
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#71717A] dark:text-[#A39B92] shrink-0">
-                <User className="w-3.5 h-3.5 text-[#C6924B]" />
+              <div className="flex items-center gap-1.5 text-zinc-400 text-[11px] shrink-0">
+                <User className="w-3 h-3 text-[#C6924B]" />
                 <span>Gabriel Silva</span>
               </div>
             </div>
 
             {/* Step 2 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className={`pt-4 mt-2 border-t flex items-center justify-between gap-3 shrink-0 ${
+              isDark ? "border-zinc-800" : "border-zinc-200"
+            }`}>
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
+                className="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-xs font-medium text-zinc-300 transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4 shrink-0" />
+                <ChevronLeft className="w-4 h-4" />
                 <span>Voltar</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="bg-[#C6924B] hover:bg-[#B5823C] text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
+                className="px-6 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs sm:text-sm font-semibold tracking-tight flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               >
-                <span>Ver horários ({totalPriceFormatted})</span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <span>Ver horários</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 3: ESCOLHA O HORÁRIO (MANHÃ & TARDE/NOITE + OCUPADOS)                */}
+        {/* PASSO 3: ESCOLHA O HORÁRIO (SHADCN TIME PICKER BLOCK)                      */}
         {/* ========================================================================= */}
         {step === 3 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
-            <div className="shrink-0 pb-2">
-              <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 overflow-hidden animate-fadeIn">
+            <div className="pb-3 shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100">
                 Escolha o horário
               </h2>
-              <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal capitalize ${
-                isDark ? "text-[#A39B92]" : "text-[#71717A]"
-              }`}>
-                {formattedDatePortuguese} • Total: <span className="text-[#C6924B] font-bold">{totalPriceFormatted}</span>
+              <p className="text-xs text-zinc-400 mt-0.5 capitalize">
+                {formattedDatePortuguese} • Total: <strong className="text-zinc-100 font-mono">{totalPriceFormatted}</strong>
                 {totalQuantity > 1 && (
-                  <span className="block sm:inline font-semibold text-[#D8A763] mt-0.5 sm:mt-0 sm:ml-2">
-                    • Duração: {totalQuantity * 30} min ({totalQuantity} vagas consecutivas)
+                  <span className="block sm:inline text-[#C6924B] sm:ml-2">
+                    ({totalQuantity * 30} min consecutivos requeridos)
                   </span>
                 )}
-                {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 1 && " (Segunda: 13:00 – 22:00)"}
-                {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 6 && " (Sábado: 10:00 – 18:00)"}
               </p>
             </div>
 
             {isLoadingSlots ? (
-              <div className="py-12 text-center space-y-3 my-auto">
-                <div className="w-8 h-8 border-2 border-[#C6924B] border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className={`text-xs ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
-                  A consultar agenda em tempo real no Supabase...
-                </p>
+              <div className="py-16 text-center space-y-3 my-auto">
+                <div className="w-6 h-6 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-zinc-400 font-mono">A verificar disponibilidade em tempo real...</p>
               </div>
             ) : evaluatedSlots.length === 0 ? (
-              <div className={`py-8 text-center space-y-3 p-6 rounded-2xl border my-auto ${
-                isDark ? "bg-[#1E1915] border-[#2D251F]" : "bg-white border-[#E8E4DC] shadow-sm"
+              <div className={`p-8 text-center space-y-3 rounded-xl border my-auto ${
+                isDark ? "bg-zinc-900/40 border-zinc-800" : "bg-zinc-50 border-zinc-200"
               }`}>
-                <AlertCircle className="w-8 h-8 text-[#C6924B] mx-auto" />
-                <h4 className={`text-sm sm:text-base font-bold ${isDark ? "text-[#FAF6F0]" : "text-[#18181B]"}`}>
-                  Sem vagas para esta data
+                <AlertCircle className="w-8 h-8 text-zinc-400 mx-auto" />
+                <h4 className="text-sm font-semibold text-zinc-200">
+                  Sem horários disponíveis para este dia
                 </h4>
-                <p className={`text-xs max-w-md mx-auto ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
-                  A barbearia encontra-se encerrada ou com vagas esgotadas nesta data. Por favor selecione outro dia.
+                <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                  A barbearia encontra-se encerrada ou com vagas esgotadas para a data selecionada.
                 </p>
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="bg-[#C6924B] text-[#171310] font-bold px-6 py-2.5 text-xs rounded-full cursor-pointer hover:bg-[#B5823C]"
+                  className="px-4 py-2 rounded-lg bg-zinc-100 text-zinc-950 text-xs font-semibold cursor-pointer hover:bg-white"
                 >
-                  Escolher Outra Data
+                  Escolher outra data
                 </button>
               </div>
             ) : (
-              <div className="space-y-3 my-auto flex-1 min-h-0 overflow-y-auto pr-0.5 py-1">
+              <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1 py-1">
                 {/* Morning Slots */}
                 {evaluatedSlots.some((s) => s.period === "morning") && (
-                  <div className="space-y-1.5">
-                    <span className={`text-xs font-semibold flex items-center gap-1.5 ${
-                      isDark ? "text-[#D8A763]" : "text-[#8C601E]"
-                    }`}>
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold flex items-center gap-1.5 text-zinc-300">
                       <Sun className="w-3.5 h-3.5 text-[#C6924B]" />
                       <span>Manhã (10:00 – 13:00)</span>
                     </span>
@@ -823,25 +825,23 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                               onClick={() => {
                                 if (!isOccupied) setSelectedTime(slot.time);
                               }}
-                              className={`py-2 px-1.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center min-h-[42px] ${
+                              className={`py-2 px-1.5 rounded-lg text-xs font-mono font-medium border transition-all flex flex-col items-center justify-center min-h-[42px] ${
                                 isOccupied
                                   ? isDark
-                                    ? "bg-black/30 border-[#2D251F]/40 text-[#6B635A] cursor-not-allowed opacity-50"
-                                    : "bg-neutral-50 border-neutral-200 text-neutral-400 cursor-not-allowed"
+                                    ? "bg-zinc-950/60 border-zinc-900 text-zinc-600 cursor-not-allowed opacity-50"
+                                    : "bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed opacity-50"
                                   : isSelected
-                                    ? isDark
-                                      ? "bg-[#C6924B] text-[#171310] border-[#C6924B] shadow-md scale-[1.02] cursor-pointer"
-                                      : "bg-[#18181B] text-white border-[#18181B] shadow-md scale-[1.02] cursor-pointer"
+                                    ? "bg-zinc-100 text-zinc-950 font-bold border-zinc-100 shadow-sm cursor-pointer"
                                     : isDark
-                                      ? "bg-[#1B1613] border-[#2D251F] text-[#FAF6F0] hover:border-[#C6924B]/50 hover:bg-[#201A15] cursor-pointer"
-                                      : "bg-white border-[#E8E4DC] text-[#18181B] hover:border-[#C6924B] hover:bg-[#FAF6F0] shadow-xs cursor-pointer"
+                                      ? "bg-zinc-900/60 border-zinc-800 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 cursor-pointer"
+                                      : "bg-white border-zinc-200 text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 cursor-pointer"
                               }`}
                             >
-                              <span className={isOccupied ? "line-through text-neutral-500" : ""}>
+                              <span className={isOccupied ? "line-through text-zinc-600" : ""}>
                                 {slot.time}
                               </span>
                               {isOccupied && (
-                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5 text-center leading-tight">
+                                <span className="text-[7.5px] font-sans font-medium text-red-400 leading-tight">
                                   {slot.reasonLabel || "Ocupado"}
                                 </span>
                               )}
@@ -854,10 +854,8 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
 
                 {/* Afternoon & Night Slots */}
                 {evaluatedSlots.some((s) => s.period === "afternoon" || s.period === "evening") && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className={`text-xs font-semibold flex items-center gap-1.5 ${
-                      isDark ? "text-[#D8A763]" : "text-[#8C601E]"
-                    }`}>
+                  <div className="space-y-2 pt-1">
+                    <span className="text-xs font-semibold flex items-center gap-1.5 text-zinc-300">
                       <Moon className="w-3.5 h-3.5 text-[#C6924B]" />
                       <span>
                         {selectedDate && new Date(`${selectedDate}T12:00:00`).getDay() === 6
@@ -879,25 +877,23 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                               onClick={() => {
                                 if (!isOccupied) setSelectedTime(slot.time);
                               }}
-                              className={`py-2 px-1.5 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center min-h-[42px] ${
+                              className={`py-2 px-1.5 rounded-lg text-xs font-mono font-medium border transition-all flex flex-col items-center justify-center min-h-[42px] ${
                                 isOccupied
                                   ? isDark
-                                    ? "bg-black/30 border-[#2D251F]/40 text-[#6B635A] cursor-not-allowed opacity-50"
-                                    : "bg-neutral-50 border-neutral-200 text-neutral-400 cursor-not-allowed"
+                                    ? "bg-zinc-950/60 border-zinc-900 text-zinc-600 cursor-not-allowed opacity-50"
+                                    : "bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed opacity-50"
                                   : isSelected
-                                    ? isDark
-                                      ? "bg-[#C6924B] text-[#171310] border-[#C6924B] shadow-md scale-[1.02] cursor-pointer"
-                                      : "bg-[#18181B] text-white border-[#18181B] shadow-md scale-[1.02] cursor-pointer"
+                                    ? "bg-zinc-100 text-zinc-950 font-bold border-zinc-100 shadow-sm cursor-pointer"
                                     : isDark
-                                      ? "bg-[#1B1613] border-[#2D251F] text-[#FAF6F0] hover:border-[#C6924B]/50 hover:bg-[#201A15] cursor-pointer"
-                                      : "bg-white border-[#E8E4DC] text-[#18181B] hover:border-[#C6924B] hover:bg-[#FAF6F0] shadow-xs cursor-pointer"
+                                      ? "bg-zinc-900/60 border-zinc-800 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 cursor-pointer"
+                                      : "bg-white border-zinc-200 text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 cursor-pointer"
                               }`}
                             >
-                              <span className={isOccupied ? "line-through text-neutral-500" : ""}>
+                              <span className={isOccupied ? "line-through text-zinc-600" : ""}>
                                 {slot.time}
                               </span>
                               {isOccupied && (
-                                <span className="text-[7.5px] font-semibold text-red-400 mt-0.5 text-center leading-tight">
+                                <span className="text-[7.5px] font-sans font-medium text-red-400 leading-tight">
                                   {slot.reasonLabel || "Ocupado"}
                                 </span>
                               )}
@@ -910,202 +906,195 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
               </div>
             )}
 
-            {/* Selected Time Sub-bar */}
+            {/* Selected slot feedback pill */}
             {selectedTime && (
-              <div className={`p-2.5 sm:p-3 rounded-xl border flex items-center justify-between text-xs sm:text-sm shrink-0 my-1.5 animate-fadeIn ${
-                isDark
-                  ? "bg-[#C6924B]/10 border-[#C6924B]/30 text-[#D8A763]"
-                  : "bg-[#FAF6F0] border-[#EADFCF] text-[#8C601E]"
+              <div className={`p-2.5 rounded-lg border flex items-center justify-between text-xs shrink-0 my-2 ${
+                isDark ? "bg-zinc-900/80 border-zinc-800 text-zinc-200" : "bg-zinc-100 border-zinc-200 text-zinc-800"
               }`}>
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-[#C6924B]" />
                   <span>
-                    Horário escolhido: <strong>{formattedTimeRange || selectedTime}</strong>
+                    Horário escolhido: <strong className="font-mono text-zinc-100">{formattedTimeRange || selectedTime}</strong>
                   </span>
                 </div>
-                <span className="text-[11px] font-semibold text-[#C6924B]">Selecionado</span>
+                <span className="text-[11px] font-medium text-emerald-400">Selecionado</span>
               </div>
             )}
 
             {/* Step 3 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className={`pt-4 mt-2 border-t flex items-center justify-between gap-3 shrink-0 ${
+              isDark ? "border-zinc-800" : "border-zinc-200"
+            }`}>
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
+                className="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-xs font-medium text-zinc-300 transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4 shrink-0" />
+                <ChevronLeft className="w-4 h-4" />
                 <span>Voltar</span>
               </button>
+
               <button
                 type="button"
                 disabled={!selectedTime}
                 onClick={() => setStep(4)}
-                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-40 text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
+                className={`px-6 py-2.5 rounded-lg text-xs sm:text-sm font-semibold tracking-tight flex items-center gap-2 transition-all cursor-pointer ${
+                  selectedTime
+                    ? "bg-zinc-100 hover:bg-white text-zinc-950 shadow-sm"
+                    : "bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50"
+                }`}
               >
                 <span>Avançar para dados</span>
-                <ChevronRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 4: OS SEUS DADOS (GENEROUS SPACING, PREMIUM INPUTS)                */}
+        {/* PASSO 4: OS SEUS DADOS (SHADCN FORM BLOCK)                                 */}
         {/* ========================================================================= */}
         {step === 4 && (
-          <form onSubmit={handleBookingSubmit} className="relative z-10 flex-1 min-h-0 flex flex-col justify-between pt-1 animate-fadeIn">
-            <div className="shrink-0 pb-2">
-              <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
+          <form onSubmit={handleBookingSubmit} className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 overflow-hidden animate-fadeIn">
+            <div className="pb-3 shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100">
                 Os seus dados
               </h2>
-              <p className={`text-[11px] sm:text-xs mt-0.5 leading-normal ${
-                isDark ? "text-[#A39B92]" : "text-[#71717A]"
-              }`}>
+              <p className="text-xs text-zinc-400 mt-0.5">
                 Preencha os dados de contacto para confirmarmos o seu horário na barbearia.
               </p>
             </div>
 
-            {/* Clean Summary Card */}
-            <div className={`p-3 sm:p-4 rounded-xl border flex items-center justify-between text-xs sm:text-sm shrink-0 mb-2.5 ${
-              isDark
-                ? "bg-[#1E1915] border-[#2D251F] text-[#FAF6F0]"
-                : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B]"
+            {/* Receipt Summary Card */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between text-xs shrink-0 mb-3 ${
+              isDark ? "bg-zinc-900/60 border-zinc-800 text-zinc-300" : "bg-zinc-50 border-zinc-200 text-zinc-700"
             }`}>
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0 pr-2">
                 <div className="flex items-center gap-2">
-                  <Scissors className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C6924B]" />
-                  <p className="font-bold text-xs sm:text-sm md:text-base">
+                  <Scissors className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
+                  <span className="font-semibold text-zinc-100 text-xs sm:text-sm truncate">
                     {servicesSummaryText || currentService.name}
-                  </p>
+                  </span>
                 </div>
-                <p className={`text-[11px] sm:text-xs capitalize font-medium ${isDark ? "text-[#D8A763]" : "text-[#8C601E]"}`}>
-                  {formattedDatePortuguese} às <strong>{formattedTimeRange || selectedTime}</strong>
+                <p className="text-[11px] text-zinc-400 capitalize">
+                  {formattedDatePortuguese} às <strong className="text-zinc-200 font-mono">{formattedTimeRange || selectedTime}</strong>
                 </p>
               </div>
-              <div className="text-right">
-                <span className="font-bold text-sm sm:text-lg font-mono text-[#C6924B]">
+              <div className="text-right shrink-0">
+                <span className="font-mono font-bold text-sm sm:text-base text-zinc-100 block">
                   {totalPriceFormatted}
                 </span>
-                <p className={`text-[11px] sm:text-xs ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
+                <span className="text-[10px] text-zinc-400">
                   {totalQuantity} {totalQuantity === 1 ? "serviço" : "serviços"}
-                </p>
+                </span>
               </div>
             </div>
 
             {errorMessage && (
-              <div className={`p-3 rounded-xl border text-xs sm:text-sm flex items-center gap-2.5 shrink-0 mb-2 ${
-                isDark
-                  ? "bg-red-500/20 border-red-500/40 text-red-300"
-                  : "bg-red-50 border-red-200 text-red-700"
-              }`}>
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-xs flex items-center gap-2 mb-3">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
-            {/* Input Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 my-auto py-1 flex-1 min-h-0 overflow-y-auto pr-0.5">
-              {/* Name */}
-              <div className="space-y-1.5">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
-                  isDark ? "text-[#A39B92]" : "text-[#18181B]"
-                }`}>
-                  <User className="w-3.5 h-3.5 text-[#C6924B]" />
-                  <span>O seu nome completo *</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: João Silva"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
-                    isDark
-                      ? "border-[#2D251F] bg-[#120F0D] text-[#FAF6F0] placeholder-[#6B635A] focus:border-[#C6924B]"
-                      : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-xs"
-                  }`}
-                />
+            {/* Form Fields */}
+            <div className="space-y-3.5 flex-1 min-h-0 overflow-y-auto pr-1 py-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Nome completo *</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: João Silva"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs sm:text-sm rounded-lg border transition-colors ${
+                      isDark
+                        ? "bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-400 focus:outline-none"
+                        : "bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none"
+                    }`}
+                  />
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Telemóvel / WhatsApp *</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Ex: 912 345 678"
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs sm:text-sm rounded-lg border transition-colors ${
+                      isDark
+                        ? "bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-400 focus:outline-none"
+                        : "bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none"
+                    }`}
+                  />
+                </div>
               </div>
 
-              {/* Phone */}
+              {/* Notes */}
               <div className="space-y-1.5">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
-                  isDark ? "text-[#A39B92]" : "text-[#18181B]"
-                }`}>
-                  <Phone className="w-3.5 h-3.5 text-[#C6924B]" />
-                  <span>Telemóvel / WhatsApp *</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="Ex: +351 912 345 678"
-                  value={clientPhone}
-                  onChange={(e) => setClientPhone(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
-                    isDark
-                      ? "border-[#2D251F] bg-[#120F0D] text-[#FAF6F0] placeholder-[#6B635A] focus:border-[#C6924B]"
-                      : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-xs"
-                  }`}
-                />
-              </div>
-
-              {/* Notes (Span 2 cols on md) */}
-              <div className="space-y-1.5 md:col-span-2">
-                <label className={`text-xs font-semibold flex items-center gap-1.5 ${
-                  isDark ? "text-[#A39B92]" : "text-[#18181B]"
-                }`}>
-                  <FileText className="w-3.5 h-3.5 text-[#C6924B]" />
+                <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Observações (opcional)</span>
                 </label>
                 <input
                   type="text"
                   placeholder={
                     totalQuantity > 1
-                      ? "Ex: 1 corte para o pai (André) e 1 corte para o filho (Martim)"
-                      : "Ex: Pretendo corte à tesoura e barba com toalha aquecida"
+                      ? "Ex: 1 corte para o pai (André) e 1 para o filho (Martim)"
+                      : "Ex: Corte à tesoura e barba alinhada"
                   }
                   value={clientNotes}
                   onChange={(e) => setClientNotes(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm rounded-xl border focus:outline-none transition-colors ${
+                  className={`w-full px-3 py-2 text-xs sm:text-sm rounded-lg border transition-colors ${
                     isDark
-                      ? "border-[#2D251F] bg-[#120F0D] text-[#FAF6F0] placeholder-[#6B635A] focus:border-[#C6924B]"
-                      : "border-[#E8E4DC] bg-white text-[#18181B] placeholder-neutral-400 focus:border-[#18181B] shadow-xs"
+                      ? "bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-400 focus:outline-none"
+                      : "bg-white border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none"
                   }`}
                 />
               </div>
+
+              <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
+                Os seus dados serão utilizados exclusivamente para a gestão e confirmação deste agendamento na Rota do Corte.
+              </p>
             </div>
 
-            {/* Privacy notice */}
-            <p className={`text-[11px] leading-relaxed pt-1 text-center sm:text-left ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
-              Os seus dados serão tratados pela Rota do Corte exclusivamente para a gestão e confirmação do agendamento solicitado (Art. 6.º, n.º 1, al. b do RGPD).
-            </p>
-
             {/* Step 4 Footer */}
-            <div className="pt-2.5 sm:pt-3 mt-1.5 flex items-center justify-between gap-2.5 sm:gap-3 border-t border-[#2D251F] dark:border-[#2D251F] shrink-0 z-20">
+            <div className={`pt-4 mt-2 border-t flex items-center justify-between gap-3 shrink-0 ${
+              isDark ? "border-zinc-800" : "border-zinc-200"
+            }`}>
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="text-xs sm:text-sm font-semibold flex items-center gap-1 text-[#71717A] hover:text-black dark:text-[#A39B92] dark:hover:text-white cursor-pointer transition-colors shrink-0 whitespace-nowrap py-2 px-1"
+                className="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-xs font-medium text-zinc-300 transition-colors flex items-center gap-1 cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4 shrink-0" />
+                <ChevronLeft className="w-4 h-4" />
                 <span>Voltar</span>
               </button>
+
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-[#C6924B] hover:bg-[#B5823C] disabled:opacity-50 text-[#171310] font-extrabold px-5 sm:px-8 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-[#C6924B]/20 hover:scale-[1.01] shrink-0"
+                className="px-6 py-2.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs sm:text-sm font-semibold tracking-tight flex items-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-3.5 h-3.5 border-2 border-[#171310] border-t-transparent rounded-full animate-spin shrink-0" />
+                    <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin shrink-0" />
                     <span>A confirmar...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4 stroke-[2.5] shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>Confirmar agendamento</span>
                   </>
                 )}
@@ -1115,63 +1104,59 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         )}
 
         {/* ========================================================================= */}
-        {/* PASSO 5: SUCESSO & CONFIRMAÇÃO IMEDIATA (SPACIOUS & DELIGHTFUL)           */}
+        {/* PASSO 5: CONFIRMAÇÃO IMEDIATA (SHADCN SUCCESS RECEIPT BLOCK)              */}
         {/* ========================================================================= */}
         {step === 5 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between items-center text-center py-2 sm:py-3 animate-fadeIn max-w-2xl mx-auto w-full overflow-y-auto pr-0.5">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#C6924B]/20 border-2 border-[#C6924B] flex items-center justify-center text-[#D8A763] mx-auto shadow-lg shadow-[#C6924B]/20 shrink-0 mb-1.5">
-              <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-[#C6924B]" />
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between items-center text-center p-5 sm:p-7 overflow-y-auto animate-fadeIn max-w-lg mx-auto w-full">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto shrink-0 mb-2">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
 
-            <div className="space-y-1 shrink-0">
-              <h2 className={`font-display text-lg sm:text-2xl font-bold tracking-tight ${
-                isDark ? "text-[#FAF6F0]" : "text-[#18181B]"
-              }`}>
-                Marcação confirmada!
+            <div className="space-y-1 shrink-0 mb-4">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-zinc-100">
+                Marcação Confirmada
               </h2>
-              <p className={`text-xs ${isDark ? "text-[#A39B92]" : "text-[#71717A]"}`}>
-                O seu horário foi registado com sucesso na agenda da Rota do Corte.
+              <p className="text-xs text-zinc-400">
+                O seu horário foi registado na agenda da Rota do Corte.
               </p>
             </div>
 
-            {/* Booking Details Card */}
-            <div className={`p-4 sm:p-5 rounded-xl border text-left space-y-2.5 text-xs sm:text-sm shrink-0 w-full my-3 ${
-              isDark ? "bg-[#1E1915] border-[#2D251F] text-[#FAF6F0]" : "bg-[#FAF6F0] border-[#EADFCF] text-[#18181B] shadow-xs"
+            {/* Receipt Card */}
+            <div className={`w-full p-4 rounded-xl border text-left space-y-2 text-xs shrink-0 mb-4 ${
+              isDark ? "bg-zinc-900/60 border-zinc-800 text-zinc-200" : "bg-zinc-50 border-zinc-200 text-zinc-800"
             }`}>
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Serviço(s):</span>
-                <span className="font-bold text-right">
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/60">
+                <span className="text-zinc-400">Serviço:</span>
+                <span className="font-semibold text-right text-zinc-100">
                   {servicesSummaryText || currentService.name}
                 </span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Barbeiro:</span>
-                <span className="font-bold text-[#C6924B]">
-                  Gabriel Silva
-                </span>
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/60">
+                <span className="text-zinc-400">Barbeiro:</span>
+                <span className="font-semibold text-zinc-100">Gabriel Silva</span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Data & Hora:</span>
-                <span className="font-bold capitalize">
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/60">
+                <span className="text-zinc-400">Data & Hora:</span>
+                <span className="font-semibold capitalize text-zinc-100">
                   {formattedDatePortuguese} às {formattedTimeRange || selectedTime}
                 </span>
               </div>
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Valor Total:</span>
-                <span className="font-bold text-[#C6924B]">
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/60">
+                <span className="text-zinc-400">Valor Total:</span>
+                <span className="font-mono font-bold text-zinc-100">
                   {totalPriceFormatted}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className={isDark ? "text-[#A39B92]" : "text-[#71717A]"}>Localização:</span>
-                <span className="text-right font-medium">
+                <span className="text-zinc-400">Localização:</span>
+                <span className="font-medium text-zinc-300 text-right">
                   {shopInfo.addressShort}
                 </span>
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-2.5 pt-0.5 shrink-0 w-full">
+            <div className="w-full space-y-2.5 shrink-0">
               {/* WhatsApp 1-Click Confirmation */}
               <a
                 href={`https://wa.me/351935190491?text=${buildWhatsAppMessage({
@@ -1185,14 +1170,14 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                 })}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-3 sm:py-3.5 text-xs sm:text-sm font-bold rounded-full bg-[#25D366] hover:bg-[#20ba5a] text-white flex items-center justify-center gap-2 transition-all shadow-md shadow-[#25D366]/20 cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
                 <WhatsAppIcon className="w-4 h-4 fill-white" />
-                <span>Enviar confirmação por WhatsApp</span>
+                <span>Enviar confirmação no WhatsApp</span>
               </a>
 
-              {/* Calendar Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Calendar Export Buttons */}
+              <div className="grid grid-cols-2 gap-2">
                 <a
                   href={buildGoogleCalendarUrl({
                     serviceName: currentService.name,
@@ -1202,13 +1187,13 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   })}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`py-2.5 px-3 rounded-full border text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                  className={`py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
                     isDark
-                      ? "border-[#2D251F] bg-[#1B1613] hover:bg-[#221C17] text-[#FAF6F0]"
-                      : "border-[#E8E4DC] bg-white hover:bg-neutral-50 text-[#18181B] shadow-xs"
+                      ? "border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200"
+                      : "border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800"
                   }`}
                 >
-                  <CalendarIcon className="w-3.5 h-3.5 text-[#C6924B]" />
+                  <CalendarIcon className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Google Calendar</span>
                 </a>
 
@@ -1223,25 +1208,23 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                       clientName
                     })
                   }
-                  className={`py-2.5 px-3 rounded-full border text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                     isDark
-                      ? "border-[#2D251F] bg-[#1B1613] hover:bg-[#221C17] text-[#FAF6F0]"
-                      : "border-[#E8E4DC] bg-white hover:bg-neutral-50 text-[#18181B] shadow-xs"
+                      ? "border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200"
+                      : "border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800"
                   }`}
                 >
-                  <Share2 className="w-3.5 h-3.5 text-[#C6924B]" />
-                  <span>Apple / Outlook (.ics)</span>
+                  <Share2 className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Apple / .ics</span>
                 </button>
               </div>
             </div>
 
-            <div className="pt-2 shrink-0">
+            <div className="pt-4 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className={`text-xs font-semibold cursor-pointer transition-colors ${
-                  isDark ? "text-[#A39B92] hover:text-white" : "text-[#71717A] hover:text-[#18181B]"
-                }`}
+                className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer"
               >
                 Concluir e fechar
               </button>

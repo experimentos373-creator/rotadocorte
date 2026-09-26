@@ -10,6 +10,7 @@
 // Chaves de LocalStorage
 const STORAGE_SOUND_ENABLED = "rotadocorte_admin_sound_enabled";
 const STORAGE_NOTIF_ENABLED = "rotadocorte_admin_notif_enabled";
+const STORAGE_REMINDERS_ENABLED = "rotadocorte_admin_reminders_enabled";
 const STORAGE_VOLUME = "rotadocorte_admin_volume";
 
 // Instância única de AudioContext
@@ -36,6 +37,28 @@ export function unlockAudioContext() {
   const ctx = getAudioContext();
   if (ctx && ctx.state === "suspended") {
     ctx.resume().catch(() => {});
+  }
+}
+
+// Auto-desbloqueio no primeiro toque em mobile / desktop
+if (typeof window !== "undefined") {
+  const autoUnlock = () => {
+    unlockAudioContext();
+    window.removeEventListener("touchstart", autoUnlock);
+    window.removeEventListener("pointerdown", autoUnlock);
+    window.removeEventListener("click", autoUnlock);
+  };
+  window.addEventListener("touchstart", autoUnlock, { passive: true });
+  window.addEventListener("pointerdown", autoUnlock, { passive: true });
+  window.addEventListener("click", autoUnlock, { passive: true });
+
+  // Registo de Service Worker para notificações em Android / Telemóvel
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .catch((err) => console.warn("SW register notice:", err));
+    });
   }
 }
 
@@ -167,23 +190,39 @@ export async function requestNotificationPermission() {
 }
 
 /**
- * Dispara uma notificação nativa do sistema
+ * Dispara uma notificação nativa do sistema (compatível com Android / Mobile e Desktop)
  */
-export function showSystemNotification({ title, body, icon, tag, data, onClick }) {
+export async function showSystemNotification({ title, body, icon, tag, data, onClick }) {
   if (!isPushSupported()) return null;
   if (Notification.permission !== "granted") return null;
   if (!isNotificationsEnabled()) return null;
 
+  const notifOptions = {
+    body,
+    icon: icon || "/favicon.svg",
+    badge: "/favicon.svg",
+    tag: tag || `booking-${Date.now()}`,
+    renotify: true,
+    data,
+    vibrate: [200, 100, 200]
+  };
+
+  // 1. Tentar primeiro via Service Worker (obrigatório para Android Chrome / Mobile)
+  if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification(title, notifOptions);
+        return true;
+      }
+    } catch (_) {
+      // Continua para fallback nativo
+    }
+  }
+
+  // 2. Fallback para Desktop Notification API
   try {
-    const notification = new Notification(title, {
-      body,
-      icon: icon || "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: tag || `booking-${Date.now()}`,
-      renotify: true,
-      data,
-      vibrate: [200, 100, 200]
-    });
+    const notification = new Notification(title, notifOptions);
 
     notification.onclick = (e) => {
       e.preventDefault();
@@ -237,7 +276,67 @@ export function getSavedVolume() {
   return isNaN(parsed) ? 0.8 : Math.max(0, Math.min(1, parsed));
 }
 
-export function setSavedVolume(volume) {
+export function isRemindersEnabled() {
+  if (typeof localStorage === "undefined") return true;
+  const val = localStorage.getItem(STORAGE_REMINDERS_ENABLED);
+  return val === null ? true : val === "true";
+}
+
+export function setRemindersEnabled(enabled) {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(STORAGE_VOLUME, String(volume));
+  localStorage.setItem(STORAGE_REMINDERS_ENABLED, String(enabled));
+}
+
+/**
+ * Toca um sino distinto de aviso de preparação (2h / 1h antes)
+ */
+export function playReminderChime(customVolume = null) {
+  try {
+    const isSoundOn = isSoundEnabled();
+    if (!isSoundOn && customVolume === null) return;
+
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const masterVol = customVolume !== null ? customVolume : getSavedVolume();
+    if (masterVol <= 0) return;
+
+    const now = ctx.currentTime;
+
+    // Sequência de 2 acordes harmónicos para aviso de antecedência (D5 -> A5)
+    const notes = [
+      { freq: 587.33, time: 0.00, dur: 0.7, gain: 0.35 }, // D5
+      { freq: 880.00, time: 0.18, dur: 1.1, gain: 0.50 }, // A5 (alerta claro)
+    ];
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(masterVol, now);
+    masterGain.connect(ctx.destination);
+
+    notes.forEach(({ freq, time, dur, gain: noteGainVal }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + time);
+
+      gain.gain.setValueAtTime(0.0001, now + time);
+      gain.gain.exponentialRampToValueAtTime(noteGainVal, now + time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
+
+      osc.connect(gain);
+      gain.connect(masterGain);
+
+      osc.start(now + time);
+      osc.stop(now + time + dur + 0.05);
+    });
+
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      try {
+        navigator.vibrate([100, 50, 100]);
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn("Audio reminder chime play error:", err);
+  }
 }
