@@ -385,7 +385,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       <div
         className={`relative ${
           step === 1
-            ? "w-full max-w-4xl max-h-[92vh]"
+            ? "w-[96vw] max-w-5xl max-h-[94vh]"
             : "w-full max-w-2xl max-h-[90vh]"
         } flex flex-col rounded-2xl border transition-all duration-200 overflow-hidden shadow-2xl ${
           isDark
@@ -398,56 +398,20 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
         <BarberBackgroundWatermark isDark={isDark} />
 
         {/* ========================================================================= */}
-        {/* SHADCN DIALOG HEADER & STEPPER                                            */}
+        {/* SHADCN DIALOG HEADER: STEPPER + CLOSE BUTTON (COMPACT SINGLE ROW)         */}
         {/* ========================================================================= */}
-        <div className={`relative z-10 px-4 sm:px-6 pt-5 pb-4 border-b ${
+        <div className={`relative z-10 px-4 sm:px-6 py-2.5 sm:py-3 border-b ${
           isDark ? "border-zinc-800/80 bg-zinc-950/90" : "border-zinc-200/80 bg-white/90"
         } backdrop-blur-md shrink-0`}>
-          <div className="flex items-center justify-between gap-4">
-            {/* Brand Title */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-[#C6924B]/15 border border-[#C6924B]/30 flex items-center justify-center text-[#C6924B] shrink-0">
-                <Scissors className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-sm tracking-tight truncate">
-                    Rota do Corte
-                  </h3>
-                  <span className="text-[10px] font-medium font-mono px-1.5 py-0.2 rounded-md bg-[#C6924B]/10 text-[#C6924B] border border-[#C6924B]/20">
-                    Paião
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-400 truncate">
-                  Agendamento Online de Gabriel Silva
-                </p>
-              </div>
-            </div>
-
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={onClose}
-              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                isDark
-                  ? "border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
-                  : "border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
-              }`}
-              aria-label="Fechar"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* shadcn Stepper Indicator */}
-          {step < 5 && (
-            <div className="mt-4 pt-3 border-t border-zinc-800/50 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center justify-between gap-3">
+            {/* Stepper Pills on Left/Center */}
+            {step < 5 ? (
+              <div className="flex items-center gap-1 sm:gap-2">
                 {stepsList.map((s, idx) => {
                   const isCurrent = step === s.number;
                   const isDone = step > s.number;
                   return (
-                    <div key={s.number} className="flex items-center gap-1.5 sm:gap-2">
+                    <div key={s.number} className="flex items-center gap-1 sm:gap-1.5">
                       <div
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors ${
                           isCurrent
@@ -473,50 +437,59 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                         <span className="hidden sm:inline text-xs">{s.label}</span>
                       </div>
                       {idx < stepsList.length - 1 && (
-                        <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                        <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
                       )}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Step counter badge on small mobile */}
-              <div className="sm:hidden text-[11px] font-mono text-zinc-400 font-medium">
-                Passo {step}/4
+            ) : (
+              <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Marcação Confirmada</span>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Close Button on Right */}
+            <button
+              type="button"
+              onClick={onClose}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer shrink-0 ${
+                isDark
+                  ? "border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+                  : "border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              aria-label="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* PASSO 1: ESCOLHA OS SERVIÇOS (SHADCN CARDS GRID)                          */}
+        {/* PASSO 1: ESCOLHA OS SERVIÇOS (MAX SCREEN REAL ESTATE & COMPACT CARDS)     */}
         {/* ========================================================================= */}
         {step === 1 && (
-          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-4 sm:p-6 overflow-hidden animate-fadeIn">
-            {/* Section Header */}
-            <div className="pb-3 shrink-0">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100">
-                Selecione os serviços
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Escolha um ou mais serviços pretendidos para o seu atendimento.
-              </p>
-            </div>
+          <div className="relative z-10 flex-1 min-h-0 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden animate-fadeIn">
+            {/* Compact Header with multi-cut tip */}
+            <div className="flex items-center justify-between gap-3 pb-2 shrink-0">
+              <div>
+                <h2 className="text-sm sm:text-base font-semibold tracking-tight text-zinc-100">
+                  Selecione os serviços
+                </h2>
+                <p className="text-[11px] text-zinc-400">
+                  Escolha os serviços pretendidos para o atendimento.
+                </p>
+              </div>
 
-            {/* Helper Banner for Multi-Bookings */}
-            <div className={`px-3 py-2.5 rounded-lg border flex items-center gap-2.5 text-xs mb-3 shrink-0 ${
-              isDark
-                ? "bg-zinc-900/60 border-zinc-800 text-zinc-300"
-                : "bg-zinc-50 border-zinc-200 text-zinc-700"
-            }`}>
-              <Users className="w-4 h-4 text-[#C6924B] shrink-0" />
-              <div className="leading-tight">
-                <strong>Marcação em grupo ou família?</strong> Use o botão <strong>[+]</strong> para agendar até <strong>4 pessoas</strong> (reserva slots de 30 min consecutivos no calendário).
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-300 bg-zinc-900/80 border border-zinc-800 px-2.5 py-1 rounded-md">
+                <Users className="w-3.5 h-3.5 text-[#C6924B] shrink-0" />
+                <span>Até <strong>4 pessoas</strong> com o botão <strong>[+]</strong></span>
               </div>
             </div>
 
-            {/* Services Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 flex-1 min-h-0 overflow-y-auto pr-1 py-1">
+            {/* Services Grid (All 6 services fit in 2 rows x 3 cols without scroll) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 flex-1 min-h-0 overflow-y-auto pr-1 py-0.5">
               {servicesData.map((s) => {
                 const qty = selectedServices[s.id] || 0;
                 const isSelected = qty > 0;
@@ -525,7 +498,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                   <div
                     key={s.id}
                     onClick={() => handleSelectOrToggle(s.id)}
-                    className={`relative rounded-xl border p-3.5 transition-all cursor-pointer flex flex-col justify-between group ${
+                    className={`relative rounded-xl border p-2.5 sm:p-3 transition-all cursor-pointer flex flex-col justify-between group ${
                       isSelected
                         ? isDark
                           ? "bg-zinc-900/90 border-[#C6924B] ring-1 ring-[#C6924B]/40 shadow-xs"
@@ -536,13 +509,13 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                     }`}
                   >
                     <div>
-                      <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-start justify-between gap-1.5 mb-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs sm:text-[13px] font-semibold tracking-tight text-zinc-100">
                             {s.name}
                           </span>
                           {s.badge && (
-                            <span className="text-[9px] font-medium font-mono px-1.5 py-0.2 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700">
+                            <span className="text-[8.5px] font-medium font-mono px-1.5 py-0.2 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700">
                               {s.badge}
                             </span>
                           )}
@@ -555,12 +528,12 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
                         )}
                       </div>
 
-                      <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
+                      <p className="text-[10.5px] sm:text-[11px] text-zinc-400 line-clamp-1 sm:line-clamp-2 leading-relaxed">
                         {s.shortDesc}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 mt-2 border-t border-zinc-800/60">
+                    <div className="flex items-center justify-between pt-2 mt-1.5 border-t border-zinc-800/60">
                       <div className="flex items-center gap-1 text-[11px] text-zinc-400 font-medium">
                         <Clock className="w-3 h-3 text-zinc-500" />
                         <span>{s.duration}</span>
