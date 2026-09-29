@@ -811,21 +811,30 @@ export default function AdminAgenda() {
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
-    // Detailed day maps (completed cuts and confirmed cuts)
+    // Detailed day maps (including all non-blocked cuts & bookings)
     const dayDetailsMap = {};
-    completed.forEach((a) => {
+    nonBlocked.forEach((a) => {
       if (!a.date) return;
       if (!dayDetailsMap[a.date]) {
         dayDetailsMap[a.date] = {
           date: a.date,
           revenue: 0,
-          count: 0,
+          completedCount: 0,
+          totalCount: 0,
           appointments: []
         };
       }
-      dayDetailsMap[a.date].revenue += parsePrice(a.service_price);
-      dayDetailsMap[a.date].count += 1;
+      if (a.status === "completed") {
+        dayDetailsMap[a.date].revenue += parsePrice(a.service_price);
+        dayDetailsMap[a.date].completedCount += 1;
+      }
+      dayDetailsMap[a.date].totalCount += 1;
       dayDetailsMap[a.date].appointments.push(a);
+    });
+
+    Object.values(dayDetailsMap).forEach((dayObj) => {
+      dayObj.appointments.sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+      dayObj.count = dayObj.completedCount > 0 ? dayObj.completedCount : dayObj.totalCount;
     });
 
     const dayConfirmedMap = {};
@@ -853,9 +862,15 @@ export default function AdminAgenda() {
         date: d,
         label: `${dayNum}/${monthNum}`,
         revenue: dayDetailsMap[d].revenue,
-        count: dayDetailsMap[d].count,
+        count: dayDetailsMap[d].completedCount > 0 ? dayDetailsMap[d].completedCount : dayDetailsMap[d].totalCount,
         appointments: dayDetailsMap[d].appointments
       };
+    });
+
+    const allAppointmentsList = [...nonBlocked].sort((a, b) => {
+      const tA = `${a.date} ${a.time || "00:00"}`;
+      const tB = `${b.date} ${b.time || "00:00"}`;
+      return tB.localeCompare(tA);
     });
 
     // Dynamic Y-Max & Lateral Scale
@@ -928,6 +943,7 @@ export default function AdminAgenda() {
       peakDay,
       serviceRanking,
       timelineData,
+      allAppointmentsList,
       maxRev: yMax,
       yMax,
       yTicks,
@@ -2010,7 +2026,10 @@ export default function AdminAgenda() {
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setStatsPeriod(p.id)}
+                      onClick={() => {
+                        setStatsPeriod(p.id);
+                        setSelectedDayKey(null);
+                      }}
                       className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shrink-0 ${
                         statsPeriod === p.id
                           ? "bg-zinc-100 text-zinc-950 font-semibold"
@@ -2147,7 +2166,7 @@ export default function AdminAgenda() {
                                 <g
                                   key={i}
                                   className="cursor-pointer group"
-                                  onClick={() => setSelectedDayKey(pt.date)}
+                                  onClick={() => setSelectedDayKey((prev) => (prev === pt.date ? null : pt.date))}
                                 >
                                   {/* Value badge above point */}
                                   <text
@@ -2196,7 +2215,7 @@ export default function AdminAgenda() {
                             <button
                               key={d.date}
                               type="button"
-                              onClick={() => setSelectedDayKey(d.date)}
+                              onClick={() => setSelectedDayKey((prev) => (prev === d.date ? null : d.date))}
                               className={`hover:text-zinc-200 transition-colors cursor-pointer ${
                                 selectedDayKey === d.date ? "text-[#C6924B] font-bold underline" : ""
                               }`}
@@ -2207,71 +2226,172 @@ export default function AdminAgenda() {
                         </div>
                       </div>
 
-                      {/* Daily Details: O Que Fez no Dia Selecionado */}
+                      {/* Daily Details / Histórico Total */}
                       {(() => {
-                        const activeDayStr = selectedDayKey || (statsData.timelineData[statsData.timelineData.length - 1]?.date || null);
-                        const activeDayData = activeDayStr ? statsData.dayDetailsMap[activeDayStr] : null;
+                        const isAllDays = !selectedDayKey;
+                        const activeDayData = selectedDayKey ? statsData.dayDetailsMap[selectedDayKey] : null;
+                        const displayedList = isAllDays
+                          ? (statsData.allAppointmentsList || [])
+                          : (activeDayData?.appointments || []);
+
+                        const displayedRevenue = isAllDays
+                          ? statsData.completedRevenue
+                          : (activeDayData?.revenue || 0);
+
+                        const displayedCount = isAllDays
+                          ? statsData.completedCount
+                          : (activeDayData?.completedCount ?? activeDayData?.count ?? displayedList.length);
 
                         return (
                           <div className="mt-4 p-3.5 sm:p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
-                            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                            {/* Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-800/80 pb-2.5 gap-2">
                               <div className="flex items-center gap-2">
-                                <CalendarDays className="w-4 h-4 text-[#C6924B]" />
-                                <span className="font-semibold text-xs text-zinc-100">
-                                  {activeDayStr
-                                    ? `O Que Fez no Dia ${activeDayStr.substring(8)}/${activeDayStr.substring(5, 7)}/${activeDayStr.substring(0, 4)}`
-                                    : "Clica em qualquer ponto no gráfico para inspecionar os cortes"}
-                                </span>
+                                <CalendarDays className="w-4 h-4 text-[#C6924B] shrink-0" />
+                                <div>
+                                  <span className="font-semibold text-xs text-zinc-100 block">
+                                    {isAllDays
+                                      ? statsPeriod === "all"
+                                        ? "📋 Histórico Total de Todos os Dias"
+                                        : statsPeriod === "month"
+                                          ? "📋 Todos os Dias deste Mês"
+                                          : statsPeriod === "week"
+                                            ? "📋 Todos os Dias desta Semana"
+                                            : "📋 Cortes de Hoje"
+                                      : `📅 Cortes do Dia ${selectedDayKey.substring(8)}/${selectedDayKey.substring(5, 7)}/${selectedDayKey.substring(0, 4)}`}
+                                  </span>
+                                  <span className="text-[11px] text-zinc-500">
+                                    {isAllDays
+                                      ? "Apresentando todos os serviços e cortes registados"
+                                      : "Filtrado para o dia selecionado"}
+                                  </span>
+                                </div>
                               </div>
-                              {activeDayData && (
-                                <div className="flex items-center gap-3 text-xs">
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex items-center gap-2.5 text-xs bg-zinc-900/80 px-2.5 py-1 rounded-lg border border-zinc-800">
                                   <span className="font-mono text-zinc-400">
-                                    {activeDayData.count} corte{activeDayData.count !== 1 ? "s" : ""}
+                                    {displayedCount} corte{displayedCount !== 1 ? "s" : ""}
                                   </span>
                                   <span className="font-mono font-bold text-sm text-[#C6924B]">
-                                    {activeDayData.revenue.toFixed(2)} €
+                                    {displayedRevenue.toFixed(2)} €
                                   </span>
                                 </div>
-                              )}
+
+                                {!isAllDays && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedDayKey(null)}
+                                    className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#C6924B]/15 text-[#C6924B] border border-[#C6924B]/30 hover:bg-[#C6924B]/25 transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Ver lista de todos os dias"
+                                  >
+                                    <span>✕ Ver Todos os Dias</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                              {!activeDayData || activeDayData.appointments.length === 0 ? (
-                                <div className="col-span-full py-4 text-center text-xs text-zinc-500">
-                                  Sem detalhes para esta data. Clica em qualquer ponto no gráfico acima.
+                            {/* Filter Chips by Day */}
+                            {statsData.timelineData.length > 1 && (
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 text-[11px]">
+                                <span className="text-zinc-500 font-mono text-[10px] shrink-0 mr-1">Filtrar:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDayKey(null)}
+                                  className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-medium ${
+                                    isAllDays
+                                      ? "bg-[#C6924B] text-zinc-950 border-[#C6924B] font-semibold shadow-xs"
+                                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                                  }`}
+                                >
+                                  ✨ Todos os Dias ({displayedList.length})
+                                </button>
+
+                                {statsData.timelineData.map((d) => {
+                                  const isCurrentSelected = selectedDayKey === d.date;
+                                  return (
+                                    <button
+                                      key={d.date}
+                                      type="button"
+                                      onClick={() => setSelectedDayKey(isCurrentSelected ? null : d.date)}
+                                      className={`px-2 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-mono ${
+                                        isCurrentSelected
+                                          ? "bg-amber-500 text-zinc-950 border-amber-500 font-bold shadow-xs"
+                                          : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                                      }`}
+                                    >
+                                      {d.label} ({d.revenue > 0 ? `${d.revenue.toFixed(0)}€` : `${d.count}c`})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* List of Appointments */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                              {displayedList.length === 0 ? (
+                                <div className="col-span-full py-6 text-center text-xs text-zinc-500">
+                                  Sem marcações para o período selecionado.
                                 </div>
                               ) : (
-                                activeDayData.appointments.map((appt, idx) => (
-                                  <div
-                                    key={appt.id || idx}
-                                    className="p-2 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2"
-                                  >
-                                    <div className="min-w-0 space-y-0.5">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="font-semibold text-xs text-zinc-100 truncate">
-                                          {appt.customer_name || "Cliente"}
-                                        </span>
-                                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                          {appt.time || "Atendido"}
+                                displayedList.map((appt, idx) => {
+                                  const isDirect = appt.source === "admin_direct_sale" || (appt.customer_notes && appt.customer_notes.includes("[Venda Balcão]"));
+                                  const dateFormatted = appt.date
+                                    ? `${appt.date.substring(8, 10)}/${appt.date.substring(5, 7)}`
+                                    : "";
+
+                                  return (
+                                    <div
+                                      key={appt.id || `${appt.date}-${appt.time}-${idx}`}
+                                      className="p-2.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2.5 hover:border-zinc-700/80 transition-colors"
+                                    >
+                                      <div className="min-w-0 space-y-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-semibold text-xs text-zinc-100 truncate">
+                                            {appt.customer_name || "Cliente"}
+                                          </span>
+                                          {dateFormatted && (
+                                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+                                              📅 {dateFormatted}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-800">
+                                            ⏰ {appt.time || "Horário livre"}
+                                          </span>
+                                          {isDirect && (
+                                            <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
+                                              Balcão
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400 truncate">
+                                          {appt.service_name || "Serviço"}
+                                        </p>
+                                        <span className="text-[10px] font-mono text-zinc-500">
+                                          {appt.customer_phone || "Sem contacto"}
                                         </span>
                                       </div>
-                                      <p className="text-[11px] text-zinc-400 truncate">
-                                        {appt.service_name}
-                                      </p>
-                                      <span className="text-[10px] font-mono text-zinc-500">
-                                        {appt.customer_phone || "Sem telefone"}
-                                      </span>
+                                      <div className="text-right shrink-0">
+                                        <span className="font-mono font-bold text-xs text-[#C6924B] block">
+                                          {appt.service_price}
+                                        </span>
+                                        {appt.status === "completed" ? (
+                                          <span className="text-[9px] text-emerald-400 font-medium">
+                                            Concluído
+                                          </span>
+                                        ) : appt.status === "confirmed" ? (
+                                          <span className="text-[9px] text-cyan-400 font-medium">
+                                            Confirmado
+                                          </span>
+                                        ) : (
+                                          <span className="text-[9px] text-zinc-500 font-medium">
+                                            {appt.status}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <div className="text-right shrink-0">
-                                      <span className="font-mono font-bold text-xs text-[#C6924B] block">
-                                        {appt.service_price}
-                                      </span>
-                                      <span className="text-[9px] text-emerald-400 font-medium">
-                                        Concluído
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))
+                                  );
+                                })
                               )}
                             </div>
                           </div>
