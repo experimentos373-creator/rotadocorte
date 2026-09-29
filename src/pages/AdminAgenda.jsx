@@ -736,6 +736,11 @@ export default function AdminAgenda() {
     const targetList = unifiedAppointments.filter((a) => {
       if (!a.date) return false;
       if (statsPeriod === "today") return a.date === todayStr;
+      if (statsPeriod === "week") {
+        const d = new Date(a.date);
+        const diff = (now - d) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= 7;
+      }
       if (statsPeriod === "month") {
         return a.date.substring(0, 7) === todayStr.substring(0, 7);
       }
@@ -1998,6 +2003,7 @@ export default function AdminAgenda() {
                 <div className="flex items-center gap-1 p-1 rounded-lg border border-zinc-800 bg-zinc-950/60 overflow-x-auto">
                   {[
                     { id: "today", label: "Hoje" },
+                    { id: "week", label: "Semana" },
                     { id: "month", label: "Mês Atual" },
                     { id: "all", label: "Histórico Total" }
                   ].map((p) => (
@@ -2054,9 +2060,16 @@ export default function AdminAgenda() {
                             Setembro 2026
                           </span>
                         )}
+                        {statsPeriod === "week" && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#C6924B]/15 text-[#C6924B] border border-[#C6924B]/30 font-medium">
+                            Últimos 7 Dias
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-zinc-500 mt-0.5">
-                        Rendimento diário detalhado no mês com escala lateral em euros.
+                        {statsPeriod === "week"
+                          ? "Rendimento diário nos últimos 7 dias com escala lateral em euros."
+                          : "Rendimento diário detalhado com escala lateral em euros."}
                       </p>
                     </div>
 
