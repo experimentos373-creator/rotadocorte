@@ -140,6 +140,8 @@ export default function AdminAgenda() {
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
   const [selectedDayKey, setSelectedDayKey] = useState(null);
   const [selectedWeekKey, setSelectedWeekKey] = useState(null);
+  const [pieChartMode, setPieChartMode] = useState("days"); // 'days' | 'services'
+  const [hoveredPieIndex, setHoveredPieIndex] = useState(null);
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -207,6 +209,25 @@ export default function AdminAgenda() {
       endDate: sunStr,
       monTimestamp: mon.getTime()
     };
+  };
+
+  // Helper to generate SVG Donut slice path
+  const describeDonutSlice = (cx, cy, rOuter, rInner, startAngle, endAngle) => {
+    const angle = endAngle - startAngle;
+    const safeEnd = angle >= 360 ? startAngle + 359.99 : endAngle;
+    const rad = (a) => ((a - 90) * Math.PI) / 180.0;
+
+    const p1 = { x: cx + rOuter * Math.cos(rad(startAngle)), y: cy + rOuter * Math.sin(rad(startAngle)) };
+    const p2 = { x: cx + rOuter * Math.cos(rad(safeEnd)), y: cy + rOuter * Math.sin(rad(safeEnd)) };
+    const p3 = { x: cx + rInner * Math.cos(rad(safeEnd)), y: cy + rInner * Math.sin(rad(safeEnd)) };
+    const p4 = { x: cx + rInner * Math.cos(rad(startAngle)), y: cy + rInner * Math.sin(rad(startAngle)) };
+
+    const largeArc = angle > 180 ? 1 : 0;
+
+    return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} ` +
+           `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} ` +
+           `L ${p3.x.toFixed(2)} ${p3.y.toFixed(2)} ` +
+           `A ${rInner} ${rInner} 0 ${largeArc} 0 ${p4.x.toFixed(2)} ${p4.y.toFixed(2)} Z`;
   };
 
   // 🔒 Financial Ledger & CRM state
@@ -792,10 +813,19 @@ export default function AdminAgenda() {
     const clientSet = new Set(nonBlocked.map((a) => a.customer_phone || a.customer_name).filter(Boolean));
     const uniqueClientsCount = clientSet.size;
 
-    // Days activity
+    // Days activity (Seg - Sáb)
     const daysCount = [0, 0, 0, 0, 0, 0];
     const daysRevenue = [0, 0, 0, 0, 0, 0];
     const dayNames = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const dayFullNames = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+    const dayColors = [
+      "#C6924B", // Seg (Ouro Rota do Corte)
+      "#71717A", // Ter (Zinc médio)
+      "#A1A1AA", // Qua (Zinc neutro)
+      "#EAB308", // Qui (Dourado luminoso)
+      "#F59E0B", // Sex (Âmbar vibrante)
+      "#D97706"  // Sáb (Âmbar caloroso)
+    ];
 
     completed.forEach((a) => {
       const d = new Date(a.date);
@@ -806,6 +836,8 @@ export default function AdminAgenda() {
       }
     });
 
+    const totalDaysCount = daysCount.reduce((acc, c) => acc + c, 0);
+    const totalDaysRevenue = daysRevenue.reduce((acc, r) => acc + r, 0);
     const maxDayCount = Math.max(...daysCount, 1);
     let peakDayIdx = 0;
     daysCount.forEach((c, i) => {
@@ -814,31 +846,90 @@ export default function AdminAgenda() {
 
     const peakDay = {
       name: dayNames[peakDayIdx],
+      fullName: dayFullNames[peakDayIdx],
       count: daysCount[peakDayIdx],
-      revenue: daysRevenue[peakDayIdx]
+      revenue: daysRevenue[peakDayIdx],
+      percent: totalDaysCount > 0 ? Math.round((daysCount[peakDayIdx] / totalDaysCount) * 100) : 0,
+      color: dayColors[peakDayIdx]
     };
 
     const daysActivity = dayNames.map((name, i) => ({
       label: name,
+      fullName: dayFullNames[i],
       count: daysCount[i],
-      revenue: daysRevenue[i]
+      revenue: daysRevenue[i],
+      percent: totalDaysCount > 0 ? Math.round((daysCount[i] / totalDaysCount) * 100) : 0,
+      color: dayColors[i]
     }));
+
+    // Slices for Days Donut Chart
+    let currDayAngle = 0;
+    const daysDonutSlices = daysActivity.map((d, idx) => {
+      const slicePct = totalDaysCount > 0 ? d.count / totalDaysCount : 0;
+      const angle = slicePct * 360;
+      const startAngle = currDayAngle;
+      const endAngle = currDayAngle + angle;
+      currDayAngle += angle;
+      return {
+        ...d,
+        index: idx,
+        slicePct,
+        startAngle,
+        endAngle
+      };
+    });
 
     // Service composition
     const sMap = {};
+    const sCountMap = {};
     completed.forEach((a) => {
       const s = a.service_name || "Outros";
       sMap[s] = (sMap[s] || 0) + parsePrice(a.service_price);
+      sCountMap[s] = (sCountMap[s] || 0) + 1;
     });
 
+    const serviceColorsPalette = [
+      "#F59E0B", // Âmbar 500
+      "#C6924B", // Ouro da Marca
+      "#D97706", // Âmbar 600
+      "#EAB308", // Dourado claro
+      "#71717A", // Zinc 500
+      "#52525B", // Zinc 600
+      "#A1A1AA"  // Zinc 400
+    ];
+
     const serviceRanking = Object.entries(sMap)
-      .map(([name, rev]) => ({
+      .map(([name, rev], idx) => ({
         name,
+        count: sCountMap[name] || 0,
         revenue: rev,
         percent: completedRev > 0 ? Math.round((rev / completedRev) * 100) : 0,
-        hex: "#C6924B"
+        hex: serviceColorsPalette[idx % serviceColorsPalette.length],
+        color: serviceColorsPalette[idx % serviceColorsPalette.length]
       }))
       .sort((a, b) => b.revenue - a.revenue);
+
+    const totalServiceRevenue = serviceRanking.reduce((acc, s) => acc + s.revenue, 0);
+    let currServiceAngle = 0;
+    const servicesDonutSlices = serviceRanking.map((s, idx) => {
+      const slicePct = totalServiceRevenue > 0 ? s.revenue / totalServiceRevenue : 0;
+      const angle = slicePct * 360;
+      const startAngle = currServiceAngle;
+      const endAngle = currServiceAngle + angle;
+      currServiceAngle += angle;
+      return {
+        label: s.name,
+        fullName: s.name,
+        count: s.count,
+        revenue: s.revenue,
+        percent: s.percent,
+        color: s.color,
+        index: idx,
+        slicePct,
+        startAngle,
+        endAngle
+      };
+    });
 
     // Detailed day maps (including all non-blocked cuts & bookings)
     const dayDetailsMap = {};
@@ -1007,6 +1098,10 @@ export default function AdminAgenda() {
       daysActivity,
       maxDayCount,
       peakDay,
+      totalDaysCount,
+      totalDaysRevenue,
+      daysDonutSlices,
+      servicesDonutSlices,
       serviceRanking,
       timelineData,
       allAppointmentsList,
@@ -2631,50 +2726,269 @@ export default function AdminAgenda() {
                   )}
                 </div>
 
-                {/* Days of Week (4 cols) */}
-                <div className={`lg:col-span-4 p-5 rounded-xl border space-y-4 ${
+                {/* Gráfico de Pizza / Donut Interativo: Dias Mais Ativos & Mix de Serviços */}
+                <div className={`lg:col-span-4 p-5 rounded-xl border flex flex-col justify-between space-y-4 ${
                   isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
                 }`}>
+                  {/* Top Bar: Title & Toggle */}
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-sm text-zinc-100">
-                      Dias Mais Ativos
-                    </h3>
-                    <span className="text-[10px] font-mono text-zinc-500">Seg – Sáb</span>
+                    <div>
+                      <h3 className="font-semibold text-sm text-zinc-100 flex items-center gap-1.5">
+                        <span>{pieChartMode === "days" ? "Dias Mais Ativos" : "Mix de Serviços"}</span>
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 font-mono">
+                        {pieChartMode === "days" ? "Distribuição Semanal (Seg – Sáb)" : "Composição de Faturação"}
+                      </p>
+                    </div>
+
+                    {/* Mode Toggle: Dias vs Serviços */}
+                    <div className="flex items-center p-0.5 rounded-lg border border-zinc-800 bg-zinc-950/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPieChartMode("days");
+                          setHoveredPieIndex(null);
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                          pieChartMode === "days"
+                            ? "bg-[#C6924B] text-zinc-950 font-bold shadow-sm"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        Dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPieChartMode("services");
+                          setHoveredPieIndex(null);
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                          pieChartMode === "services"
+                            ? "bg-[#C6924B] text-zinc-950 font-bold shadow-sm"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        Serviços
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-6 gap-1.5 items-end h-32 pt-2">
-                    {statsData.daysActivity.map((d) => {
-                      const heightPct = statsData.maxDayCount > 0 && d.count > 0
-                        ? Math.max((d.count / statsData.maxDayCount) * 100, 15)
-                        : 0;
+                  {/* Donut Chart Canvas & Dynamic Center */}
+                  {(() => {
+                    const activeSlices = pieChartMode === "days" ? statsData.daysDonutSlices : statsData.servicesDonutSlices;
+                    const hasData = pieChartMode === "days" ? statsData.totalDaysCount > 0 : statsData.serviceRanking.length > 0;
+                    const hoveredItem = hoveredPieIndex !== null ? activeSlices.find((s) => s.index === hoveredPieIndex) : null;
 
-                      return (
-                        <div key={d.label} className="flex flex-col items-center gap-1.5 h-full justify-end">
-                          <span className="text-[9px] font-mono text-zinc-400">
-                            {d.count > 0 ? d.count : "-"}
-                          </span>
-                          <div className="w-full rounded-md bg-zinc-800/40 h-full flex items-end">
-                            {d.count > 0 && (
-                              <div
-                                className="w-full rounded-md bg-[#C6924B]/70"
-                                style={{ height: `${heightPct}%` }}
+                    return (
+                      <div className="relative flex flex-col items-center justify-center my-1">
+                        <div className="relative w-44 h-44 sm:w-48 sm:h-48 flex items-center justify-center">
+                          {!hasData ? (
+                            <svg viewBox="0 0 200 200" className="w-full h-full">
+                              <circle
+                                cx="100"
+                                cy="100"
+                                r="65"
+                                fill="none"
+                                stroke={isLight ? "#e4e4e7" : "#27272a"}
+                                strokeWidth="24"
+                                strokeDasharray="4 4"
                               />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
+                              {activeSlices.map((slice) => {
+                                if (!slice.slicePct || slice.slicePct <= 0) return null;
+                                const isHovered = hoveredPieIndex === slice.index;
+                                const pathD = describeDonutSlice(
+                                  100,
+                                  100,
+                                  isHovered ? 82 : 78,
+                                  isHovered ? 48 : 52,
+                                  slice.startAngle,
+                                  slice.endAngle
+                                );
+                                return (
+                                  <path
+                                    key={slice.label}
+                                    d={pathD}
+                                    fill={slice.color}
+                                    stroke={isLight ? "#ffffff" : "#18181b"}
+                                    strokeWidth="2.5"
+                                    strokeLinejoin="round"
+                                    className="cursor-pointer transition-all duration-200"
+                                    style={{
+                                      opacity: hoveredPieIndex === null ? 1 : isHovered ? 1 : 0.4,
+                                      filter: isHovered ? "drop-shadow(0 0 6px rgba(198,146,75,0.45))" : "none"
+                                    }}
+                                    onMouseEnter={() => setHoveredPieIndex(slice.index)}
+                                    onMouseLeave={() => setHoveredPieIndex(null)}
+                                  />
+                                );
+                              })}
+                            </svg>
+                          )}
+
+                          {/* Dynamic Center Badge */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-2 select-none">
+                            {!hasData ? (
+                              <>
+                                <span className="text-xs text-zinc-500 font-medium">Sem dados</span>
+                                <span className="text-[10px] text-zinc-600">no período</span>
+                              </>
+                            ) : hoveredItem ? (
+                              <div className="flex flex-col items-center animate-fadeIn">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 truncate max-w-[100px]">
+                                  {hoveredItem.fullName || hoveredItem.label}
+                                </span>
+                                <span className="text-base font-extrabold text-zinc-100 font-mono tracking-tight">
+                                  {pieChartMode === "days" ? `${hoveredItem.count} cortes` : `${hoveredItem.revenue.toFixed(0)} €`}
+                                </span>
+                                <span className="text-[10px] font-mono text-zinc-400">
+                                  {hoveredItem.percent}% • {hoveredItem.revenue.toFixed(0)} €
+                                </span>
+                              </div>
+                            ) : pieChartMode === "days" ? (
+                              <div className="flex flex-col items-center animate-fadeIn">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[#C6924B]">
+                                  Top Dia
+                                </span>
+                                <span className="text-sm font-extrabold text-zinc-100">
+                                  {statsData.peakDay.name}
+                                </span>
+                                <span className="text-[10px] font-mono text-zinc-400">
+                                  {statsData.peakDay.count} cortes ({statsData.peakDay.percent}%)
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center animate-fadeIn">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[#C6924B]">
+                                  Top Serviço
+                                </span>
+                                <span className="text-xs font-extrabold text-zinc-100 truncate max-w-[90px]">
+                                  {statsData.serviceRanking[0]?.name || "N/A"}
+                                </span>
+                                <span className="text-[10px] font-mono text-zinc-400">
+                                  {(statsData.serviceRanking[0]?.revenue || 0).toFixed(0)} € ({statsData.serviceRanking[0]?.percent || 0}%)
+                                </span>
+                              </div>
                             )}
                           </div>
-                          <span className="text-[10px] text-zinc-400 font-medium">
-                            {d.label}
-                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
 
-                  <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-950/60 text-center text-xs">
-                    <span className="text-zinc-400">Dia de maior movimento: </span>
-                    <strong className="text-zinc-100">{statsData.peakDay.name}</strong>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
-                      {statsData.peakDay.count} cortes • {statsData.peakDay.revenue.toFixed(2)} €
-                    </p>
+                        {/* Interactive Legend Grid */}
+                        <div className="w-full mt-3">
+                          {pieChartMode === "days" ? (
+                            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-zinc-800/60">
+                              {statsData.daysDonutSlices.map((d) => {
+                                const isHovered = hoveredPieIndex === d.index;
+                                return (
+                                  <div
+                                    key={d.label}
+                                    onMouseEnter={() => setHoveredPieIndex(d.index)}
+                                    onMouseLeave={() => setHoveredPieIndex(null)}
+                                    className={`flex items-center justify-between p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                      isHovered
+                                        ? "border-[#C6924B]/50 bg-zinc-800/80 shadow-sm"
+                                        : isLight
+                                        ? "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                                        : "border-zinc-800/40 bg-zinc-950/40 hover:bg-zinc-800/40"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span
+                                        className="w-2 h-2 rounded-full shrink-0"
+                                        style={{ backgroundColor: d.color }}
+                                      />
+                                      <span className={`text-[11px] font-medium truncate ${isHovered ? "text-[#C6924B] font-semibold" : "text-zinc-300"}`}>
+                                        {d.label}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-zinc-400 shrink-0 ml-1">
+                                      {d.count} <span className="text-zinc-500">({d.percent}%)</span>
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar pt-2 border-t border-zinc-800/60">
+                              {statsData.servicesDonutSlices.map((s) => {
+                                const isHovered = hoveredPieIndex === s.index;
+                                return (
+                                  <div
+                                    key={s.label}
+                                    onMouseEnter={() => setHoveredPieIndex(s.index)}
+                                    onMouseLeave={() => setHoveredPieIndex(null)}
+                                    className={`flex items-center justify-between p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                      isHovered
+                                        ? "border-[#C6924B]/50 bg-zinc-800/80 shadow-sm"
+                                        : isLight
+                                        ? "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+                                        : "border-zinc-800/40 bg-zinc-950/40 hover:bg-zinc-800/40"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span
+                                        className="w-2 h-2 rounded-full shrink-0"
+                                        style={{ backgroundColor: s.color }}
+                                      />
+                                      <span className={`text-[11px] font-medium truncate ${isHovered ? "text-[#C6924B] font-semibold" : "text-zinc-300"}`}>
+                                        {s.label}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-zinc-400 shrink-0 ml-1">
+                                      {s.revenue.toFixed(0)} € <span className="text-zinc-500">({s.percent}%)</span>
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Bottom Highlight Banner */}
+                  <div className={`p-3 rounded-lg border text-xs flex items-center justify-between ${
+                    isLight ? "bg-zinc-50 border-zinc-200" : "bg-zinc-950/60 border-zinc-800"
+                  }`}>
+                    {pieChartMode === "days" ? (
+                      <>
+                        <div className="min-w-0 pr-2">
+                          <span className="text-zinc-500 text-[10px] uppercase tracking-wider block font-medium">Dia Mais Ativo</span>
+                          <strong className="text-zinc-100 font-semibold truncate block">
+                            {statsData.peakDay.fullName || statsData.peakDay.name}
+                          </strong>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-zinc-200 font-bold font-mono text-xs">
+                            {statsData.peakDay.count} cortes
+                          </span>
+                          <p className="text-[11px] text-[#C6924B] font-mono">
+                            {statsData.peakDay.revenue.toFixed(2)} € ({statsData.peakDay.percent}%)
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="min-w-0 pr-2">
+                          <span className="text-zinc-500 text-[10px] uppercase tracking-wider block font-medium">Serviço Principal</span>
+                          <strong className="text-zinc-100 font-semibold truncate block">
+                            {statsData.serviceRanking[0]?.name || "N/A"}
+                          </strong>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-zinc-200 font-bold font-mono text-xs">
+                            {(statsData.serviceRanking[0]?.revenue || 0).toFixed(2)} €
+                          </span>
+                          <p className="text-[11px] text-[#C6924B] font-mono">
+                            {statsData.serviceRanking[0]?.count || 0} cortes ({statsData.serviceRanking[0]?.percent || 0}%)
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
