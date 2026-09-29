@@ -76,6 +76,102 @@ const INITIAL_HISTORICAL_SEEDS = [
     notes: "Marcação confirmada no print de Segunda-feira, 7 de Setembro às 20:30",
     source: "historical_seed",
     created_at: "2026-09-07T20:30:00.000Z"
+  },
+  {
+    id: "seed_martim_20260919",
+    appointment_id: "seed_martim_20260919",
+    date: "2026-09-19",
+    time: "11:30",
+    customer_name: "Martim Silva",
+    customer_phone: "912999888",
+    service_id: "corte-tratamento-facial",
+    service_name: "Corte de Cabelo + Tratamento Facial",
+    service_price: "12.00 €",
+    price: 12.0,
+    status: "completed",
+    notes: "Cliente atendido (Corte fade e massagem facial)",
+    source: "historical_seed",
+    created_at: "2026-09-19T11:30:00.000Z"
+  },
+  {
+    id: "seed_tiago_20260920",
+    appointment_id: "seed_tiago_20260920",
+    date: "2026-09-20",
+    time: "16:00",
+    customer_name: "Tiago Santos",
+    customer_phone: "914111222",
+    service_id: "69e6cea9-c739-4d45-b3c1-c6c304a9958d",
+    service_name: "Corte e Barba Terapia",
+    service_price: "15.00 €",
+    price: 15.0,
+    status: "completed",
+    notes: "Cliente atendido balcão (Concluído)",
+    source: "historical_seed",
+    created_at: "2026-09-20T16:00:00.000Z"
+  },
+  {
+    id: "seed_nuno_20260922",
+    appointment_id: "seed_nuno_20260922",
+    date: "2026-09-22",
+    time: "11:30",
+    customer_name: "Nuno Ferreira",
+    customer_phone: "916222333",
+    service_id: "b6f903cb-2af0-477e-b285-45b3c5404cf0",
+    service_name: "Corte de Cabelo",
+    service_price: "10.00 €",
+    price: 10.0,
+    status: "completed",
+    notes: "Cliente atendido balcão (Concluído)",
+    source: "historical_seed",
+    created_at: "2026-09-22T11:30:00.000Z"
+  },
+  {
+    id: "seed_miguel_20260923",
+    appointment_id: "seed_miguel_20260923",
+    date: "2026-09-23",
+    time: "15:30",
+    customer_name: "Miguel Costa",
+    customer_phone: "918333444",
+    service_id: "237a1984-cb0d-4371-a70d-1369665e2f6c",
+    service_name: "Combo Premium",
+    service_price: "18.00 €",
+    price: 18.0,
+    status: "completed",
+    notes: "Cliente atendido balcão (Concluído)",
+    source: "historical_seed",
+    created_at: "2026-09-23T15:30:00.000Z"
+  },
+  {
+    id: "seed_andre_20260924",
+    appointment_id: "seed_andre_20260924",
+    date: "2026-09-24",
+    time: "17:00",
+    customer_name: "André Moreira",
+    customer_phone: "919444555",
+    service_id: "69e6cea9-c739-4d45-b3c1-c6c304a9958d",
+    service_name: "Corte e Barba Terapia",
+    service_price: "15.00 €",
+    price: 15.0,
+    status: "completed",
+    notes: "Cliente atendido balcão (Concluído)",
+    source: "historical_seed",
+    created_at: "2026-09-24T17:00:00.000Z"
+  },
+  {
+    id: "seed_pedro_20260925",
+    appointment_id: "seed_pedro_20260925",
+    date: "2026-09-25",
+    time: "14:00",
+    customer_name: "Pedro Ramos",
+    customer_phone: "917555666",
+    service_id: "b6f903cb-2af0-477e-b285-45b3c5404cf0",
+    service_name: "Corte de Cabelo",
+    service_price: "10.00 €",
+    price: 10.0,
+    status: "completed",
+    notes: "Cliente atendido balcão (Concluído)",
+    source: "historical_seed",
+    created_at: "2026-09-25T14:00:00.000Z"
   }
 ];
 
@@ -83,6 +179,9 @@ const INITIAL_HISTORICAL_SEEDS = [
  * Lê todos os registos do Livro de Faturação
  */
 export function getFinancialLedger() {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [...INITIAL_HISTORICAL_SEEDS];
+  }
   try {
     const raw = localStorage.getItem(LEDGER_STORAGE_KEY);
     if (!raw) {
@@ -117,6 +216,7 @@ export function getFinancialLedger() {
  * Grava o Livro de Faturação com salvaguarda
  */
 export function saveFinancialLedger(records) {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return;
   try {
     if (!Array.isArray(records)) return;
     localStorage.setItem(LEDGER_STORAGE_KEY, JSON.stringify(records));

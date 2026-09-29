@@ -227,7 +227,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
       if (d.getHours() >= 21) {
         d.setDate(d.getDate() + 1);
       }
-      const initialDate = d.toISOString().split("T")[0];
+      const initialDate = d.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
       setSelectedDate(initialDate);
       setStep(1);
       setBookingResult(null);
@@ -277,7 +277,7 @@ export default function BookingModal({ isOpen, onClose, preselectedService }) {
     for (let i = 0; i < 31; i++) {
       const d = new Date(base);
       d.setDate(base.getDate() + i);
-      const iso = d.toISOString().split("T")[0];
+      const iso = d.toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
       const dayOfWeek = d.getDay();
       const isSunday = dayOfWeek === 0;
 

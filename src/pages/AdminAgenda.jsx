@@ -51,7 +51,8 @@ import {
   verifyAdminPin,
   subscribeToAppointments,
   subscribeToLiveAlerts,
-  createBooking
+  createBooking,
+  getLisbonTodayDateString
 } from "../lib/supabase";
 import {
   playLuxuryChime,
@@ -115,9 +116,7 @@ export default function AdminAgenda() {
   const [agendaViewMode, setAgendaViewMode] = useState("table");
 
   // Selected Date for Agenda View
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [selectedDate, setSelectedDate] = useState(() => getLisbonTodayDateString());
 
   // Appointments State
   const [allAppointments, setAllAppointments] = useState([]);
@@ -144,7 +143,7 @@ export default function AdminAgenda() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [manualName, setManualName] = useState("");
   const [manualPhone, setManualPhone] = useState("");
-  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [manualDate, setManualDate] = useState(() => getLisbonTodayDateString());
   const [manualTime, setManualTime] = useState("11:00");
   const [manualServiceId, setManualServiceId] = useState("corte-barba-terapia");
   const [manualNotes, setManualNotes] = useState("");
@@ -163,7 +162,7 @@ export default function AdminAgenda() {
 
   // Modal: Block Slot (Time Off / Pausa / Ausência)
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
-  const [blockDate, setBlockDate] = useState(new Date().toISOString().split("T")[0]);
+  const [blockDate, setBlockDate] = useState(() => getLisbonTodayDateString());
   const [blockStartTime, setBlockStartTime] = useState("13:00");
   const [blockEndTime, setBlockEndTime] = useState("14:30");
   const [blockReason, setBlockReason] = useState("Pausa de Almoço");
@@ -190,7 +189,7 @@ export default function AdminAgenda() {
   const [isDirectSaleModalOpen, setIsDirectSaleModalOpen] = useState(false);
   const [directSaleCustomer, setDirectSaleCustomer] = useState("");
   const [directSalePhone, setDirectSalePhone] = useState("");
-  const [directSaleDate, setDirectSaleDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [directSaleDate, setDirectSaleDate] = useState(() => getLisbonTodayDateString());
   const [directSaleTime, setDirectSaleTime] = useState("12:00");
   const [directSaleService, setDirectSaleService] = useState("Corte de Cabelo");
   const [directSalePrice, setDirectSalePrice] = useState("10.00");
@@ -628,21 +627,52 @@ export default function AdminAgenda() {
     }
   };
 
-  // Direct Sale / Venda Balcão
-  const handleSaveDirectSale = (e) => {
+  // Direct Sale / Venda Balcão (Sincronizado Centralmente no Supabase)
+  const handleSaveDirectSale = async (e) => {
     e.preventDefault();
     if (!directSaleCustomer.trim()) return;
 
     setIsSavingDirectSale(true);
+    const numPrice = parseFloat(directSalePrice) || 10.0;
+
+    // 1. Grava no ledger local
     recordDirectSale({
       customerName: directSaleCustomer.trim(),
       customerPhone: directSalePhone.trim(),
       date: directSaleDate,
       time: directSaleTime,
       serviceName: directSaleService,
-      price: parseFloat(directSalePrice) || 0,
+      price: numPrice,
       notes: directSaleNotes.trim()
     });
+
+    // 2. Grava no Supabase central como concluído para que ambos (Gabriel e Paulo) vejam o mesmo valor
+    try {
+      const res = await createBooking({
+        shopSlug: "rotadocorte",
+        serviceId: "corte-cabelo",
+        date: directSaleDate,
+        time: directSaleTime,
+        customerName: directSaleCustomer.trim(),
+        customerPhone: directSalePhone.trim() || "Balcão",
+        customerNotes: `[Venda Balcão] ${directSaleNotes.trim()} (${numPrice.toFixed(2)} €)`,
+        totalPrice: `${numPrice.toFixed(2)} €`,
+        source: "admin_direct_sale"
+      });
+
+      if (res.success && res.appointment?.id) {
+        await updateAppointment(
+          res.appointment.id,
+          {
+            status: "completed",
+            service_price: `${numPrice.toFixed(2)} €`
+          },
+          currentAdminPin
+        );
+      }
+    } catch (err) {
+      console.warn("Aviso ao sincronizar venda balcão com Supabase:", err);
+    }
 
     refreshLedger();
     setIsSavingDirectSale(false);
@@ -650,6 +680,7 @@ export default function AdminAgenda() {
     setDirectSaleCustomer("");
     setDirectSalePhone("");
     setDirectSaleNotes("Venda balcão / Cliente direto");
+    loadAppointments();
   };
 
   const handleExportCSV = () => {

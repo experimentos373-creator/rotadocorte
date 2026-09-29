@@ -286,73 +286,24 @@ export async function sendAdminWhatsAppNotification({
   const greenApiGroupId =
     env.VITE_GREEN_API_GROUP_ID || "120363412598827459@g.us";
 
-  // Configured WhatsApp notification recipients (Paulo + Gabriel)
-  const ADMIN_RECIPIENTS = [
-    { phone: "351926256842", apikey: "1825930", name: "Paulo (Admin)" },
-    { phone: "351935190491", apikey: "1726665", name: "Gabriel (Barbeiro)" }
-  ];
-
-  let msg = `✂️ *ROTA DO CORTE — NOVO AGENDAMENTO!*\n\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
-  msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
-  msg += `💈 *Serviço:* ${serviceName} (${servicePrice})\n`;
-  msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
-  if (notes) msg += `📝 *Observações:* ${notes}\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `📍 _Barbearia Gabriel Silva • Paião_`;
-
-  // 1. Primary Dispatch: Green-API (Sends to dedicated WhatsApp Group AND directly to Gabriel & Paulo)
-  if (greenApiUrl && greenApiId && greenApiToken) {
+  // Dispara APENAS para o grupo oficial da barbearia no WhatsApp via Green-API
+  if (greenApiUrl && greenApiId && greenApiToken && greenApiGroupId) {
     try {
       const greenEndpoint = `${greenApiUrl}/waInstance${greenApiId}/sendMessage/${greenApiToken}`;
-      const targetChatIds = Array.from(
-        new Set(
-          [
-            greenApiGroupId,
-            ...ADMIN_RECIPIENTS.map((r) => `${r.phone}@c.us`)
-          ].filter(Boolean)
-        )
-      );
-
-      const greenPromises = targetChatIds.map(async (chatId) => {
-        try {
-          const res = await fetch(greenEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chatId,
-              message: msg
-            })
-          });
-          return res.ok;
-        } catch {
-          return false;
-        }
+      const res = await fetch(greenEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: greenApiGroupId,
+          message: msg
+        })
       });
-      await Promise.allSettled(greenPromises);
+      return { success: res.ok };
     } catch (err) {
-      console.warn("Falha no envio Green-API:", err);
+      console.warn("Falha no envio Green-API para o grupo:", err);
+      return { success: false, error: err.message };
     }
   }
 
-  // 2. Guaranteed Parallel / Fallback Dispatch: CallMeBot (Direto para Gabriel e Paulo)
-  const encodedMsg = encodeURIComponent(msg);
-  const callMeBotPromises = ADMIN_RECIPIENTS.map(async ({ phone: recipientPhone, apikey: recipientKey }) => {
-    if (!recipientPhone || !recipientKey) return;
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${recipientPhone}&text=${encodedMsg}&apikey=${recipientKey}`;
-    try {
-      await fetch(url, { mode: "no-cors", keepalive: true });
-    } catch (err) {
-      try {
-        if (typeof Image !== "undefined") {
-          const img = new Image();
-          img.src = url;
-        }
-      } catch {}
-    }
-  });
-
-  await Promise.allSettled(callMeBotPromises);
   return { success: true };
 }

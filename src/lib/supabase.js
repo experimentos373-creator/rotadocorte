@@ -56,6 +56,41 @@ function withTimeout(promise, ms = 7500) {
 const STORAGE_KEY_APPOINTMENTS = "rotadocorte_appointments_v1";
 const CACHE_ALL_APPOINTMENTS_KEY = "rotadocorte_admin_cache_all_v1";
 
+/**
+ * Safely creates an ISO timestamp representing a specific date and time in Europe/Lisbon.
+ * This guarantees consistency regardless of the customer device's local timezone.
+ */
+export function getLisbonIsoString(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  const cleanDate = String(dateStr).trim();
+  const cleanTime = String(timeStr).trim().length === 5 ? String(timeStr).trim() : String(timeStr).trim().padStart(5, "0");
+
+  try {
+    const testDate = new Date(`${cleanDate}T12:00:00Z`);
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Lisbon",
+      timeZoneName: "shortOffset"
+    });
+    const parts = formatter.formatToParts(testDate);
+    const tzPart = parts.find((p) => p.type === "timeZoneName")?.value || "GMT";
+    let offsetStr = "+00:00";
+    if (tzPart.includes("+1")) offsetStr = "+01:00";
+    else if (tzPart.includes("+2")) offsetStr = "+02:00";
+    return `${cleanDate}T${cleanTime}:00${offsetStr}`;
+  } catch (_) {
+    const m = parseInt(cleanDate.split("-")[1], 10);
+    const offset = m >= 4 && m <= 9 ? "+01:00" : "+00:00";
+    return `${cleanDate}T${cleanTime}:00${offset}`;
+  }
+}
+
+/**
+ * Safely gets today's date in Europe/Lisbon as YYYY-MM-DD
+ */
+export function getLisbonTodayDateString() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Lisbon" });
+}
+
 export function getLocalAppointments() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_APPOINTMENTS);
@@ -261,33 +296,67 @@ export async function createBooking({
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const startTimeIso = new Date(`${date}T${time}:00`).toISOString();
-      const { data, error } = await withTimeout(
-        supabase.rpc("book_appointment", {
-          p_shop_slug: shopSlug,
-          p_service_id: serviceId,
-          p_start_time: startTimeIso,
-          p_customer_name: customerName,
-          p_customer_phone: customerPhone,
-          p_customer_email: customerEmail || null,
-          p_notes: finalNotes || null
-        }),
-        8000
-      );
+      const startTimeIso = getLisbonIsoString(date, time);
+      if (!startTimeIso) {
+        return { success: false, message: "Data ou horário inválido." };
+      }
+
+      // 🔄 Resilient RPC call with 15s timeout + 1 automatic retry
+      let rpcResult = null;
+      try {
+        rpcResult = await withTimeout(
+          supabase.rpc("book_appointment", {
+            p_shop_slug: shopSlug,
+            p_service_id: serviceId,
+            p_start_time: startTimeIso,
+            p_customer_name: customerName,
+            p_customer_phone: customerPhone,
+            p_customer_email: customerEmail || null,
+            p_notes: finalNotes || null
+          }),
+          15000
+        );
+      } catch (firstErr) {
+        console.warn("Primeira tentativa de reserva falhou ou expirou, a tentar novamente:", firstErr);
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        rpcResult = await withTimeout(
+          supabase.rpc("book_appointment", {
+            p_shop_slug: shopSlug,
+            p_service_id: serviceId,
+            p_start_time: startTimeIso,
+            p_customer_name: customerName,
+            p_customer_phone: customerPhone,
+            p_customer_email: customerEmail || null,
+            p_notes: finalNotes || null
+          }),
+          15000
+        );
+      }
+
+      const { data, error } = rpcResult || {};
 
       if (error) {
-        return { success: false, error: error.message };
+        console.error("Erro Supabase RPC book_appointment:", error);
+        return {
+          success: false,
+          error: error.message,
+          message: "Não foi possível confirmar o agendamento no servidor. Por favor tente novamente."
+        };
       }
 
       if (data && !data.success) {
-        return { success: false, error: data.error, message: data.message };
+        return {
+          success: false,
+          error: data.error,
+          message: data.message || "Este horário acabou de ser reservado. Por favor escolha outro horário."
+        };
       }
 
       // 🔒 MULTI-SLOT PROTECTION: Block subsequent slots in Supabase so no other client can book them
       if (totalQuantity > 1) {
         for (let i = 1; i < consecutiveTimes.length; i++) {
           const nextSlotTime = consecutiveTimes[i];
-          const nextSlotIso = new Date(`${date}T${nextSlotTime}:00`).toISOString();
+          const nextSlotIso = getLisbonIsoString(date, nextSlotTime);
 
           try {
             await supabase.rpc("book_appointment", {
@@ -334,8 +403,17 @@ export async function createBooking({
         success: true,
         appointment: returnedAppt
       };
-    } catch (_) {
-      // Continue to local storage fallback
+    } catch (err) {
+      console.error("Exceção na gravação em Supabase:", err);
+      // Para marcações online de clientes, NUNCA simular sucesso falso no localStorage do telemóvel!
+      if (source === "client_online") {
+        return {
+          success: false,
+          error: err?.message || "NETWORK_ERROR",
+          message: "Ocorreu uma instabilidade na ligação ao servidor da barbearia. Por favor verifique a sua ligação e tente novamente."
+        };
+      }
+      // Apenas para admin manual / offline fallback
     }
   }
 
@@ -441,7 +519,7 @@ export async function updateAppointment(appointmentId, updatedFields, pin) {
     try {
       let startTimeIso = null;
       if (updatedFields.date && updatedFields.time) {
-        startTimeIso = new Date(`${updatedFields.date}T${updatedFields.time}:00`).toISOString();
+        startTimeIso = getLisbonIsoString(updatedFields.date, updatedFields.time);
       }
 
       const { data, error } = await withTimeout(
@@ -455,7 +533,7 @@ export async function updateAppointment(appointmentId, updatedFields, pin) {
           p_notes: updatedFields.customer_notes || updatedFields.notes || null,
           p_service_id: updatedFields.service_id || null
         }),
-        8000
+        15000
       );
 
       if (!error && data?.success) {
@@ -483,7 +561,7 @@ export async function deleteAppointment(appointmentId, pin) {
           p_admin_pin: pin,
           p_appointment_id: appointmentId
         }),
-        8000
+        15000
       );
       if (!error && data?.success) {
         return { success: true };
@@ -515,7 +593,7 @@ export async function getAllAppointments(pin, shopSlug = "rotadocorte") {
           p_admin_pin: activePin,
           p_shop_slug: shopSlug
         }),
-        8000
+        15000
       );
 
       if (!error && data?.success && Array.isArray(data.appointments)) {
