@@ -135,13 +135,10 @@ export default function AdminAgenda() {
   const [searchQuery, setSearchQuery] = useState("");
   const [crmSearchQuery, setCrmSearchQuery] = useState("");
 
-  // Stats Period Selector: 'today' | 'week' | 'month' | '30days' | 'all'
+  // Stats Period Selector: 'today' | 'month' | 'all'
   const [statsPeriod, setStatsPeriod] = useState("month");
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
-  const [chartViewMode, setChartViewMode] = useState("weeks"); // 'weeks' (Semanas do Mês) | 'daily' (Dia a Dia)
-  const [selectedWeekNum, setSelectedWeekNum] = useState(null);
   const [selectedDayKey, setSelectedDayKey] = useState(null);
-  const [selectedWeekDayFilter, setSelectedWeekDayFilter] = useState("all");
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -739,20 +736,10 @@ export default function AdminAgenda() {
     const targetList = unifiedAppointments.filter((a) => {
       if (!a.date) return false;
       if (statsPeriod === "today") return a.date === todayStr;
-      if (statsPeriod === "week") {
-        const d = new Date(a.date);
-        const diff = (now - d) / (1000 * 60 * 60 * 24);
-        return diff >= 0 && diff <= 7;
-      }
       if (statsPeriod === "month") {
         return a.date.substring(0, 7) === todayStr.substring(0, 7);
       }
-      if (statsPeriod === "30days") {
-        const d = new Date(a.date);
-        const diff = (now - d) / (1000 * 60 * 60 * 24);
-        return diff >= 0 && diff <= 30;
-      }
-      return true;
+      return true; // "all" (Histórico Total)
     });
 
     const nonBlocked = targetList.filter((a) => a.status !== "blocked");
@@ -921,90 +908,6 @@ export default function AdminAgenda() {
       chartPoints.push({ ...timelineData[0], x, y });
     }
 
-    // Monthly breakdown by weeks (Semana 1 a 5 conforme o dia atual)
-    const targetMonthStr = (targetList.find((a) => a.date)?.date || todayStr).substring(0, 7);
-    const [tYear, tMonth] = targetMonthStr.split("-").map(Number);
-    const daysInTargetMonth = new Date(tYear, tMonth, 0).getDate();
-    const todayDayOfMonth = now.getDate();
-    const isViewingCurrentMonth = targetMonthStr === todayStr.substring(0, 7);
-    const monthShortName = new Date(tYear, tMonth - 1, 1).toLocaleDateString("pt-PT", { month: "short" });
-
-    const rawWeekDefs = [
-      { num: 1, start: 1, end: 7, label: "Semana 1", rangeLabel: `1 - 7 ${monthShortName}` },
-      { num: 2, start: 8, end: 14, label: "Semana 2", rangeLabel: `8 - 14 ${monthShortName}` },
-      { num: 3, start: 15, end: 21, label: "Semana 3", rangeLabel: `15 - 21 ${monthShortName}` },
-      { num: 4, start: 22, end: 28, label: "Semana 4", rangeLabel: `22 - 28 ${monthShortName}` }
-    ];
-
-    if (daysInTargetMonth > 28) {
-      rawWeekDefs.push({
-        num: 5,
-        start: 29,
-        end: daysInTargetMonth,
-        label: "Semana 5",
-        rangeLabel: `29 - ${daysInTargetMonth} ${monthShortName}`
-      });
-    }
-
-    const monthWeeks = rawWeekDefs.map((w) => {
-      const isCurrentWeek = isViewingCurrentMonth && todayDayOfMonth >= w.start && todayDayOfMonth <= w.end;
-      const isPastWeek = isViewingCurrentMonth ? todayDayOfMonth > w.end : true;
-      const isFutureWeek = isViewingCurrentMonth ? todayDayOfMonth < w.start : false;
-
-      const weekCompleted = completed.filter((a) => {
-        if (!a.date.startsWith(targetMonthStr)) return false;
-        const dNum = parseInt(a.date.split("-")[2], 10);
-        return dNum >= w.start && dNum <= w.end;
-      });
-
-      const weekConfirmed = confirmed.filter((a) => {
-        if (!a.date.startsWith(targetMonthStr)) return false;
-        const dNum = parseInt(a.date.split("-")[2], 10);
-        return dNum >= w.start && dNum <= w.end;
-      });
-
-      const rev = weekCompleted.reduce((sum, a) => sum + parsePrice(a.service_price), 0);
-      const confRev = weekConfirmed.reduce((sum, a) => sum + parsePrice(a.service_price), 0);
-
-      // Collect active days
-      const daysInWeek = [];
-      for (let day = w.start; day <= w.end; day++) {
-        const dStr = `${targetMonthStr}-${String(day).padStart(2, "0")}`;
-        if (dayDetailsMap[dStr]) {
-          daysInWeek.push(dayDetailsMap[dStr]);
-        }
-      }
-
-      return {
-        ...w,
-        revenue: rev,
-        count: weekCompleted.length,
-        confirmedRevenue: confRev,
-        confirmedCount: weekConfirmed.length,
-        isCurrentWeek,
-        isPastWeek,
-        isFutureWeek,
-        appointments: weekCompleted,
-        confirmedAppointments: weekConfirmed,
-        daysInWeek
-      };
-    });
-
-    const maxWeekRev = Math.max(...monthWeeks.map((w) => w.revenue), 10);
-    let bestWeekNum = null;
-    let maxFoundRev = 0;
-    monthWeeks.forEach((w) => {
-      if (w.revenue > maxFoundRev) {
-        maxFoundRev = w.revenue;
-        bestWeekNum = w.num;
-      }
-    });
-
-    monthWeeks.forEach((w) => {
-      w.isBestWeek = w.num === bestWeekNum && w.revenue > 0;
-      w.heightPercent = maxWeekRev > 0 ? Math.max(Math.round((w.revenue / maxWeekRev) * 100), w.revenue > 0 ? 15 : 8) : 8;
-    });
-
     return {
       total: nonBlocked.length,
       uniqueClientsCount,
@@ -1023,8 +926,6 @@ export default function AdminAgenda() {
       maxRev: yMax,
       yMax,
       yTicks,
-      monthWeeks,
-      maxWeekRev,
       dayDetailsMap,
       dayConfirmedMap,
       chartSvgPath,
@@ -2097,9 +1998,7 @@ export default function AdminAgenda() {
                 <div className="flex items-center gap-1 p-1 rounded-lg border border-zinc-800 bg-zinc-950/60 overflow-x-auto">
                   {[
                     { id: "today", label: "Hoje" },
-                    { id: "week", label: "Semana" },
                     { id: "month", label: "Mês Atual" },
-                    { id: "30days", label: "30 Dias" },
                     { id: "all", label: "Histórico Total" }
                   ].map((p) => (
                     <button
@@ -2144,7 +2043,7 @@ export default function AdminAgenda() {
                 <div className={`lg:col-span-8 p-5 rounded-xl border space-y-4 ${
                   isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
                 }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-sm text-zinc-100">
@@ -2157,47 +2056,13 @@ export default function AdminAgenda() {
                         )}
                       </div>
                       <p className="text-xs text-zinc-500 mt-0.5">
-                        {statsPeriod === "month"
-                          ? (chartViewMode === "weeks"
-                              ? "Faturação semanal do mês • Semana em curso destacada"
-                              : "Rendimento diário detalhado com escala lateral em euros")
-                          : "Rendimento diário no período selecionado."}
+                        Rendimento diário detalhado no mês com escala lateral em euros.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      {/* View Mode Toggle when viewing month */}
-                      {statsPeriod === "month" && (
-                        <div className="flex items-center gap-1 p-0.5 rounded-lg border border-zinc-800 bg-zinc-950/70">
-                          <button
-                            type="button"
-                            onClick={() => setChartViewMode("weeks")}
-                            className={`px-2.5 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                              chartViewMode === "weeks"
-                                ? "bg-[#C6924B] text-zinc-950 shadow-xs"
-                                : "text-zinc-400 hover:text-zinc-200"
-                            }`}
-                          >
-                            📊 Por Semanas
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setChartViewMode("daily")}
-                            className={`px-2.5 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                              chartViewMode === "daily"
-                                ? "bg-[#C6924B] text-zinc-950 shadow-xs"
-                                : "text-zinc-400 hover:text-zinc-200"
-                            }`}
-                          >
-                            📈 Dia a Dia
-                          </button>
-                        </div>
-                      )}
-
-                      <span className="font-mono font-bold text-base text-zinc-100 shrink-0">
-                        {statsData.completedRevenue.toFixed(2)} €
-                      </span>
-                    </div>
+                    <span className="font-mono font-bold text-base text-zinc-100">
+                      {statsData.completedRevenue.toFixed(2)} €
+                    </span>
                   </div>
 
                   {statsData.timelineData.length === 0 ? (
@@ -2206,451 +2071,198 @@ export default function AdminAgenda() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {/* VIEW 1: SEMANAS DO MÊS (5 Colunas com alturas proporcionais e semana atual em curso) */}
-                      {statsPeriod === "month" && chartViewMode === "weeks" ? (
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-5 gap-2 sm:gap-3">
-                            {statsData.monthWeeks.map((w) => {
-                              const activeWeekNumber = selectedWeekNum || (statsData.monthWeeks.find((x) => x.isCurrentWeek)?.num || 1);
-                              const isSelected = activeWeekNumber === w.num;
+                      {/* SVG Timeline com Escala Lateral em Euros & Pontos com Valores */}
+                      <div className="space-y-2">
+                        <div className="w-full relative">
+                          <svg
+                            className="w-full h-52 overflow-visible"
+                            viewBox={`0 0 ${statsData.chartW} ${statsData.chartH}`}
+                            preserveAspectRatio="none"
+                          >
+                            <defs>
+                              <linearGradient id="zincRevenueGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#C6924B" stopOpacity="0.38" />
+                                <stop offset="100%" stopColor="#C6924B" stopOpacity="0.0" />
+                              </linearGradient>
+                            </defs>
 
-                              return (
-                                <div
-                                  key={w.num}
-                                  onClick={() => {
-                                    setSelectedWeekNum(w.num);
-                                    setSelectedWeekDayFilter("all");
-                                  }}
-                                  className={`flex flex-col justify-between p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer relative group ${
-                                    isSelected
-                                      ? "border-[#C6924B] bg-[#C6924B]/10 ring-1 ring-[#C6924B]/50"
-                                      : w.isCurrentWeek
-                                      ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-400/80"
-                                      : isLight
-                                      ? "border-zinc-200 bg-zinc-50 hover:border-zinc-300"
-                                      : "border-zinc-800/80 bg-zinc-950/40 hover:border-zinc-700"
-                                  }`}
-                                >
-                                  {/* Top Badge */}
-                                  <div className="min-h-[22px] flex items-center justify-center">
-                                    {w.isCurrentWeek ? (
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shrink-0">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                                        <span className="hidden sm:inline">Semana</span> Atual
-                                      </span>
-                                    ) : w.isBestWeek ? (
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C6924B]/20 text-[#C6924B] border border-[#C6924B]/40 shrink-0">
-                                        🏆 Melhor
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] text-zinc-500 font-mono text-center">
-                                        {w.label}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Dynamic Height Bar Track */}
-                                  <div className="h-32 sm:h-38 w-full my-2 flex flex-col justify-end items-center rounded-lg bg-zinc-900/60 p-1 relative overflow-hidden border border-zinc-800/50">
-                                    {/* Guideline */}
-                                    <div className="absolute inset-0 flex flex-col justify-between p-1.5 opacity-10 pointer-events-none">
-                                      <div className="w-full border-b border-zinc-500 border-dashed" />
-                                      <div className="w-full border-b border-zinc-500 border-dashed" />
-                                      <div className="w-full border-b border-zinc-500 border-dashed" />
-                                    </div>
-
-                                    {/* Rising Bar */}
-                                    <div
-                                      className={`w-full rounded-md flex flex-col justify-between items-center py-1 transition-all duration-500 relative z-10 ${
-                                        w.revenue > 0
-                                          ? "bg-gradient-to-t from-[#8E5E20] via-[#C6924B] to-[#F3CE86] shadow-sm"
-                                          : "bg-zinc-800/40"
-                                      }`}
-                                      style={{ height: `${w.heightPercent}%` }}
-                                    >
-                                      <span className={`text-[10px] sm:text-xs font-mono font-bold ${
-                                        w.revenue > 0 ? "text-zinc-950 drop-shadow-xs" : "text-zinc-500"
-                                      }`}>
-                                        {w.revenue > 0 ? `${w.revenue.toFixed(0)}€` : "0€"}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Footer Details */}
-                                  <div className="text-center space-y-0.5 pt-1 border-t border-zinc-800/60">
-                                    <span className="text-[11px] font-bold font-mono text-zinc-100 block">
-                                      {w.revenue.toFixed(2)} €
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 font-mono block">
-                                      {w.count} corte{w.count !== 1 ? "s" : ""}
-                                    </span>
-                                    <span className="text-[9px] text-zinc-500 font-mono block truncate">
-                                      {w.rangeLabel}
-                                    </span>
-                                    {w.isCurrentWeek && w.confirmedCount > 0 && (
-                                      <span className="text-[9px] font-mono text-amber-400 font-semibold block">
-                                        +{w.confirmedCount} hoje
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        /* VIEW 2: SVG TIMELINE COM ESCALA LATERAL EM EUROS & PONTOS INTERATIVOS */
-                        <div className="space-y-3">
-                          <div className="w-full relative">
-                            <svg
-                              className="w-full h-52 overflow-visible"
-                              viewBox={`0 0 ${statsData.chartW} ${statsData.chartH}`}
-                              preserveAspectRatio="none"
-                            >
-                              <defs>
-                                <linearGradient id="zincRevenueGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#C6924B" stopOpacity="0.38" />
-                                  <stop offset="100%" stopColor="#C6924B" stopOpacity="0.0" />
-                                </linearGradient>
-                              </defs>
-
-                              {/* Lateral Y-Axis Ticks & Horizontal Grid Lines */}
-                              {statsData.yTicks.map((t, idx) => (
-                                <g key={idx}>
-                                  <line
-                                    x1={statsData.padL}
-                                    y1={t.y}
-                                    x2={statsData.chartW - statsData.padR}
-                                    y2={t.y}
-                                    stroke="currentColor"
-                                    strokeDasharray={t.val === 0 ? "none" : "3 3"}
-                                    strokeWidth={t.val === 0 ? "1.5" : "1"}
-                                    className={t.val === 0 ? "text-zinc-700" : "text-zinc-800/80"}
-                                  />
-                                  <text
-                                    x={statsData.padL - 10}
-                                    y={t.y + 3.5}
-                                    textAnchor="end"
-                                    className="text-[10px] font-mono font-semibold fill-zinc-400"
-                                  >
-                                    {t.label}
-                                  </text>
-                                </g>
-                              ))}
-
-                              {/* Area fill */}
-                              {statsData.chartAreaPath && (
-                                <path d={statsData.chartAreaPath} fill="url(#zincRevenueGrad)" />
-                              )}
-
-                              {/* Stroke line */}
-                              {statsData.chartSvgPath && (
-                                <path
-                                  d={statsData.chartSvgPath}
-                                  fill="none"
-                                  stroke="#C6924B"
-                                  strokeWidth="2.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                            {/* Lateral Y-Axis Ticks & Horizontal Grid Lines */}
+                            {statsData.yTicks.map((t, idx) => (
+                              <g key={idx}>
+                                <line
+                                  x1={statsData.padL}
+                                  y1={t.y}
+                                  x2={statsData.chartW - statsData.padR}
+                                  y2={t.y}
+                                  stroke="currentColor"
+                                  strokeDasharray={t.val === 0 ? "none" : "3 3"}
+                                  strokeWidth={t.val === 0 ? "1.5" : "1"}
+                                  className={t.val === 0 ? "text-zinc-700" : "text-zinc-800/80"}
                                 />
-                              )}
+                                <text
+                                  x={statsData.padL - 10}
+                                  y={t.y + 3.5}
+                                  textAnchor="end"
+                                  className="text-[10px] font-mono font-semibold fill-zinc-400"
+                                >
+                                  {t.label}
+                                </text>
+                              </g>
+                            ))}
 
-                              {/* Points with Value Labels */}
-                              {statsData.chartPoints.map((pt, i) => {
-                                const isSelected = selectedDayKey === pt.date;
-                                return (
-                                  <g
-                                    key={i}
-                                    className="cursor-pointer group"
-                                    onClick={() => setSelectedDayKey(pt.date)}
+                            {/* Area fill */}
+                            {statsData.chartAreaPath && (
+                              <path d={statsData.chartAreaPath} fill="url(#zincRevenueGrad)" />
+                            )}
+
+                            {/* Stroke line */}
+                            {statsData.chartSvgPath && (
+                              <path
+                                d={statsData.chartSvgPath}
+                                fill="none"
+                                stroke="#C6924B"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            )}
+
+                            {/* Points with Value Labels */}
+                            {statsData.chartPoints.map((pt, i) => {
+                              const isSelected = selectedDayKey === pt.date;
+                              return (
+                                <g
+                                  key={i}
+                                  className="cursor-pointer group"
+                                  onClick={() => setSelectedDayKey(pt.date)}
+                                >
+                                  {/* Value badge above point */}
+                                  <text
+                                    x={pt.x}
+                                    y={pt.y - 9}
+                                    textAnchor="middle"
+                                    className={`text-[9px] font-mono font-bold transition-all ${
+                                      isSelected ? "fill-amber-300 text-[10px]" : "fill-zinc-400 group-hover:fill-zinc-100"
+                                    }`}
                                   >
-                                    {/* Value badge above point */}
-                                    <text
-                                      x={pt.x}
-                                      y={pt.y - 9}
-                                      textAnchor="middle"
-                                      className={`text-[9px] font-mono font-bold transition-all ${
-                                        isSelected ? "fill-amber-300 text-[10px]" : "fill-zinc-400 group-hover:fill-zinc-100"
-                                      }`}
-                                    >
-                                      {pt.revenue.toFixed(0)}€
-                                    </text>
+                                    {pt.revenue.toFixed(0)}€
+                                  </text>
 
-                                    {/* Selection ring */}
-                                    {isSelected && (
-                                      <circle
-                                        cx={pt.x}
-                                        cy={pt.y}
-                                        r="8"
-                                        fill="none"
-                                        stroke="#C6924B"
-                                        strokeWidth="1.5"
-                                        className="animate-ping opacity-75"
-                                      />
-                                    )}
-
-                                    {/* Main point */}
+                                  {/* Selection ring */}
+                                  {isSelected && (
                                     <circle
                                       cx={pt.x}
                                       cy={pt.y}
-                                      r={isSelected ? "5" : "3.5"}
-                                      fill={isSelected ? "#F59E0B" : "#C6924B"}
-                                      stroke="#18181B"
-                                      strokeWidth="2"
-                                      className="transition-transform group-hover:scale-125"
+                                      r="8"
+                                      fill="none"
+                                      stroke="#C6924B"
+                                      strokeWidth="1.5"
+                                      className="animate-ping opacity-75"
                                     />
-                                  </g>
-                                );
-                              })}
-                            </svg>
-                          </div>
+                                  )}
 
-                          {/* X-Axis Dates */}
-                          <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-800 pl-12 pr-4">
-                            {statsData.timelineData.map((d) => (
-                              <button
-                                key={d.date}
-                                type="button"
-                                onClick={() => setSelectedDayKey(d.date)}
-                                className={`hover:text-zinc-200 transition-colors cursor-pointer ${
-                                  selectedDayKey === d.date ? "text-[#C6924B] font-bold underline" : ""
-                                }`}
-                              >
-                                {d.label}
-                              </button>
-                            ))}
-                          </div>
+                                  {/* Main point */}
+                                  <circle
+                                    cx={pt.x}
+                                    cy={pt.y}
+                                    r={isSelected ? "5" : "3.5"}
+                                    fill={isSelected ? "#F59E0B" : "#C6924B"}
+                                    stroke="#18181B"
+                                    strokeWidth="2"
+                                    className="transition-transform group-hover:scale-125"
+                                  />
+                                </g>
+                              );
+                            })}
+                          </svg>
                         </div>
-                      )}
 
-                      {/* ================================================================= */}
-                      {/* INSPECTION DRAWER: O QUE ELE FEZ EM CADA DIA / SEMANA            */}
-                      {/* ================================================================= */}
+                        {/* X-Axis Dates */}
+                        <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-800 pl-12 pr-4">
+                          {statsData.timelineData.map((d) => (
+                            <button
+                              key={d.date}
+                              type="button"
+                              onClick={() => setSelectedDayKey(d.date)}
+                              className={`hover:text-zinc-200 transition-colors cursor-pointer ${
+                                selectedDayKey === d.date ? "text-[#C6924B] font-bold underline" : ""
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Daily Details: O Que Fez no Dia Selecionado */}
                       {(() => {
-                        if (statsPeriod === "month" && chartViewMode === "weeks") {
-                          const activeWeekNumber = selectedWeekNum || (statsData.monthWeeks.find((x) => x.isCurrentWeek)?.num || 1);
-                          const activeWeek = statsData.monthWeeks.find((w) => w.num === activeWeekNumber) || statsData.monthWeeks[0];
+                        const activeDayStr = selectedDayKey || (statsData.timelineData[statsData.timelineData.length - 1]?.date || null);
+                        const activeDayData = activeDayStr ? statsData.dayDetailsMap[activeDayStr] : null;
 
-                          const displayAppts = selectedWeekDayFilter === "all"
-                            ? activeWeek.appointments
-                            : activeWeek.appointments.filter((a) => a.date === selectedWeekDayFilter);
-
-                          return (
-                            <div className="mt-4 p-3.5 sm:p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
-                              {/* Header */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <CalendarDays className="w-4 h-4 text-[#C6924B]" />
-                                  <span className="font-semibold text-xs text-zinc-100">
-                                    O Que Fez na {activeWeek.label} ({activeWeek.rangeLabel})
-                                  </span>
-                                  {activeWeek.isCurrentWeek && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                                      Semana Atual
-                                    </span>
-                                  )}
-                                  {activeWeek.isBestWeek && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C6924B]/20 text-[#C6924B] border border-[#C6924B]/40">
-                                      🏆 Melhor do Mês
-                                    </span>
-                                  )}
-                                </div>
-
+                        return (
+                          <div className="mt-4 p-3.5 sm:p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
+                            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="w-4 h-4 text-[#C6924B]" />
+                                <span className="font-semibold text-xs text-zinc-100">
+                                  {activeDayStr
+                                    ? `O Que Fez no Dia ${activeDayStr.substring(8)}/${activeDayStr.substring(5, 7)}/${activeDayStr.substring(0, 4)}`
+                                    : "Clica em qualquer ponto no gráfico para inspecionar os cortes"}
+                                </span>
+                              </div>
+                              {activeDayData && (
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className="font-mono text-zinc-400">
-                                    {activeWeek.count} corte{activeWeek.count !== 1 ? "s" : ""}
+                                    {activeDayData.count} corte{activeDayData.count !== 1 ? "s" : ""}
                                   </span>
                                   <span className="font-mono font-bold text-sm text-[#C6924B]">
-                                    {activeWeek.revenue.toFixed(2)} €
+                                    {activeDayData.revenue.toFixed(2)} €
                                   </span>
                                 </div>
-                              </div>
+                              )}
+                            </div>
 
-                              {/* Day Filter Chips (if week has activity in multiple days) */}
-                              {activeWeek.daysInWeek && activeWeek.daysInWeek.length > 1 && (
-                                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedWeekDayFilter("all")}
-                                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors shrink-0 cursor-pointer ${
-                                      selectedWeekDayFilter === "all"
-                                        ? "bg-zinc-100 text-zinc-950 font-bold"
-                                        : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-                                    }`}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                              {!activeDayData || activeDayData.appointments.length === 0 ? (
+                                <div className="col-span-full py-4 text-center text-xs text-zinc-500">
+                                  Sem detalhes para esta data. Clica em qualquer ponto no gráfico acima.
+                                </div>
+                              ) : (
+                                activeDayData.appointments.map((appt, idx) => (
+                                  <div
+                                    key={appt.id || idx}
+                                    className="p-2 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2"
                                   >
-                                    Todos os Dias ({activeWeek.count})
-                                  </button>
-                                  {activeWeek.daysInWeek.map((day) => (
-                                    <button
-                                      key={day.date}
-                                      type="button"
-                                      onClick={() => setSelectedWeekDayFilter(day.date)}
-                                      className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition-colors shrink-0 cursor-pointer ${
-                                        selectedWeekDayFilter === day.date
-                                          ? "bg-[#C6924B] text-zinc-950 font-bold"
-                                          : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
-                                      }`}
-                                    >
-                                      Dia {day.date.substring(8)} ({day.revenue.toFixed(0)}€ • {day.count} cortes)
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Client Appointments List */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                                {displayAppts.length === 0 ? (
-                                  <div className="col-span-full py-4 text-center text-xs text-zinc-500">
-                                    {activeWeek.isCurrentWeek
-                                      ? "Nenhum corte concluído ainda nesta semana. Veja abaixo as marcações em curso para hoje."
-                                      : "Sem atendimentos registados nesta semana."}
-                                  </div>
-                                ) : (
-                                  displayAppts.map((appt, idx) => (
-                                    <div
-                                      key={appt.id || idx}
-                                      className="p-2 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2 hover:border-zinc-700 transition-colors"
-                                    >
-                                      <div className="min-w-0 space-y-0.5">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-semibold text-xs text-zinc-100 truncate">
-                                            {appt.customer_name || "Cliente"}
-                                          </span>
-                                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                            {appt.time || "Atendido"}
-                                          </span>
-                                        </div>
-                                        <p className="text-[11px] text-zinc-400 truncate">
-                                          {appt.service_name || "Corte de Cabelo"}
-                                        </p>
-                                        <span className="text-[10px] font-mono text-zinc-500">
-                                          {appt.date} {appt.customer_phone ? `• ${appt.customer_phone}` : ""}
+                                    <div className="min-w-0 space-y-0.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-semibold text-xs text-zinc-100 truncate">
+                                          {appt.customer_name || "Cliente"}
+                                        </span>
+                                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                          {appt.time || "Atendido"}
                                         </span>
                                       </div>
-                                      <div className="text-right shrink-0">
-                                        <span className="font-mono font-bold text-xs text-[#C6924B] block">
-                                          {appt.service_price}
-                                        </span>
-                                        <span className="text-[9px] text-emerald-400 font-medium">
-                                          Concluído
-                                        </span>
-                                      </div>
+                                      <p className="text-[11px] text-zinc-400 truncate">
+                                        {appt.service_name}
+                                      </p>
+                                      <span className="text-[10px] font-mono text-zinc-500">
+                                        {appt.customer_phone || "Sem telefone"}
+                                      </span>
                                     </div>
-                                  ))
-                                )}
-                              </div>
-
-                              {/* Today's upcoming cuts if current week */}
-                              {activeWeek.isCurrentWeek && activeWeek.confirmedAppointments && activeWeek.confirmedAppointments.length > 0 && (
-                                <div className="pt-2 border-t border-zinc-800/60 space-y-2">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-semibold text-amber-400 flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5" />
-                                      Marcações Agendadas Para Hoje ({activeWeek.confirmedAppointments.length} clientes):
-                                    </span>
-                                    <span className="font-mono font-bold text-amber-300">
-                                      {activeWeek.confirmedRevenue.toFixed(2)} € previstos
-                                    </span>
+                                    <div className="text-right shrink-0">
+                                      <span className="font-mono font-bold text-xs text-[#C6924B] block">
+                                        {appt.service_price}
+                                      </span>
+                                      <span className="text-[9px] text-emerald-400 font-medium">
+                                        Concluído
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {activeWeek.confirmedAppointments.map((appt, idx) => (
-                                      <div
-                                        key={appt.id || idx}
-                                        className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center justify-between gap-2"
-                                      >
-                                        <div className="min-w-0">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="font-semibold text-xs text-zinc-100 truncate">
-                                              {appt.customer_name}
-                                            </span>
-                                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold">
-                                              {appt.time}
-                                            </span>
-                                          </div>
-                                          <p className="text-[10px] text-zinc-400 truncate">
-                                            {appt.service_name}
-                                          </p>
-                                        </div>
-                                        <span className="font-mono font-bold text-xs text-amber-400 shrink-0">
-                                          {appt.service_price}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
+                                ))
                               )}
                             </div>
-                          );
-                        } else {
-                          // DAILY INSPECTION
-                          const activeDayStr = selectedDayKey || (statsData.timelineData[statsData.timelineData.length - 1]?.date || null);
-                          const activeDayData = activeDayStr ? statsData.dayDetailsMap[activeDayStr] : null;
-
-                          return (
-                            <div className="mt-4 p-3.5 sm:p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
-                              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                                <div className="flex items-center gap-2">
-                                  <CalendarDays className="w-4 h-4 text-[#C6924B]" />
-                                  <span className="font-semibold text-xs text-zinc-100">
-                                    {activeDayStr
-                                      ? `O Que Fez no Dia ${activeDayStr.substring(8)}/${activeDayStr.substring(5, 7)}/${activeDayStr.substring(0, 4)}`
-                                      : "Selecione um dia no gráfico para inspecionar"}
-                                  </span>
-                                </div>
-                                {activeDayData && (
-                                  <div className="flex items-center gap-3 text-xs">
-                                    <span className="font-mono text-zinc-400">
-                                      {activeDayData.count} corte{activeDayData.count !== 1 ? "s" : ""}
-                                    </span>
-                                    <span className="font-mono font-bold text-sm text-[#C6924B]">
-                                      {activeDayData.revenue.toFixed(2)} €
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                                {!activeDayData || activeDayData.appointments.length === 0 ? (
-                                  <div className="col-span-full py-4 text-center text-xs text-zinc-500">
-                                    Sem detalhes para esta data. Clica em qualquer ponto no gráfico acima.
-                                  </div>
-                                ) : (
-                                  activeDayData.appointments.map((appt, idx) => (
-                                    <div
-                                      key={appt.id || idx}
-                                      className="p-2 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2"
-                                    >
-                                      <div className="min-w-0 space-y-0.5">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-semibold text-xs text-zinc-100 truncate">
-                                            {appt.customer_name || "Cliente"}
-                                          </span>
-                                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                            {appt.time || "Atendido"}
-                                          </span>
-                                        </div>
-                                        <p className="text-[11px] text-zinc-400 truncate">
-                                          {appt.service_name}
-                                        </p>
-                                        <span className="text-[10px] font-mono text-zinc-500">
-                                          {appt.customer_phone || "Sem telefone"}
-                                        </span>
-                                      </div>
-                                      <div className="text-right shrink-0">
-                                        <span className="font-mono font-bold text-xs text-[#C6924B] block">
-                                          {appt.service_price}
-                                        </span>
-                                        <span className="text-[9px] text-emerald-400 font-medium">
-                                          Concluído
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }
+                          </div>
+                        );
                       })()}
                     </div>
                   )}
