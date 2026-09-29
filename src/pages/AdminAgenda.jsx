@@ -139,6 +139,7 @@ export default function AdminAgenda() {
   const [statsPeriod, setStatsPeriod] = useState("month");
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
   const [selectedDayKey, setSelectedDayKey] = useState(null);
+  const [selectedWeekKey, setSelectedWeekKey] = useState(null);
 
   // Modal: New Manual Appointment
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -178,6 +179,34 @@ export default function AdminAgenda() {
       .replace(",", ".");
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
+  };
+
+  // Helper to get week info from a date string "YYYY-MM-DD"
+  const getWeekInfo = (dateStr) => {
+    if (!dateStr) return { weekKey: "other", weekLabel: "Outros", shortLabel: "Outros", startDate: "", endDate: "", monTimestamp: 0 };
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const d = new Date(year, month - 1, day);
+    const dayOfWeek = d.getDay();
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    
+    const pad = (n) => String(n).padStart(2, "0");
+    const monStr = `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
+    const sunStr = `${sun.getFullYear()}-${pad(sun.getMonth() + 1)}-${pad(sun.getDate())}`;
+    const labelMon = `${pad(mon.getDate())}/${pad(mon.getMonth() + 1)}`;
+    const labelSun = `${pad(sun.getDate())}/${pad(sun.getMonth() + 1)}`;
+    
+    return {
+      weekKey: `${monStr}_${sunStr}`,
+      weekLabel: `Semana de ${labelMon} a ${labelSun}`,
+      shortLabel: `${labelMon} - ${labelSun}`,
+      startDate: monStr,
+      endDate: sunStr,
+      monTimestamp: mon.getTime()
+    };
   };
 
   // 🔒 Financial Ledger & CRM state
@@ -873,6 +902,43 @@ export default function AdminAgenda() {
       return tB.localeCompare(tA);
     });
 
+    // Group all non-blocked appointments by week
+    const weeksMap = {};
+    allAppointmentsList.forEach((appt) => {
+      const { weekKey, weekLabel, shortLabel, startDate, endDate, monTimestamp } = getWeekInfo(appt.date);
+      if (!weeksMap[weekKey]) {
+        weeksMap[weekKey] = {
+          weekKey,
+          weekLabel,
+          shortLabel,
+          startDate,
+          endDate,
+          monTimestamp,
+          revenue: 0,
+          completedCount: 0,
+          totalCount: 0,
+          appointments: [],
+          dayKeys: []
+        };
+      }
+      const w = weeksMap[weekKey];
+      if (appt.status === "completed") {
+        w.revenue += parsePrice(appt.service_price);
+        w.completedCount += 1;
+      }
+      w.totalCount += 1;
+      w.appointments.push(appt);
+      if (appt.date && !w.dayKeys.includes(appt.date)) {
+        w.dayKeys.push(appt.date);
+      }
+    });
+
+    Object.values(weeksMap).forEach((w) => {
+      w.dayKeys.sort().reverse();
+    });
+
+    const sortedWeeks = Object.values(weeksMap).sort((a, b) => b.monTimestamp - a.monTimestamp);
+
     // Dynamic Y-Max & Lateral Scale
     const maxDayRevenue = timelineData.length > 0 ? Math.max(...timelineData.map((t) => t.revenue), 10) : 10;
     const targetHeadroom = maxDayRevenue * 1.25;
@@ -944,6 +1010,8 @@ export default function AdminAgenda() {
       serviceRanking,
       timelineData,
       allAppointmentsList,
+      sortedWeeks,
+      weeksMap,
       maxRev: yMax,
       yMax,
       yTicks,
@@ -2029,6 +2097,7 @@ export default function AdminAgenda() {
                       onClick={() => {
                         setStatsPeriod(p.id);
                         setSelectedDayKey(null);
+                        setSelectedWeekKey(null);
                       }}
                       className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shrink-0 ${
                         statsPeriod === p.id
@@ -2166,7 +2235,15 @@ export default function AdminAgenda() {
                                 <g
                                   key={i}
                                   className="cursor-pointer group"
-                                  onClick={() => setSelectedDayKey((prev) => (prev === pt.date ? null : pt.date))}
+                                  onClick={() => {
+                                    if (selectedDayKey === pt.date) {
+                                      setSelectedDayKey(null);
+                                    } else {
+                                      setSelectedDayKey(pt.date);
+                                      const wInfo = getWeekInfo(pt.date);
+                                      setSelectedWeekKey(wInfo.weekKey);
+                                    }
+                                  }}
                                 >
                                   {/* Value badge above point */}
                                   <text
@@ -2215,7 +2292,15 @@ export default function AdminAgenda() {
                             <button
                               key={d.date}
                               type="button"
-                              onClick={() => setSelectedDayKey((prev) => (prev === d.date ? null : d.date))}
+                              onClick={() => {
+                                if (selectedDayKey === d.date) {
+                                  setSelectedDayKey(null);
+                                } else {
+                                  setSelectedDayKey(d.date);
+                                  const wInfo = getWeekInfo(d.date);
+                                  setSelectedWeekKey(wInfo.weekKey);
+                                }
+                              }}
                               className={`hover:text-zinc-200 transition-colors cursor-pointer ${
                                 selectedDayKey === d.date ? "text-[#C6924B] font-bold underline" : ""
                               }`}
@@ -2226,21 +2311,102 @@ export default function AdminAgenda() {
                         </div>
                       </div>
 
-                      {/* Daily Details / Histórico Total */}
+                      {/* Daily & Weekly Details: Organizado por Semana */}
                       {(() => {
-                        const isAllDays = !selectedDayKey;
+                        const totalHistoryCount = statsData.allAppointmentsList?.length || 0;
                         const activeDayData = selectedDayKey ? statsData.dayDetailsMap[selectedDayKey] : null;
-                        const displayedList = isAllDays
-                          ? (statsData.allAppointmentsList || [])
-                          : (activeDayData?.appointments || []);
+                        const activeWeekData = selectedWeekKey
+                          ? statsData.weeksMap[selectedWeekKey]
+                          : selectedDayKey
+                            ? statsData.weeksMap[getWeekInfo(selectedDayKey).weekKey]
+                            : null;
 
-                        const displayedRevenue = isAllDays
-                          ? statsData.completedRevenue
-                          : (activeDayData?.revenue || 0);
+                        // Title, Subtitle and Stats
+                        let sectionTitle = "📋 Histórico Semanal de Cortes";
+                        let sectionSubtitle = "Organizado por semana com totais acumulados";
+                        let sectionCount = statsData.completedCount;
+                        let sectionRevenue = statsData.completedRevenue;
 
-                        const displayedCount = isAllDays
-                          ? statsData.completedCount
-                          : (activeDayData?.completedCount ?? activeDayData?.count ?? displayedList.length);
+                        if (selectedDayKey) {
+                          sectionTitle = `📅 Cortes do Dia ${selectedDayKey.substring(8)}/${selectedDayKey.substring(5, 7)}/${selectedDayKey.substring(0, 4)}`;
+                          sectionSubtitle = activeWeekData ? `Integrado na ${activeWeekData.weekLabel}` : "Filtrado para o dia selecionado";
+                          sectionCount = activeDayData?.completedCount ?? activeDayData?.count ?? activeDayData?.appointments?.length ?? 0;
+                          sectionRevenue = activeDayData?.revenue || 0;
+                        } else if (selectedWeekKey && activeWeekData) {
+                          sectionTitle = `🗓️ ${activeWeekData.weekLabel}`;
+                          sectionSubtitle = "Faturação e cortes desta semana";
+                          sectionCount = activeWeekData.completedCount || activeWeekData.totalCount;
+                          sectionRevenue = activeWeekData.revenue;
+                        } else if (statsPeriod === "month") {
+                          sectionTitle = "📋 Semanas do Mês Atual";
+                          sectionSubtitle = "Resumo e cortes agrupados por semana";
+                        } else if (statsPeriod === "week") {
+                          sectionTitle = "📋 Cortes dos Últimos 7 Dias";
+                          sectionSubtitle = "Detalhamento da semana atual";
+                        } else if (statsPeriod === "today") {
+                          sectionTitle = "📋 Cortes de Hoje";
+                          sectionSubtitle = "Movimento registado hoje";
+                        }
+
+                        // Helper to render an appointment card
+                        const renderApptCard = (appt, idx) => {
+                          const isDirect = appt.source === "admin_direct_sale" || (appt.customer_notes && appt.customer_notes.includes("[Venda Balcão]"));
+                          const dateFormatted = appt.date
+                            ? `${appt.date.substring(8, 10)}/${appt.date.substring(5, 7)}`
+                            : "";
+
+                          return (
+                            <div
+                              key={appt.id || `${appt.date}-${appt.time}-${idx}`}
+                              className="p-2.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2.5 hover:border-zinc-700/80 transition-colors"
+                            >
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-xs text-zinc-100 truncate">
+                                    {appt.customer_name || "Cliente"}
+                                  </span>
+                                  {dateFormatted && (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+                                      📅 {dateFormatted}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-800">
+                                    ⏰ {appt.time || "Horário livre"}
+                                  </span>
+                                  {isDirect && (
+                                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
+                                      Balcão
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-zinc-400 truncate">
+                                  {appt.service_name || "Serviço"}
+                                </p>
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  {appt.customer_phone || "Sem contacto"}
+                                </span>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-mono font-bold text-xs text-[#C6924B] block">
+                                  {appt.service_price}
+                                </span>
+                                {appt.status === "completed" ? (
+                                  <span className="text-[9px] text-emerald-400 font-medium">
+                                    Concluído
+                                  </span>
+                                ) : appt.status === "confirmed" ? (
+                                  <span className="text-[9px] text-cyan-400 font-medium">
+                                    Confirmado
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-zinc-500 font-medium">
+                                    {appt.status}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        };
 
                         return (
                           <div className="mt-4 p-3.5 sm:p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
@@ -2250,20 +2416,10 @@ export default function AdminAgenda() {
                                 <CalendarDays className="w-4 h-4 text-[#C6924B] shrink-0" />
                                 <div>
                                   <span className="font-semibold text-xs text-zinc-100 block">
-                                    {isAllDays
-                                      ? statsPeriod === "all"
-                                        ? "📋 Histórico Total de Todos os Dias"
-                                        : statsPeriod === "month"
-                                          ? "📋 Todos os Dias deste Mês"
-                                          : statsPeriod === "week"
-                                            ? "📋 Todos os Dias desta Semana"
-                                            : "📋 Cortes de Hoje"
-                                      : `📅 Cortes do Dia ${selectedDayKey.substring(8)}/${selectedDayKey.substring(5, 7)}/${selectedDayKey.substring(0, 4)}`}
+                                    {sectionTitle}
                                   </span>
                                   <span className="text-[11px] text-zinc-500">
-                                    {isAllDays
-                                      ? "Apresentando todos os serviços e cortes registados"
-                                      : "Filtrado para o dia selecionado"}
+                                    {sectionSubtitle}
                                   </span>
                                 </div>
                               </div>
@@ -2271,127 +2427,201 @@ export default function AdminAgenda() {
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="flex items-center gap-2.5 text-xs bg-zinc-900/80 px-2.5 py-1 rounded-lg border border-zinc-800">
                                   <span className="font-mono text-zinc-400">
-                                    {displayedCount} corte{displayedCount !== 1 ? "s" : ""}
+                                    {sectionCount} corte{sectionCount !== 1 ? "s" : ""}
                                   </span>
                                   <span className="font-mono font-bold text-sm text-[#C6924B]">
-                                    {displayedRevenue.toFixed(2)} €
+                                    {sectionRevenue.toFixed(2)} €
                                   </span>
                                 </div>
 
-                                {!isAllDays && (
+                                {selectedDayKey && activeWeekData && (
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedDayKey(null)}
+                                    onClick={() => {
+                                      setSelectedDayKey(null);
+                                      setSelectedWeekKey(activeWeekData.weekKey);
+                                    }}
                                     className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#C6924B]/15 text-[#C6924B] border border-[#C6924B]/30 hover:bg-[#C6924B]/25 transition-colors cursor-pointer flex items-center gap-1"
-                                    title="Ver lista de todos os dias"
+                                    title="Ver todos os cortes desta semana"
                                   >
-                                    <span>✕ Ver Todos os Dias</span>
+                                    <span>🗓️ Ver Semana ({activeWeekData.totalCount})</span>
+                                  </button>
+                                )}
+
+                                {(selectedDayKey || selectedWeekKey) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedDayKey(null);
+                                      setSelectedWeekKey(null);
+                                    }}
+                                    className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Ver todas as semanas"
+                                  >
+                                    <span>✕ Ver Todas as Semanas</span>
                                   </button>
                                 )}
                               </div>
                             </div>
 
-                            {/* Filter Chips by Day */}
-                            {statsData.timelineData.length > 1 && (
-                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 text-[11px]">
-                                <span className="text-zinc-500 font-mono text-[10px] shrink-0 mr-1">Filtrar:</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedDayKey(null)}
-                                  className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-medium ${
-                                    isAllDays
-                                      ? "bg-[#C6924B] text-zinc-950 border-[#C6924B] font-semibold shadow-xs"
-                                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-                                  }`}
-                                >
-                                  ✨ Todos os Dias ({displayedList.length})
-                                </button>
+                            {/* Weekly Filter Bar (Abas de Semanas) */}
+                            {statsData.sortedWeeks?.length > 0 && (
+                              <div className="space-y-1.5 pt-0.5">
+                                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                                  <span className="text-zinc-500 font-mono text-[10px] shrink-0 mr-1">Semana:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedWeekKey(null);
+                                      setSelectedDayKey(null);
+                                    }}
+                                    className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-medium ${
+                                      !selectedWeekKey && !selectedDayKey
+                                        ? "bg-[#C6924B] text-zinc-950 border-[#C6924B] font-semibold shadow-xs"
+                                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                                    }`}
+                                  >
+                                    ✨ Todas as Semanas ({totalHistoryCount})
+                                  </button>
 
-                                {statsData.timelineData.map((d) => {
-                                  const isCurrentSelected = selectedDayKey === d.date;
-                                  return (
+                                  {statsData.sortedWeeks.map((w) => {
+                                    const isCurrentWeek = selectedWeekKey === w.weekKey && !selectedDayKey;
+                                    const isParentOfSelectedDay = selectedDayKey && activeWeekData?.weekKey === w.weekKey;
+
+                                    return (
+                                      <button
+                                        key={w.weekKey}
+                                        type="button"
+                                        onClick={() => {
+                                          if (selectedWeekKey === w.weekKey && !selectedDayKey) {
+                                            setSelectedWeekKey(null);
+                                          } else {
+                                            setSelectedWeekKey(w.weekKey);
+                                            setSelectedDayKey(null);
+                                          }
+                                        }}
+                                        className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-mono ${
+                                          isCurrentWeek
+                                            ? "bg-[#C6924B] text-zinc-950 border-[#C6924B] font-bold shadow-xs"
+                                            : isParentOfSelectedDay
+                                              ? "bg-[#C6924B]/20 text-[#C6924B] border-[#C6924B]/50 font-semibold"
+                                              : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                                        }`}
+                                      >
+                                        🗓️ {w.shortLabel} ({w.revenue > 0 ? `${w.revenue.toFixed(0)}€` : `${w.totalCount}c`})
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Sub-bar: Days of Active Week (when a week or day is focused) */}
+                                {activeWeekData && activeWeekData.dayKeys?.length > 1 && (
+                                  <div className="flex items-center gap-1.5 overflow-x-auto pl-4 border-l-2 border-[#C6924B]/40 py-0.5 text-[10px]">
+                                    <span className="text-zinc-500 font-mono shrink-0">Dias da semana:</span>
                                     <button
-                                      key={d.date}
                                       type="button"
-                                      onClick={() => setSelectedDayKey(isCurrentSelected ? null : d.date)}
-                                      className={`px-2 py-1 rounded-full border transition-all cursor-pointer shrink-0 font-mono ${
-                                        isCurrentSelected
-                                          ? "bg-amber-500 text-zinc-950 border-amber-500 font-bold shadow-xs"
-                                          : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                                      onClick={() => setSelectedDayKey(null)}
+                                      className={`px-2 py-0.5 rounded-md border transition-all cursor-pointer shrink-0 font-mono ${
+                                        !selectedDayKey
+                                          ? "bg-zinc-200 text-zinc-950 font-bold border-zinc-200"
+                                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                                       }`}
                                     >
-                                      {d.label} ({d.revenue > 0 ? `${d.revenue.toFixed(0)}€` : `${d.count}c`})
+                                      Semana Inteira ({activeWeekData.totalCount})
                                     </button>
-                                  );
-                                })}
+
+                                    {activeWeekData.dayKeys.map((dKey) => {
+                                      const isDaySelected = selectedDayKey === dKey;
+                                      const dayRev = statsData.dayDetailsMap[dKey]?.revenue || 0;
+                                      const dayCount = statsData.dayDetailsMap[dKey]?.count || 0;
+                                      const parts = dKey.split("-");
+                                      const dLabel = `${parts[2]}/${parts[1]}`;
+
+                                      return (
+                                        <button
+                                          key={dKey}
+                                          type="button"
+                                          onClick={() => setSelectedDayKey(isDaySelected ? null : dKey)}
+                                          className={`px-2 py-0.5 rounded-md border transition-all cursor-pointer shrink-0 font-mono ${
+                                            isDaySelected
+                                              ? "bg-amber-500 text-zinc-950 font-bold border-amber-500 shadow-xs"
+                                              : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-zinc-200"
+                                          }`}
+                                        >
+                                          {dLabel} ({dayRev > 0 ? `${dayRev.toFixed(0)}€` : `${dayCount}c`})
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )}
 
-                            {/* List of Appointments */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                              {displayedList.length === 0 ? (
-                                <div className="col-span-full py-6 text-center text-xs text-zinc-500">
-                                  Sem marcações para o período selecionado.
-                                </div>
+                            {/* Appointments Body */}
+                            <div className="max-h-80 overflow-y-auto pr-1 space-y-4">
+                              {/* CASE 1: Single day focused */}
+                              {selectedDayKey ? (
+                                !activeDayData || activeDayData.appointments.length === 0 ? (
+                                  <div className="py-6 text-center text-xs text-zinc-500">
+                                    Sem cortes registados neste dia.
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {activeDayData.appointments.map(renderApptCard)}
+                                  </div>
+                                )
+                              ) : selectedWeekKey && activeWeekData ? (
+                                /* CASE 2: Single week focused */
+                                activeWeekData.appointments.length === 0 ? (
+                                  <div className="py-6 text-center text-xs text-zinc-500">
+                                    Sem cortes registados nesta semana.
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {activeWeekData.appointments.map(renderApptCard)}
+                                  </div>
+                                )
                               ) : (
-                                displayedList.map((appt, idx) => {
-                                  const isDirect = appt.source === "admin_direct_sale" || (appt.customer_notes && appt.customer_notes.includes("[Venda Balcão]"));
-                                  const dateFormatted = appt.date
-                                    ? `${appt.date.substring(8, 10)}/${appt.date.substring(5, 7)}`
-                                    : "";
-
-                                  return (
-                                    <div
-                                      key={appt.id || `${appt.date}-${appt.time}-${idx}`}
-                                      className="p-2.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-2.5 hover:border-zinc-700/80 transition-colors"
-                                    >
-                                      <div className="min-w-0 space-y-1">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="font-semibold text-xs text-zinc-100 truncate">
-                                            {appt.customer_name || "Cliente"}
+                                /* CASE 3: All weeks grouped */
+                                !statsData.sortedWeeks || statsData.sortedWeeks.length === 0 ? (
+                                  <div className="py-6 text-center text-xs text-zinc-500">
+                                    Sem marcações para o período selecionado.
+                                  </div>
+                                ) : (
+                                  statsData.sortedWeeks.map((wk) => (
+                                    <div key={wk.weekKey} className="space-y-2">
+                                      <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-800 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <CalendarDays className="w-3.5 h-3.5 text-[#C6924B]" />
+                                          <span className="font-semibold text-zinc-200">
+                                            {wk.weekLabel}
                                           </span>
-                                          {dateFormatted && (
-                                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60">
-                                              📅 {dateFormatted}
-                                            </span>
-                                          )}
-                                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-800">
-                                            ⏰ {appt.time || "Horário livre"}
-                                          </span>
-                                          {isDirect && (
-                                            <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
-                                              Balcão
-                                            </span>
-                                          )}
                                         </div>
-                                        <p className="text-[11px] text-zinc-400 truncate">
-                                          {appt.service_name || "Serviço"}
-                                        </p>
-                                        <span className="text-[10px] font-mono text-zinc-500">
-                                          {appt.customer_phone || "Sem contacto"}
-                                        </span>
+                                        <div className="flex items-center gap-2 font-mono text-[11px]">
+                                          <span className="text-zinc-400">
+                                            {wk.completedCount || wk.totalCount} corte{(wk.completedCount || wk.totalCount) !== 1 ? "s" : ""}
+                                          </span>
+                                          <span className="text-[#C6924B] font-bold">
+                                            {wk.revenue.toFixed(2)} €
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedWeekKey(wk.weekKey);
+                                              setSelectedDayKey(null);
+                                            }}
+                                            className="text-[10px] text-[#C6924B] hover:text-amber-300 font-medium underline ml-1 cursor-pointer"
+                                          >
+                                            Ver Semana
+                                          </button>
+                                        </div>
                                       </div>
-                                      <div className="text-right shrink-0">
-                                        <span className="font-mono font-bold text-xs text-[#C6924B] block">
-                                          {appt.service_price}
-                                        </span>
-                                        {appt.status === "completed" ? (
-                                          <span className="text-[9px] text-emerald-400 font-medium">
-                                            Concluído
-                                          </span>
-                                        ) : appt.status === "confirmed" ? (
-                                          <span className="text-[9px] text-cyan-400 font-medium">
-                                            Confirmado
-                                          </span>
-                                        ) : (
-                                          <span className="text-[9px] text-zinc-500 font-medium">
-                                            {appt.status}
-                                          </span>
-                                        )}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-1">
+                                        {wk.appointments.map(renderApptCard)}
                                       </div>
                                     </div>
-                                  );
-                                })
+                                  ))
+                                )
                               )}
                             </div>
                           </div>
