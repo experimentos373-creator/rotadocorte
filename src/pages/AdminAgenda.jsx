@@ -2229,7 +2229,7 @@ export default function AdminAgenda() {
               {/* Chart & Ranking Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 {/* Chart Card (8 cols) */}
-                <div className={`lg:col-span-8 p-5 rounded-xl border space-y-4 ${
+                <div className={`lg:col-span-8 p-5 rounded-xl border space-y-4 overflow-hidden ${
                   isLight ? "bg-white border-zinc-200" : "bg-zinc-900/40 border-zinc-800"
                 }`}>
                   <div className="flex items-center justify-between">
@@ -2382,7 +2382,7 @@ export default function AdminAgenda() {
                         </div>
 
                         {/* X-Axis Dates */}
-                        <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-800 pl-12 pr-4">
+                        <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-2 border-t border-zinc-800 pl-12 pr-4 overflow-hidden">
                           {statsData.timelineData.map((d) => (
                             <button
                               key={d.date}
@@ -2879,7 +2879,7 @@ export default function AdminAgenda() {
                         {/* Interactive Legend Grid */}
                         <div className="w-full mt-3">
                           {pieChartMode === "days" ? (
-                            <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-zinc-800/60">
+                            <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-zinc-800/60">
                               {statsData.daysDonutSlices.map((d) => {
                                 const isHovered = hoveredPieIndex === d.index;
                                 return (
@@ -2887,7 +2887,7 @@ export default function AdminAgenda() {
                                     key={d.label}
                                     onMouseEnter={() => setHoveredPieIndex(d.index)}
                                     onMouseLeave={() => setHoveredPieIndex(null)}
-                                    className={`flex items-center justify-between p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                                       isHovered
                                         ? "border-[#C6924B]/50 bg-zinc-800/80 shadow-sm"
                                         : isLight
@@ -2895,16 +2895,16 @@ export default function AdminAgenda() {
                                         : "border-zinc-800/40 bg-zinc-950/40 hover:bg-zinc-800/40"
                                     }`}
                                   >
-                                    <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className="flex items-center gap-2 min-w-0">
                                       <span
-                                        className="w-2 h-2 rounded-full shrink-0"
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
                                         style={{ backgroundColor: d.color }}
                                       />
-                                      <span className={`text-[11px] font-medium truncate ${isHovered ? "text-[#C6924B] font-semibold" : "text-zinc-300"}`}>
+                                      <span className={`text-xs font-semibold truncate ${isHovered ? "text-[#C6924B]" : "text-zinc-200"}`}>
                                         {d.label}
                                       </span>
                                     </div>
-                                    <span className="text-[10px] font-mono text-zinc-400 shrink-0 ml-1">
+                                    <span className="text-[11px] font-mono text-zinc-400 shrink-0 ml-1.5">
                                       {d.count} <span className="text-zinc-500">({d.percent}%)</span>
                                     </span>
                                   </div>
