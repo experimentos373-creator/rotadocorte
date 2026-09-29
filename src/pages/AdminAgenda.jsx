@@ -266,6 +266,113 @@ export default function AdminAgenda() {
   const alertedBookingIdsRef = useRef(new Set());
   const remindedKeysRef = useRef(new Set());
 
+  // 🔒 Validation Gate: Detect past appointments still pending validation
+  const unvalidatedPastAppointments = useMemo(() => {
+    if (!isAuthenticated || !allAppointments?.length) return [];
+
+    const todayStr = getLisbonTodayDateString();
+    const now = new Date();
+    let currentLisbonMinutes = now.getHours() * 60 + now.getMinutes();
+    try {
+      const lisbonParts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/Lisbon",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(now);
+      const h = parseInt(lisbonParts.find((p) => p.type === "hour")?.value || "0", 10);
+      const m = parseInt(lisbonParts.find((p) => p.type === "minute")?.value || "0", 10);
+      currentLisbonMinutes = h * 60 + m;
+    } catch (_) {}
+
+    return allAppointments
+      .filter((appt) => {
+        // Exclude blocks or internal breaks
+        if (
+          appt.is_block ||
+          appt.service_name?.includes("[Bloqueio]") ||
+          appt.service_name?.includes("[Vaga Bloqueada]") ||
+          appt.customer_name?.includes("Pausa")
+        ) {
+          return false;
+        }
+
+        // Only pending/unvalidated appointments
+        const isUnvalidated =
+          !appt.status ||
+          appt.status === "confirmed" ||
+          appt.status === "pending";
+        if (!isUnvalidated) return false;
+
+        if (!appt.date) return false;
+
+        // Date strictly in the past
+        if (appt.date < todayStr) return true;
+
+        // Date is today, but time has already passed
+        if (appt.date === todayStr && appt.time) {
+          const [h, m] = String(appt.time).split(":").map(Number);
+          const apptMinutes = (h || 0) * 60 + (m || 0);
+          return apptMinutes <= currentLisbonMinutes;
+        }
+
+        return false;
+      })
+      .sort((a, b) => {
+        const cmp = (a.date || "").localeCompare(b.date || "");
+        if (cmp !== 0) return cmp;
+        return (a.time || "").localeCompare(b.time || "");
+      });
+  }, [allAppointments, isAuthenticated]);
+
+  const [isValidationGateOpen, setIsValidationGateOpen] = useState(false);
+  const [gateCompletedSuccess, setGateCompletedSuccess] = useState(false);
+  const [validatingApptId, setValidatingApptId] = useState(null);
+
+  // Auto-trigger gate when unvalidated past appointments reach 4 or more
+  useEffect(() => {
+    if (unvalidatedPastAppointments.length >= 4 && !isValidationGateOpen && !gateCompletedSuccess) {
+      setIsValidationGateOpen(true);
+    }
+  }, [unvalidatedPastAppointments.length, isValidationGateOpen, gateCompletedSuccess]);
+
+  // When all pending items are resolved, display celebratory state and smoothly close
+  useEffect(() => {
+    if (isValidationGateOpen && unvalidatedPastAppointments.length === 0) {
+      setGateCompletedSuccess(true);
+      const timer = setTimeout(() => {
+        setIsValidationGateOpen(false);
+        setGateCompletedSuccess(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isValidationGateOpen, unvalidatedPastAppointments.length]);
+
+  const handleGateValidateSingle = async (appt, newStatus) => {
+    setValidatingApptId(appt.id);
+    await handleStatusChange(appt.id, newStatus);
+    setValidatingApptId(null);
+  };
+
+  const handleBulkValidateAllCompleted = async () => {
+    if (!unvalidatedPastAppointments.length) return;
+    setValidatingApptId("bulk");
+    for (const appt of unvalidatedPastAppointments) {
+      sealCompletedAppointment(appt);
+      await updateAppointment(appt.id, { status: "completed" }, currentAdminPin);
+    }
+    refreshLedger();
+    setAllAppointments((prev) =>
+      prev.map((a) =>
+        unvalidatedPastAppointments.some((u) => u.id === a.id)
+          ? { ...a, status: "completed" }
+          : a
+      )
+    );
+    setValidatingApptId(null);
+    loadAppointments(true);
+  };
+
   const toggleSound = () => {
     const next = !isSoundOn;
     setIsSoundOn(next);
@@ -1604,6 +1711,30 @@ export default function AdminAgenda() {
                   </>
                 )}
               </div>
+
+              {/* Validation Gate Badge Button */}
+              {unvalidatedPastAppointments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsValidationGateOpen(true)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                    unvalidatedPastAppointments.length >= 4
+                      ? "bg-amber-500/20 border-amber-500/50 text-amber-400 animate-pulse shadow-xs"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title={
+                    unvalidatedPastAppointments.length >= 4
+                      ? "Atenção: 4 ou mais marcações passadas por validar!"
+                      : "Marcações passadas por validar"
+                  }
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Validar</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-zinc-950 font-bold text-[10px]">
+                    {unvalidatedPastAppointments.length}
+                  </span>
+                </button>
+              )}
 
               {/* Theme Toggle */}
               <button
@@ -3715,6 +3846,156 @@ export default function AdminAgenda() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 🔒 MANDATORY VALIDATION GATE: POP-UP A CADA 4 MARCAÇÕES PASSADAS          */}
+      {/* ========================================================================= */}
+      {isValidationGateOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={() => {
+            if (unvalidatedPastAppointments.length < 4) {
+              setIsValidationGateOpen(false);
+            }
+          }}
+        >
+          <div
+            className={`relative max-w-lg w-full rounded-2xl p-5 sm:p-6 shadow-2xl border my-auto transition-all ${
+              isLight ? "bg-white border-zinc-200" : "bg-zinc-950 border-zinc-800 text-zinc-100"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-3.5 pb-4 border-b border-zinc-800/80">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold tracking-tight text-zinc-100">
+                    Validação de Marcações Anteriores
+                  </h3>
+                  <span className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                    {unvalidatedPastAppointments.length} Pendentes
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Tens marcações cujo horário já terminou. Confirma quem compareceu para fechar o caixa e desbloquear a dashboard.
+                </p>
+              </div>
+
+              {unvalidatedPastAppointments.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => setIsValidationGateOpen(false)}
+                  className="p-1 rounded-lg border border-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                  title="Fechar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {gateCompletedSuccess ? (
+              <div className="py-10 text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Check className="w-6 h-6 stroke-[3]" />
+                </div>
+                <h4 className="text-sm font-bold text-zinc-100">Tudo Validado!</h4>
+                <p className="text-xs text-zinc-400">
+                  Todas as marcações foram confirmadas com sucesso. A entrar na dashboard...
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-4">
+                {/* Bulk Validate Option */}
+                {unvalidatedPastAppointments.length >= 2 && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs gap-2">
+                    <span className="text-zinc-400">Todos os clientes compareceram?</span>
+                    <button
+                      type="button"
+                      disabled={validatingApptId !== null}
+                      onClick={handleBulkValidateAllCompleted}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-semibold border border-emerald-500/40 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Confirmar Todos ({unvalidatedPastAppointments.length})</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* List of unvalidated appointments */}
+                <div className="max-h-[52vh] overflow-y-auto space-y-2.5 pr-1">
+                  {unvalidatedPastAppointments.map((appt) => {
+                    const isProcessing = validatingApptId === appt.id || validatingApptId === "bulk";
+                    return (
+                      <div
+                        key={appt.id}
+                        className="p-3.5 rounded-xl border border-zinc-800/90 bg-zinc-900/50 hover:bg-zinc-900/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-zinc-100 truncate">
+                              {appt.customer_name || "Cliente sem nome"}
+                            </span>
+                            <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-zinc-800 text-zinc-300 font-medium">
+                              {appt.service_price || "15,00 €"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 flex-wrap">
+                            <span className="flex items-center gap-1 font-mono text-zinc-300">
+                              <Clock className="w-3 h-3 text-[#C6924B]" />
+                              {appt.time}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <CalendarDays className="w-3 h-3 text-[#C6924B]" />
+                              {appt.date}
+                            </span>
+                            <span className="text-zinc-400 truncate max-w-[130px]">
+                              {appt.service_name || "Corte de Cabelo"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 2 Simple Action Buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isProcessing}
+                            onClick={() => handleGateValidateSingle(appt, "completed")}
+                            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 font-semibold text-xs border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Compareceu</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isProcessing}
+                            onClick={() => handleGateValidateSingle(appt, "cancelled")}
+                            className="flex-1 sm:flex-initial px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white font-medium text-xs border border-red-500/20 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Não Realizado</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-2 text-center">
+                  <p className="text-[11px] text-zinc-500 flex items-center justify-center gap-1.5">
+                    <Lock className="w-3 h-3 text-amber-500/80" />
+                    <span>Validação obrigatória: a dashboard desbloqueia assim que validares os cortes.</span>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
