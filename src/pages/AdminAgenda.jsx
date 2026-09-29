@@ -328,13 +328,20 @@ export default function AdminAgenda() {
   const [isValidationGateOpen, setIsValidationGateOpen] = useState(false);
   const [gateCompletedSuccess, setGateCompletedSuccess] = useState(false);
   const [validatingApptId, setValidatingApptId] = useState(null);
+  const [hasPostponedThisSession, setHasPostponedThisSession] = useState(false);
+  const [showPostponeConfirm, setShowPostponeConfirm] = useState(false);
 
-  // Auto-trigger gate when unvalidated past appointments reach 4 or more
+  // Auto-trigger gate when unvalidated past appointments reach 4 or more on initial entry/load
   useEffect(() => {
-    if (unvalidatedPastAppointments.length >= 4 && !isValidationGateOpen && !gateCompletedSuccess) {
+    if (
+      unvalidatedPastAppointments.length >= 4 &&
+      !isValidationGateOpen &&
+      !gateCompletedSuccess &&
+      !hasPostponedThisSession
+    ) {
       setIsValidationGateOpen(true);
     }
-  }, [unvalidatedPastAppointments.length, isValidationGateOpen, gateCompletedSuccess]);
+  }, [unvalidatedPastAppointments.length, isValidationGateOpen, gateCompletedSuccess, hasPostponedThisSession]);
 
   // When all pending items are resolved, display celebratory state and smoothly close
   useEffect(() => {
@@ -3854,7 +3861,9 @@ export default function AdminAgenda() {
         <div
           className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={() => {
-            if (unvalidatedPastAppointments.length < 4) {
+            if (unvalidatedPastAppointments.length >= 4) {
+              setShowPostponeConfirm(true);
+            } else {
               setIsValidationGateOpen(false);
             }
           }}
@@ -3884,19 +3893,64 @@ export default function AdminAgenda() {
                 </p>
               </div>
 
-              {unvalidatedPastAppointments.length < 4 && (
-                <button
-                  type="button"
-                  onClick={() => setIsValidationGateOpen(false)}
-                  className="p-1 rounded-lg border border-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
-                  title="Fechar"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              {/* Close 'X' Button in top right */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (unvalidatedPastAppointments.length >= 4) {
+                    setShowPostponeConfirm(true);
+                  } else {
+                    setIsValidationGateOpen(false);
+                  }
+                }}
+                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 transition-colors cursor-pointer shrink-0"
+                title="Fechar / Deixar para depois"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {gateCompletedSuccess ? (
+            {/* Postpone Confirmation Card */}
+            {showPostponeConfirm ? (
+              <div className="py-6 px-2 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2 text-center">
+                  <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <h4 className="text-sm font-bold text-zinc-100">
+                    Queres deixar para depois?
+                  </h4>
+                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm mx-auto">
+                    Podes aceder à dashboard agora, mas lembra-te de validar estas marcações para manter o caixa e as contas certas.
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    (Sempre que voltares a abrir o Admin este aviso voltará a aparecer.)
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPostponeConfirm(false);
+                      setHasPostponedThisSession(true);
+                      setIsValidationGateOpen(false);
+                    }}
+                    className="w-full sm:flex-1 py-2.5 px-4 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs transition-colors cursor-pointer text-center"
+                  >
+                    Deixar para Depois
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPostponeConfirm(false)}
+                    className="w-full sm:flex-1 py-2.5 px-4 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition-colors cursor-pointer shadow-xs text-center"
+                  >
+                    Validar Agora
+                  </button>
+                </div>
+              </div>
+            ) : gateCompletedSuccess ? (
               <div className="py-10 text-center space-y-3">
                 <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <Check className="w-6 h-6 stroke-[3]" />
