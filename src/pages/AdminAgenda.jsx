@@ -770,16 +770,14 @@ export default function AdminAgenda() {
     e.preventDefault();
     setIsSavingBlock(true);
 
-    const [sh, sm] = blockStartTime.split(":").map(Number);
-    const [eh, em] = blockEndTime.split(":").map(Number);
-    const duration = Math.max((eh * 60 + em) - (sh * 60 + sm), 30);
 
     const res = await createBlockSlot({
       date: blockDate,
-      time: blockStartTime,
-      durationMinutes: duration,
-      reason: blockReason.trim() || "Pausa / Indisponível"
-    }, currentAdminPin);
+      startTime: blockStartTime,
+      endTime: blockEndTime,
+      reason: blockReason.trim() || "Pausa / Indisponível",
+      pin: currentAdminPin
+    });
 
     setIsSavingBlock(false);
 
