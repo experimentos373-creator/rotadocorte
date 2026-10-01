@@ -260,9 +260,9 @@ export function downloadIcsFile({
 }
 
 /**
- * Sends an automated real-time WhatsApp alert to Admin(s) whenever a new booking is created
+ * Builds the official text notification for the WhatsApp group
  */
-export async function sendAdminWhatsAppNotification({
+export function buildAdminWhatsAppNotificationMessage({
   serviceName,
   servicePrice,
   dateFormatted,
@@ -270,7 +270,31 @@ export async function sendAdminWhatsAppNotification({
   clientName,
   phone,
   notes
-}) {
+} = {}) {
+  const safeClient = clientName?.trim() || "Não indicado";
+  const safePhone = phone?.trim() || "Não indicado";
+  const safeService = serviceName?.trim() || "Serviço";
+  const safePrice = servicePrice ? ` (${String(servicePrice).trim()})` : "";
+  const safeDate = dateFormatted?.trim() || "Data a confirmar";
+  const safeTime = time?.trim() || "Hora a confirmar";
+
+  let msg = `✂️ *ROTA DO CORTE — NOVO AGENDAMENTO!*\n\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `👤 *Cliente:* ${safeClient}\n`;
+  msg += `📱 *Contacto:* ${safePhone}\n`;
+  msg += `💈 *Serviço:* ${safeService}${safePrice}\n`;
+  msg += `📅 *Data & Hora:* ${safeDate} às ${safeTime}\n`;
+  if (notes && String(notes).trim()) msg += `📝 *Observações:* ${String(notes).trim()}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📍 _Barbearia Gabriel Silva • Paião_`;
+
+  return msg;
+}
+
+/**
+ * Sends an automated real-time WhatsApp alert to Admin(s) whenever a new booking is created
+ */
+export async function sendAdminWhatsAppNotification(payload = {}) {
   const env =
     typeof import.meta !== "undefined" && import.meta?.env
       ? import.meta.env
@@ -286,15 +310,7 @@ export async function sendAdminWhatsAppNotification({
   const greenApiGroupId =
     env.VITE_GREEN_API_GROUP_ID || "120363412598827459@g.us";
 
-  let msg = `✂️ *ROTA DO CORTE — NOVO AGENDAMENTO!*\n\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
-  msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
-  msg += `💈 *Serviço:* ${serviceName || "Serviço"}${servicePrice ? ` (${servicePrice})` : ""}\n`;
-  msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
-  if (notes) msg += `📝 *Observações:* ${notes}\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `📍 _Barbearia Gabriel Silva • Paião_`;
+  const msg = buildAdminWhatsAppNotificationMessage(payload);
 
   // Dispara APENAS para o grupo oficial da barbearia no WhatsApp via Green-API
   if (greenApiUrl && greenApiId && greenApiToken && greenApiGroupId) {
