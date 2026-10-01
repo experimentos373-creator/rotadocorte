@@ -286,6 +286,16 @@ export async function sendAdminWhatsAppNotification({
   const greenApiGroupId =
     env.VITE_GREEN_API_GROUP_ID || "120363412598827459@g.us";
 
+  let msg = `✂️ *ROTA DO CORTE — NOVO AGENDAMENTO!*\n\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `👤 *Cliente:* ${clientName || "Não indicado"}\n`;
+  msg += `📱 *Contacto:* ${phone || "Não indicado"}\n`;
+  msg += `💈 *Serviço:* ${serviceName || "Serviço"}${servicePrice ? ` (${servicePrice})` : ""}\n`;
+  msg += `📅 *Data & Hora:* ${dateFormatted} às ${time}\n`;
+  if (notes) msg += `📝 *Observações:* ${notes}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📍 _Barbearia Gabriel Silva • Paião_`;
+
   // Dispara APENAS para o grupo oficial da barbearia no WhatsApp via Green-API
   if (greenApiUrl && greenApiId && greenApiToken && greenApiGroupId) {
     try {
